@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { expectToast } from "./index";
+import { expectToast, rowsByText } from "./index";
 
 /**
  * Shared resume fixture.
@@ -76,9 +76,10 @@ export async function ensureResumeExists(
 export async function deleteResume(page: Page, title: string) {
   await page.goto("/dashboard/profile");
   await page.waitForLoadState("domcontentloaded");
-  const row = page
-    .getByRole("row", { name: new RegExp(title, "i") })
-    .first();
+  // DOM locator, not `getByRole("row")` — see `rowsByText` in ./index.ts. The
+  // "gone" assertion below is read while the DeleteAlertDialog is closing, and
+  // a role locator matches nothing at all for that window.
+  const row = rowsByText(page, title).first();
   try {
     await row.waitFor({ state: "visible", timeout: 5000 });
     await row.getByTestId("resume-actions-menu-btn").click({ force: true });
@@ -99,7 +100,13 @@ export async function deleteResume(page: Page, title: string) {
     // produced Task +6 in task-crud.spec.ts (7 tests create, 1 asserts the
     // outcome, 6 leak). Proving the row is gone costs one wait and converts a
     // hopeful cleanup into a real one.
-    await expect(row).not.toBeVisible({ timeout: 10000 });
+    //
+    // The first version of this wait was itself hopeful: `row` was a role
+    // locator, so `not.toBeVisible()` was satisfied by the modal's own
+    // `aria-hidden` before the action had resolved (E2E-B40). Both halves are
+    // needed — the toast is the server's answer, the count is the view's.
+    await expectToast(page, /Resume deleted successfully/);
+    await expect(rowsByText(page, title)).toHaveCount(0, { timeout: 10000 });
   } catch {
     // swallow-ok: this helper's contract is to TOLERATE absence (see the
     // header); profile-crud keeps its own deleteResumeAndVerifyGone for the

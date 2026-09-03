@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, selectOrCreateComboboxOption, safeWait, uniqueId } from "../helpers";
+import {
+  expectToast,
+  rowsByText,
+  selectOrCreateComboboxOption,
+  uniqueId,
+} from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Locale
@@ -70,9 +75,10 @@ async function openResumeEditor(page: Page, resumeTitle: string) {
 async function deleteResumeAndVerifyGone(page: Page, title: string) {
   await page.goto("/dashboard/profile");
   await page.waitForLoadState("domcontentloaded");
-  const row = page
-    .getByRole("row", { name: new RegExp(title, "i") })
-    .first();
+  // DOM locator: the "gone" assertion below is read while the DeleteAlertDialog
+  // is closing, and a role locator matches nothing at all for that window
+  // (`rowsByText` in e2e/helpers, E2E-B40).
+  const row = rowsByText(page, title).first();
   await row.waitFor({ state: "visible", timeout: 10000 });
   await row.getByTestId("resume-actions-menu-btn").click({ force: true });
   await page
@@ -83,8 +89,11 @@ async function deleteResumeAndVerifyGone(page: Page, title: string) {
     .getByRole("alertdialog")
     .getByRole("button", { name: "Delete" })
     .click({ force: true });
-  // Wait for the row to disappear from the table
-  await expect(row).not.toBeVisible({ timeout: 10000 });
+  // The SERVER's answer, then the view's. `ResumeTable` (:70-76) toasts
+  // `profile.resumeDeleted` only after the action resolved, so this is also what
+  // stops the request being abandoned when the page closes at end of test.
+  await expectToast(page, /Resume deleted successfully/);
+  await expect(rowsByText(page, title)).toHaveCount(0, { timeout: 10000 });
   // Reached only when every assertion above passed, i.e. the row is PROVABLY
   // gone — the one condition under which de-registering is safe. A delete that
   // threw anywhere above skips this line and stays registered, which is exactly
@@ -196,9 +205,12 @@ async function deleteAdminReferenceRow(
   page: Page,
   name: string,
 ): Promise<boolean> {
-  const row = page
-    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
-    .first();
+  // DOM locator. The proof below and the re-check in the catch are both read
+  // with the DeleteAlertDialog open or closing, and a role locator matches
+  // nothing at all for that window — so both would have answered "gone" about a
+  // row still on screen (`rowsByText` in e2e/helpers, E2E-B40). It also drops
+  // the `escapeRegExp`: `hasText` takes the string literally.
+  const row = rowsByText(page, name).first();
   try {
     if (!(await loadUntilAdminRowVisible(page, name))) return true;
     await row.getByRole("button", { name: "Delete" }).click();
@@ -210,8 +222,9 @@ async function deleteAdminReferenceRow(
     // The row disappearing is the proof, not the toast: the container calls its
     // reload only on success, so a delete the server REFUSED (the row is still
     // referenced by a WorkExperience or an Education) leaves the row where it
-    // was.
-    await row.waitFor({ state: "detached", timeout: 10000 });
+    // was. That argument only holds now that the locator cannot be blinded by
+    // the modal it is read through.
+    await expect(row).toHaveCount(0, { timeout: 10000 });
     return true;
   } catch {
     // swallow-ok: cleanup net — a throwing teardown would replace the real test

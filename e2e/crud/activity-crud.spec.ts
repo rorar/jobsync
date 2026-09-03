@@ -1,5 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption, uniqueId, safeWait, expectToast } from "../helpers";
+import {
+  selectOrCreateComboboxOption,
+  uniqueId,
+  safeWait,
+  expectToast,
+  rowsByText,
+} from "../helpers";
 
 // storageState handles authentication — no per-test login needed
 
@@ -116,9 +122,17 @@ async function createActivity(
   ).not.toBeVisible({ timeout: 10000 });
 }
 
-/** Every row in the activities table whose text contains `activityName`. */
+/**
+ * Every row in the activities table whose text contains `activityName`.
+ *
+ * DOM locator, not `getByRole("row")`: every read below happens while the
+ * DeleteAlertDialog is open or closing, and Radix `aria-hidden`s the table for
+ * that whole window. `rowsByText` (e2e/helpers/index.ts) has the mechanism and
+ * the measurement — E2E-B40, found in task-crud, whose leak the comment in
+ * `deleteActivity` already cited while repeating its cause.
+ */
 function activityRows(page: Page, activityName: string) {
-  return page.getByRole("row", { name: new RegExp(activityName, "i") });
+  return rowsByText(page, activityName);
 }
 
 async function deleteActivity(page: Page, activityName: string) {
@@ -132,12 +146,19 @@ async function deleteActivity(page: Page, activityName: string) {
   // Confirm deletion in DeleteAlertDialog — button text is t("common.delete") = "Delete"
   await page.getByRole("button", { name: "Delete" }).click({ force: true });
 
-  // Clicking is not deleting. ActivitiesTable.deleteActivity (:58-72) toasts and
-  // then calls reloadActivities(), so the row leaving the table is the first
-  // signal that the server action actually resolved — and waiting for it is
-  // what stops the request being abandoned when the page closes at end of
-  // test. That is not a hypothetical: task-crud's deleteTask ended on the click
-  // and leaked 6 of the 7 tasks it created (E2E-B24).
+  // Clicking is not deleting, and the row leaving the table is not enough
+  // either — that was this comment's original claim, and task-crud has since
+  // measured it wrong. `ActivitiesTable.deleteActivity` (:58-72) toasts
+  // `activities.deletedSuccess` only after the server action resolved, and
+  // `expectToast` reads the toast viewport through a CSS attribute selector, so
+  // no modal can hide it. Waiting for it is what stops the request being
+  // abandoned when the page closes at end of test.
+  await expectToast(page, /Activity has been deleted/);
+
+  // And the list agrees. Only meaningful since `activityRows` became a DOM
+  // locator: under the role engine this assertion was satisfied by the modal's
+  // own `aria-hidden`, which is how task-crud leaked 6 of the 7 tasks it
+  // created while reporting green (E2E-B40).
   await expect(activityRows(page, activityName)).toHaveCount(0, {
     timeout: 15000,
   });
@@ -166,9 +187,13 @@ async function purgeActivity(page: Page, activityName: string) {
       .click({ force: true });
     await page.getByRole("menuitem", { name: /Delete/ }).click({ force: true });
     await page.getByRole("button", { name: "Delete" }).click({ force: true });
-    await activityRows(page, activityName)
-      .first()
-      .waitFor({ state: "detached", timeout: 15000 });
+    // `toHaveCount(0)` rather than `waitFor({ state: "detached" })`: detached is
+    // also true of a locator that matches nothing, so under the old role-based
+    // `activityRows` this resolved instantly against the modal's `aria-hidden`
+    // and the net "succeeded" without deleting anything (E2E-B40).
+    await expect(activityRows(page, activityName)).toHaveCount(0, {
+      timeout: 15000,
+    });
   } catch {
     // swallow-ok: cleanup net — the activity may already be gone, and a
     // throwing hook would replace the real test failure with its own. The

@@ -1,5 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, safeWait, selectOrCreateComboboxOption, uniqueId } from "../helpers";
+import {
+  expectToast,
+  rowsByText,
+  safeWait,
+  selectOrCreateComboboxOption,
+  uniqueId,
+} from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,39 +116,22 @@ async function stopRunningActivity(page: Page) {
 }
 
 /**
- * Every row whose text contains `title` — as the DOM has it, deliberately NOT
- * `getByRole("row")`.
+ * Rows carrying this file's evidence that a deletion happened — DOM locators,
+ * deliberately not `getByRole("row")`, because every one of those reads happens
+ * while a modal is open or closing. `rowsByText` (e2e/helpers/index.ts) carries
+ * the mechanism and E2E-B40's measurement; this file is where it was measured.
  *
- * These two locators carry all of this file's evidence that a deletion
- * happened, and every one of those reads happens while a modal is open or
- * closing. Radix's AlertDialog calls `hideOthers()`
- * (@radix-ui/react-dialog/dist/index.mjs:137), which sets `aria-hidden="true"`
- * on every child of document.body that is not an ancestor of the dialog portal
- * — the table included. A role locator consults the accessibility tree, so
- * while that attribute is set it matches NOTHING and `toHaveCount(0)` is
- * satisfied by a row that is still on screen and still in the database.
- *
- * That is E2E-B40, and the run database says so precisely: six of the seven
- * tests that create a task left it behind after a run Playwright reported as
- * passed, and the seventh — the only one that also waited for the delete TOAST
- * — is the only one whose row is gone.
- *
- * `expectToast` (e2e/helpers/index.ts) gave up the role engine for this exact
- * mechanism and explains it at length there. Same trade, same reason. A CSS
- * locator never consults that tree.
- *
- * Only the deletion helpers need this; the inline `getByRole("row", …)` in the
- * test bodies runs with no modal open, where the role engine is the better
- * default. `hasText` on a string is a case-insensitive substring match, which
- * is what the previous `new RegExp(title, "i")` meant.
+ * Only the deletion helpers need it. The inline `getByRole("row", …)` in the
+ * test bodies runs with no modal open, where the role engine remains the better
+ * default.
  */
 function taskRows(page: Page, title: string) {
-  return page.locator("tr", { hasText: title });
+  return rowsByText(page, title);
 }
 
 /** Every row in the activities table whose text contains `activityName`. */
 function activityRows(page: Page, activityName: string) {
-  return page.locator("tr", { hasText: activityName });
+  return rowsByText(page, activityName);
 }
 
 async function deleteTask(page: Page, title: string) {

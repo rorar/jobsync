@@ -127,6 +127,46 @@ export async function expectToast(
 }
 
 /**
+ * Table rows containing `text`, read from the DOM rather than the accessibility
+ * tree — the locator to use when the answer must survive an open modal.
+ *
+ * Use this for every assertion that a row is GONE. `getByRole("row", …)` is the
+ * better default everywhere else and stays so; it is wrong specifically here,
+ * and the reason is the same mechanism `expectToast` above gave up the role
+ * engine for.
+ *
+ * Radix's Dialog and AlertDialog call `hideOthers()`
+ * (@radix-ui/react-dialog/dist/index.mjs:137), which walks document.body's
+ * children and sets `aria-hidden="true"` on every one that is not an ancestor
+ * of the dialog portal. The table is such a sibling. Role locators consult the
+ * accessibility tree, so for as long as that attribute is set they match
+ * NOTHING — and every phrasing of "the row is gone" is then satisfied by a row
+ * that is still on screen and still in the database:
+ *
+ *   toHaveCount(0)                  0 matches
+ *   not.toBeVisible()               nothing to be visible
+ *   waitFor({ state: "detached" })  also true of a locator matching nothing
+ *
+ * This is E2E-B40, and it is not a hypothetical: measured against the kept run
+ * database, six of the seven task-crud tests that create a task left it behind
+ * after a run Playwright reported as passed. The teardown net read the same
+ * empty accessibility tree and warned about nothing.
+ *
+ * A CSS locator never consults that tree. `hasText` on a string is a
+ * case-insensitive substring match, so it needs no regex escaping — which also
+ * removes the `escapeRegExp` dance the role-based call sites needed.
+ *
+ * Necessary but NOT sufficient. It proves what the DOM holds, and the DOM is
+ * only refreshed once the container's reload lands, so a row that is gone from
+ * the table still says nothing about the SERVER having answered. Pair it with
+ * `expectToast` on the action's own success message, which is the only signal
+ * in this suite that comes from the round trip rather than from the view.
+ */
+export function rowsByText(page: Page, text: string) {
+  return page.locator("tr", { hasText: text });
+}
+
+/**
  * Deterministic wait helper (M-T-04).
  *
  * Drop-in alternative to `page.waitForTimeout()` that waits for a concrete
