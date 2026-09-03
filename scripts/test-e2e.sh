@@ -286,10 +286,26 @@ RC=$?
 # Exit semantics, stated because two failures can meet here: Playwright's status
 # wins when it is non-zero -- it is the more informative failure and the residue
 # is likely a consequence of it. A clean run with dirty residue exits 1.
-if [ "${E2E_DB_PROVISIONED:-0}" = "1" ] && { [ "$RC" = "0" ] || [ "$RC" = "1" ]; }; then
+#
+#   - and only when the run was not swamped. A test killed by its own timeout
+#     dies mid-body and leaves its rows behind, so a contended run reports
+#     residue that says nothing about ownership. Measured 2026-09-02: a run with
+#     43 timeouts flagged Job +5 and JobStatus +1, both of them tests that never
+#     reached their cleanup. Playwright's exit code cannot express this -- it was
+#     1, meaning "ran and reported" -- so the count comes from the JSON report
+#     when one was produced.
+TIMED_OUT=0
+if [ -n "${PLAYWRIGHT_JSON_OUTPUT_NAME:-}" ] && [ -f "${PLAYWRIGHT_JSON_OUTPUT_NAME}" ]; then
+  TIMED_OUT="$(grep -o '"status": *"timedOut"' "$PLAYWRIGHT_JSON_OUTPUT_NAME" 2>/dev/null | wc -l)"
+fi
+
+if [ "${E2E_DB_PROVISIONED:-0}" = "1" ] && { [ "$RC" = "0" ] || [ "$RC" = "1" ]; } &&
+   [ "${TIMED_OUT:-0}" -lt 3 ]; then
   if ! bash "$DIR/check-e2e-residue.sh"; then
     [ "$RC" = "0" ] && RC=1
   fi
+elif [ "${TIMED_OUT:-0}" -ge 3 ]; then
+  echo "[residue] SKIPPED — ${TIMED_OUT} tests timed out; a test killed mid-body leaves rows that say nothing about ownership."
 elif [ "${E2E_DB_PROVISIONED:-0}" != "1" ]; then
   echo "[residue] SKIPPED — this run did not provision a database (E2E_REUSE_SERVER)."
 else
