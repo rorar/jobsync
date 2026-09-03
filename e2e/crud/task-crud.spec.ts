@@ -109,14 +109,40 @@ async function stopRunningActivity(page: Page) {
   }
 }
 
-/** Every row in the tasks table whose text contains `title`. */
+/**
+ * Every row whose text contains `title` — as the DOM has it, deliberately NOT
+ * `getByRole("row")`.
+ *
+ * These two locators carry all of this file's evidence that a deletion
+ * happened, and every one of those reads happens while a modal is open or
+ * closing. Radix's AlertDialog calls `hideOthers()`
+ * (@radix-ui/react-dialog/dist/index.mjs:137), which sets `aria-hidden="true"`
+ * on every child of document.body that is not an ancestor of the dialog portal
+ * — the table included. A role locator consults the accessibility tree, so
+ * while that attribute is set it matches NOTHING and `toHaveCount(0)` is
+ * satisfied by a row that is still on screen and still in the database.
+ *
+ * That is E2E-B40, and the run database says so precisely: six of the seven
+ * tests that create a task left it behind after a run Playwright reported as
+ * passed, and the seventh — the only one that also waited for the delete TOAST
+ * — is the only one whose row is gone.
+ *
+ * `expectToast` (e2e/helpers/index.ts) gave up the role engine for this exact
+ * mechanism and explains it at length there. Same trade, same reason. A CSS
+ * locator never consults that tree.
+ *
+ * Only the deletion helpers need this; the inline `getByRole("row", …)` in the
+ * test bodies runs with no modal open, where the role engine is the better
+ * default. `hasText` on a string is a case-insensitive substring match, which
+ * is what the previous `new RegExp(title, "i")` meant.
+ */
 function taskRows(page: Page, title: string) {
-  return page.getByRole("row", { name: new RegExp(title, "i") });
+  return page.locator("tr", { hasText: title });
 }
 
 /** Every row in the activities table whose text contains `activityName`. */
 function activityRows(page: Page, activityName: string) {
-  return page.getByRole("row", { name: new RegExp(activityName, "i") });
+  return page.locator("tr", { hasText: activityName });
 }
 
 async function deleteTask(page: Page, title: string) {
@@ -137,20 +163,27 @@ async function deleteTask(page: Page, title: string) {
     .getByRole("button", { name: "Delete" })
     .click({ force: true });
 
-  // Clicking Delete is not deleting, and this line is where E2E-B24's `Task +6`
-  // came from. `deleteTask` is the LAST statement of six of the seven tests
-  // that create a task; the seventh ("delete the task and verify removal") is
-  // followed by a toast assertion and a row-gone assertion, so its server
-  // action is awaited and lands. Six created, one awaited, six left behind —
-  // the measured number exactly. `TasksContainer.onDeleteTask` (:132-147)
-  // toasts and then calls reloadTasks(), so the row leaving the table is the
-  // first observable proof that the action resolved rather than being
-  // abandoned when the page closed.
+  // Proof #1 — the SERVER answered. `TasksContainer.onDeleteTask` (:132-147)
+  // toasts `tasks.deletedSuccess` only after `deleteTaskById` has resolved, and
+  // `expectToast` finds the viewport through a CSS attribute selector, so no
+  // modal can hide it from the assertion.
   //
-  // It is also the only place a REFUSED delete can surface: deleteTaskById
+  // This is the line that makes the helper true. Without it `deleteTask`
+  // returned while the action was still in flight, the test ended, and the page
+  // closed under the request — `deleteTask` is the LAST statement of six of the
+  // seven tests that create a task, and exactly those six rows were in the run
+  // database afterwards. The seventh waited for this toast and is the one that
+  // deleted.
+  //
+  // It is also the only place a REFUSED delete can surface: `deleteTaskById`
   // returns `tasks.cannotDeleteWithActivity` for a task that still has an
-  // activity, and that path renders a destructive toast the old helper never
-  // looked at.
+  // activity, which renders a DESTRUCTIVE toast this pattern does not match. A
+  // refusal now fails the test instead of reading as a disappearing row.
+  await expectToast(page, /Task has been deleted/);
+
+  // Proof #2 — and the list agrees. Worth keeping, worth nothing alone: until
+  // `taskRows` became a DOM locator this assertion was satisfied by the modal's
+  // own `aria-hidden` (E2E-B40), which is how six leaked rows passed as gone.
   await expect(taskRows(page, title)).toHaveCount(0, { timeout: 15000 });
 
   // Gone for real — drop it from the tracking so the afterEach does not
@@ -179,6 +212,12 @@ async function deleteActivity(page: Page, activityName: string) {
   // DeleteAlertDialog's confirm button is t("common.delete") = "Delete"
   await page.getByRole("button", { name: "Delete" }).click({ force: true });
 
+  // Same two proofs as `deleteTask`, and needed here more: the task deletion
+  // that follows DEPENDS on this one having landed, so an activity delete left
+  // in flight surfaces later as `tasks.cannotDeleteWithActivity` on a different
+  // line. `ActivitiesTable` (:64) toasts `activities.deletedSuccess` after the
+  // action resolves.
+  await expectToast(page, /Activity has been deleted/);
   await expect(activityRows(page, activityName)).toHaveCount(0, {
     timeout: 15000,
   });
@@ -236,9 +275,12 @@ async function purgeTask(page: Page, title: string) {
       .getByRole("alertdialog")
       .getByRole("button", { name: "Delete" })
       .click({ force: true });
-    await taskRows(page, title)
-      .first()
-      .waitFor({ state: "detached", timeout: 15000 });
+    // `toHaveCount(0)` rather than `waitFor({ state: "detached" })`: detached is
+    // also true of a locator that matches nothing, so under the old role-based
+    // `taskRows` it resolved instantly against the modal's `aria-hidden` and the
+    // net "succeeded" without deleting anything (E2E-B40). The throw stays
+    // inside the try — teardown must report, not fail the run.
+    await expect(taskRows(page, title)).toHaveCount(0, { timeout: 15000 });
   } catch {
     // swallow-ok: cleanup net — the task may already be gone, and a throwing
     // hook would replace the real test failure with its own. The afterEach
@@ -255,9 +297,9 @@ async function purgeActivity(page: Page, activityName: string) {
       .click({ force: true });
     await page.getByRole("menuitem", { name: /Delete/ }).click({ force: true });
     await page.getByRole("button", { name: "Delete" }).click({ force: true });
-    await activityRows(page, activityName)
-      .first()
-      .waitFor({ state: "detached", timeout: 15000 });
+    await expect(activityRows(page, activityName)).toHaveCount(0, {
+      timeout: 15000,
+    });
   } catch {
     // swallow-ok: cleanup net — as purgeTask above.
   }
@@ -442,13 +484,12 @@ test.describe("Task CRUD", () => {
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Delete
+    // Delete. Both halves of the proof now live in `deleteTask` — asserting the
+    // same toast again here would only race the same 5 s lifetime
+    // (toaster.tsx:19) for information the helper already established.
     await deleteTask(page, taskTitle);
 
-    await expectToast(page, /Task has been deleted/);
-    await expect(
-      page.getByRole("row", { name: new RegExp(taskTitle, "i") }),
-    ).not.toBeVisible({ timeout: 10000 });
+    await expect(taskRows(page, taskTitle)).toHaveCount(0, { timeout: 10000 });
   });
 
   // --- Migrated from tasks.spec.ts (unique tests) ---
