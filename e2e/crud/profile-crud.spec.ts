@@ -266,6 +266,14 @@ test.afterEach(async ({ page }, testInfo) => {
     // depends on a previous test's leftovers (NoCrossTestDependency in the spec)
     // and a create path that does not populate the control. Sweeping JobTitle
     // would trade a silent leak for a red suite while fixing neither.
+    //
+    // 2026-09-04: "the create path leaves the trigger empty" is CONDITIONAL, not
+    // a property of the path. This spec run alone is 16/16 green and creates the
+    // title on that same path; run after task-crud + activity-crud, "add work
+    // experience" fails on it — twice, and identically on the unmodified
+    // baseline. The row is written either way. So whatever empties the trigger
+    // depends on what ran before, which is a stronger reason to leave the sweep
+    // off until E2E-B39 is understood rather than a weaker one.
     // { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
     { tab: ADMIN_TAB.company, names: createdCompanies },
     { tab: ADMIN_TAB.location, names: createdLocations },

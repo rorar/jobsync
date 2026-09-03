@@ -121,8 +121,44 @@ Available imports:
 | `expectToast(page, pattern, timeout?)` | Assert toast notification visible |
 | `selectOrCreateComboboxOption(page, label, placeholder, text, timeout?)` | 3-step combobox: exact → partial → create |
 | `safeWait(page, options, timeout?)` | Deterministic wait — replaces `waitForTimeout`. See below. |
+| `rowsByText(page, text)` | Table rows from the DOM, not the accessibility tree — the locator for "the row is gone". See below. |
 
 **Adding a new shared helper**: Only add helpers used by 3+ spec files. If it's aggregate-specific, keep it local.
+
+### Proving a deletion takes two assertions, and one wrong locator
+
+A modal makes the page invisible to `getByRole`. Radix's Dialog and AlertDialog
+call `hideOthers()` (`@radix-ui/react-dialog/dist/index.mjs:137`), which sets
+`aria-hidden="true"` on every child of `document.body` outside the dialog
+portal. Role locators consult the accessibility tree, so for as long as a
+confirm dialog is open or animating out they match **nothing** — and every
+phrasing of "the row is gone" passes against a row that is still on screen:
+
+```ts
+// WRONG — all three are satisfied by aria-hidden rather than by a deletion
+await expect(page.getByRole("row", { name: title })).toHaveCount(0);
+await expect(row).not.toBeVisible();
+await row.waitFor({ state: "detached" });
+```
+
+```ts
+// RIGHT — the server's answer, then the view's
+await expectToast(page, /Task has been deleted/);      // came from the round trip
+await expect(rowsByText(page, title)).toHaveCount(0);  // DOM, immune to the modal
+```
+
+Both halves are load-bearing. `rowsByText` reads the DOM, which only refreshes
+once the container's reload lands, so on its own it says nothing about whether
+the SERVER answered — without the toast the helper returns while the action is
+still in flight and the page closes under the request. And the toast on its own
+does not prove the list updated.
+
+This cost six leaked tasks per run, plus three resumes and their children,
+invisible behind a green suite (E2E-B40) — including one fix for the same
+symptom in another table that used the blinded locator and therefore changed
+nothing. `expectToast` is already immune for the same reason and documents it
+at length.
+
 
 ## Shared Fixtures (`e2e/helpers/*.ts`)
 
