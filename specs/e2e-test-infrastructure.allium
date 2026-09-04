@@ -250,6 +250,21 @@ enum OwnedRowStatus {
     released                       -- the row is provably gone
 }
 
+enum EvidenceReader {
+    -- WHERE an assertion reads its answer from. The two are not
+    -- interchangeable while a modal is on screen, and that window is exactly
+    -- when a deletion is asserted.
+    accessibility_tree             -- role/accessible-name locators
+    dom                            -- CSS locators, and text matched in the DOM
+}
+-- Radix's Dialog and AlertDialog call `hideOthers()` on mount
+-- (node_modules/@radix-ui/react-dialog/dist/index.mjs:137), which sets
+-- aria-hidden on every child of document.body outside the dialog portal. A
+-- table is such a child, so an accessibility_tree reader matches NOTHING for as
+-- long as the confirm dialog is open or animating out — and "matches nothing"
+-- satisfies every phrasing of "the row is gone". A dom reader never consults
+-- that tree and is unaffected.
+
 enum ResidueVerdict {
     -- Who is answerable for the rows a model gains during a run. The three
     -- values are NOT degrees of the same thing; they are different claims, and
@@ -399,6 +414,7 @@ entity TestCase {
 
     owned_rows: OwnedRow with owner = this
     console_oracle: ConsoleOracle with test_case = this
+    deletion_proofs: DeletionProof with test_case = this
 
     leaked_rows: owned_rows where status = written
     has_settled: outcome in {passed, failed, skipped}
@@ -464,6 +480,29 @@ entity OwnedRow {
     invariant ReleaseRequiresConfirmedDeletion {
         status = released implies deletion_confirmed
     }
+}
+
+entity DeletionProof {
+    -- The evidence ONE test offers that a delete actually happened. It is the
+    -- thing OwnedRow.deletion_confirmed is made of, and E2E-B40 is what happens
+    -- when it is made of the wrong thing.
+    --
+    -- Instances are source-level facts, like TestCase.behavioural_assertions:
+    -- no rule creates them, because nothing the suite runs can observe which
+    -- locator an author typed. They are declared so the property below has a
+    -- name and a shape a reviewer can check, not because a tool checks it.
+    test_case: TestCase
+    subject: String                -- the label whose row must be gone
+    reader: EvidenceReader         -- where the VIEW half reads its answer
+    read_while_modal_open: Boolean -- the read happens while the confirm dialog is open or animating out
+    has_round_trip_signal: Boolean -- a success message the action renders only after the server answered
+
+    -- has_round_trip_signal is deliberately not "the action was called" and not
+    -- "the row vanished". It is a signal the VIEW cannot produce on its own: in
+    -- this suite the delete toast, which the container renders after the server
+    -- action resolves. A DOM read is refreshed only once the container's reload
+    -- lands, so on its own it can be true while the request is still in flight —
+    -- and when the test then ends, the page closes under it.
 }
 
 entity ConsoleOracle {
@@ -941,6 +980,12 @@ rule TrackedRowReleasedOnConfirmedDelete {
         -- "Proven" means an observed success signal — the delete confirmation
         -- toast, or a re-query showing the row absent — not merely that the
         -- delete call returned.
+        -- Read that OR narrowly. Where the delete goes through a confirm dialog
+        -- the two are NOT alternatives: a re-query read through the modal is
+        -- satisfied by a row that is still there, and the toast is the only one
+        -- of the pair that comes from the server. See
+        -- DeletionProofSurvivesTheModalAndCitesTheServer, which is the shape
+        -- this clause has to take at those sites (E2E-B40).
 }
 
 ------------------------------------------------------------
@@ -1361,6 +1406,15 @@ invariant SettledTestCaseOwnsNoLeakedRow {
     --   opinion. A test that edits the seeded default profile passes a green
     --   gate, and nothing here will ever say so.
     --
+    -- WHY IT HAD TO BE THE GATE THAT FOUND E2E-B40, and not the tests: the
+    -- per-file afterEach net read the SAME blinded accessibility tree the
+    -- assertions did. At 278ad940~1 task-crud.spec.ts:113-120 defined its
+    -- taskRows/activityRows as getByRole("row", …), and the hook calls them to
+    -- decide whether to warn — so a row hidden by aria-hidden was invisible to
+    -- the cleanup as well as to the check, and the net warned about nothing.
+    -- An in-test net cannot catch a defect in how the test sees. See
+    -- DeletionProofSurvivesTheModalAndCitesTheServer.
+    --
     -- PROVENANCE is what keeps a skip from becoming a plausible wrong answer:
     -- the provisioning timestamp and the template stamp live INSIDE the run
     -- database (see RunDatabase). A gate run against a database from a different
@@ -1534,6 +1588,82 @@ invariant ConsoleOracleIsNeverTheOnlyAssertion {
     -- question at the foot of this file.
 }
 
+invariant DeletionProofSurvivesTheModalAndCitesTheServer {
+    -- Same family as ConsoleOracleIsNeverTheOnlyAssertion, and the more
+    -- dangerous member of it: there the surviving claim was weak, here the
+    -- surviving claim CANNOT FAIL. An assertion that cannot fail is worse than
+    -- a missing one, because it is counted.
+    --
+    -- Two halves, and each is load-bearing for a different reason:
+    --   The VIEW half must be read where the answer is still there. While a
+    --     confirm dialog is open or animating out, an accessibility_tree reader
+    --     matches nothing, and "matches nothing" satisfies toHaveCount(0),
+    --     not.toBeVisible() and waitFor({ state: "detached" }) alike (see the
+    --     note on EvidenceReader for the mechanism).
+    --   The SERVER half must exist at all. A DOM read is still only the view,
+    --     refreshed when the container reloads; it can be true while the delete
+    --     is in flight.
+    -- Neither implies the other, which is why this is one invariant with two
+    -- conjuncts rather than two invariants: a proof that has one half and not
+    -- the other is exactly the shape that shipped.
+    for proof in DeletionProofs:
+        (proof.read_while_modal_open implies proof.reader = dom)
+        and proof.has_round_trip_signal
+
+    -- WHY THE VIEW HALF IS CONDITIONAL AND THE SERVER HALF IS NOT.
+    -- accessibility_tree readers are the better default everywhere a modal is
+    -- not up, and forbidding them outright would be a rule about locators
+    -- rather than about evidence. The round-trip signal has no such exemption:
+    -- there is no deletion whose proof does not need the server to have
+    -- answered.
+    --
+    -- RELATION TO SettledTestCaseOwnsNoLeakedRow. That invariant says a settled
+    -- test owns no leaked row; this one says what may count as knowing. A
+    -- blinded proof does not weaken it — it makes it UNFALSIFIABLE from inside
+    -- the test, because the same empty accessibility tree is what a teardown net
+    -- reads, so teardown warns about nothing and the row survives the run.
+    -- The residue gate is what caught it, from outside, by counting rows in the
+    -- kept run database — another reason the database outlives the run
+    -- (DiscardRunDatabase).
+    --
+    -- RELATION TO ReleaseRequiresConfirmedDeletion, on OwnedRow. That invariant
+    -- requires a confirmed deletion before release, and
+    -- TrackedRowReleasedOnConfirmedDelete's guidance offered two ways to confirm
+    -- one — the toast OR a re-query showing the row absent. The second, read
+    -- through a modal, is satisfiable by a row that is still there. This
+    -- invariant is the correction: for a modal-guarded delete the two are not
+    -- alternatives.
+    --
+    -- MEASURED, not hypothetical (E2E-B40, fixed in 278ad940 and 8c72d743):
+    -- six of the seven task-crud tests that create a task left it in the run
+    -- database after a run Playwright reported as passed. The seventh — the
+    -- only one that also awaited the delete toast — deleted. It is a CLASS,
+    -- not an instance: 8c72d743 found the same shape in delete helpers in three
+    -- further spec files, one of them a fix written the DAY BEFORE for the same
+    -- symptom in another table, which used the blinded locator and therefore
+    -- changed nothing. That is the argument for stating this as a property
+    -- rather than as a convention about one helper.
+    --
+    -- THE REPAIRED SHAPE, for anyone writing a new deletion test:
+    --   e2e/helpers/index.ts:165-167  rowsByText — page.locator("tr", { hasText })
+    --   e2e/helpers/index.ts:116-127  expectToast — the toast viewport is found
+    --                                 by a CSS attribute selector, so it is a
+    --                                 dom reader too and no modal hides it
+    --   paired at e2e/helpers/resume-fixture.ts:108-109 and
+    --   e2e/crud/task-crud.spec.ts:155
+    --   written up in e2e/CONVENTIONS.md § "Proving a deletion takes two
+    --   assertions, and one wrong locator"
+    -- The invariant is about the PROPERTY, not those two helpers: a different
+    -- pair that reads the DOM and waits on a server-produced signal satisfies it
+    -- equally.
+    --
+    -- NOT ENFORCED BY ANY TOOL. Unlike ConsoleOracleIsNeverTheOnlyAssertion,
+    -- which gained a lexical detector in 4d558142, nothing checks this — see
+    -- the open question at the foot of this file. Do not read a green
+    -- `allium check` as evidence it holds; the checker does not resolve these
+    -- bodies at all (HONEST LIMITATION, above).
+}
+
 ------------------------------------------------------------
 -- Actor Declarations
 ------------------------------------------------------------
@@ -1698,6 +1828,10 @@ open question "EnrichmentResult is classified allowed_growth ('enrichment cache,
 open question "The residue gate enumerates tables from the TEMPLATE, so a table that exists only in the run database is never examined. _e2e_meta is the only one today and its ALLOWED_GROWTH entry is therefore inert — harmless, but it reads as an active exemption. More usefully, it means the gate cannot see a table a MIGRATION added if that migration also rebuilt the template, which is the case where a new model's residue is least likely to be anticipated."
 
 open question "SeedTemplate.stamp digests the schema, the migrations and the two seed scripts. Nothing else — so a change to a factory, a fixture helper or an env default that alters seeded CONTENT does not invalidate the template, and the next run silently uses one built from different behaviour. The stamp's input list is a claim about what determines the template's contents, and it is maintained by hand. What re-checks it?"
+
+-- Raised while writing DeletionProofSurvivesTheModalAndCitesTheServer (E2E-B40).
+
+open question "DeletionProofSurvivesTheModalAndCitesTheServer has no mechanism. Its sibling ConsoleOracleIsNeverTheOnlyAssertion gained one in 4d558142 — a lexical Jest check over e2e/ — and the same shape looks available here: flag a role/accessible-name locator in the same statement as toHaveCount(0), not.toBeVisible() or state: \"detached\", and flag a delete helper that ends without an expectToast. Both are lexical, both would have caught all four E2E-B40 sites. What is NOT decidable lexically is read_while_modal_open — whether a modal is up at that line — so the check would have to assume it always is, which forbids role locators in deletion assertions outright rather than only where they are blind. Is that over-reach acceptable in exchange for enforcement, or does this stay review-enforced like behavioural_assertions?"
 
 -- Raised while reconciling this spec with the per-worktree dev server decision
 -- (0e1b5fca). All three were found by reading the scripts, not by a failing run,

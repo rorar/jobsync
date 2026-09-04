@@ -569,10 +569,24 @@ rule DeleteCvDocument {
 ------------------------------------------------------------
 -- Rules — publication (BOTH modes; public_slug == the website surface, 9.5)
 ------------------------------------------------------------
+-- The three rules below share ONE trigger, SetPublication, and are told apart
+-- by a `requires: mode = …` guard. They were written as
+-- `SetPublication(user, document, mode: shared_link, …)` — dispatch inside the
+-- trigger's parameter list — which allium 3.2.3 accepted and 3.6.1 rejects
+-- (allium.rule.invalidTrigger): the `name: value` form is for trigger
+-- EMISSIONS, and a trigger's parameters are bare names. The guard is the
+-- language's own way to say the same thing ("when multiple rules share a
+-- trigger, their `requires` clauses determine which fires"), so the dispatch
+-- moved one clause down and nothing about which rule fires changed.
+-- The three guards are mutually exclusive and exhaust PublicationMode, so the
+-- overlapping-precondition ambiguity that construct warns about cannot arise —
+-- but note that this is now a claim a READER checks, not one the trigger's
+-- shape made structurally impossible.
 
 rule PublishViaSharedLink {
-    when: SetPublication(user, document, mode: shared_link, expires_at?, password?)
+    when: SetPublication(user, document, mode, expires_at?, password?)
 
+    requires: mode = shared_link
     requires: exists document where document.user = user
     requires: document.status != archived
 
@@ -591,8 +605,9 @@ rule PublishViaSharedLink {
 }
 
 rule PublishViaPublicSlug {
-    when: SetPublication(user, document, mode: public_slug, slug, consent)
+    when: SetPublication(user, document, mode, slug, consent)
 
+    requires: mode = public_slug
     requires: exists document where document.user = user
     requires: document.status != archived
     requires: consent = true
@@ -622,8 +637,9 @@ rule PublishViaPublicSlug {
 }
 
 rule Unpublish {
-    when: SetPublication(user, document, mode: private)
+    when: SetPublication(user, document, mode)
 
+    requires: mode = private
     requires: exists document where document.user = user
 
     ensures:
