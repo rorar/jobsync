@@ -255,7 +255,9 @@ failing spec alone and record the duration before reaching for an explanation.
 
 ## 9. Same day, 17:00-21:30 — the Phase 1 rework and what it changed
 
-Appended after the fact. Where this section and §1-8 disagree, this one is current.
+Appended after the fact. Where this section and §1-8 disagree, this one is current — **and where
+this section and §9b disagree, §9b is current.** §9b (2026-09-03/04) corrects four of the six items
+in this section's "Open, in order" list.
 
 ### What replaced what
 
@@ -330,6 +332,9 @@ overwrites it.** Copy it before relying on it.
 
 ### Open, in order
 
+*Superseded by "§ 9b — 2026-09-03/04" below. Kept because the ordering argument is still the one in
+force; read the status corrections there before acting on any line here.*
+
 1. **SPEC-B2** — `DiscardRunDatabase` says remove the run database at run end; the code keeps it.
    Both written today, by the same author, in the same session that fixed this defect twice.
 2. Phase 2 implementation as revised (residue gate, Jest swallowed-assertion check, `uniqueId`
@@ -339,3 +344,93 @@ overwrites it.** Copy it before relying on it.
 5. **SPEC-B1** — `allium check specs/` reports 3 errors in `cv-document.allium` caused by the
    toolchain upgrade 3.2.3 → 3.6.1, not by a commit.
 6. 35 commits unpushed since `5e5d4ae8`.
+
+## 9b. 2026-09-03/04 — what landed, and the run that measured the machine instead of the tree
+
+Appended 2026-09-04. Where this section and §9 disagree, this one is current.
+
+### Commits since `0c31fed2`
+
+All on `fix/e2e-elysium`, none pushed.
+
+| Commit | What it changed |
+|---|---|
+| `278ad940` | task-crud proves a deletion against the DOM, not the accessibility tree (E2E-B40). |
+| `8c72d743` | The same rule given ONE home in `rowsByText` (`e2e/helpers/index.ts`) and applied to every deletion proof — four helpers across `task-crud`, `activity-crud`, `profile-crud`, `helpers/resume-fixture`. Measured profile-crud alone: `Resume +3 → 0`, `ResumeSection +1 → 0`, `ContactInfo +1 → 0`, `Summary +1 → 0`, `Location +3 → 0`. |
+| `7a61f7ca` | E2E-B40's recorded cause corrected (the modal's `aria-hidden`, not the status filter) and the rule written into `e2e/CONVENTIONS.md`, where a spec author is already looking. |
+| `5a5b937f` | The swamped-run guard could never fire: `1cd54f8d` read a timeout count from a Playwright JSON report nothing produced, and an absent report initialised to `0` — the one value that lets the gate proceed (E2E-B41). |
+| `31763aa9` | The wrapper now says when a run measured the machine, and stops the dev server it started (`E2E_KEEP_SERVER=1` opts out; only when `E2E_SERVER_STARTED` is set, so a borrowed server under `E2E_REUSE_SERVER=1` outlives us). Five more deleted-file comments corrected; `KNOWN_DEBT`'s provenance block recounted. |
+| `98f4ce4a` | `--timeout` made a knob that works: 25 absolute `test.setTimeout()` calls become `testInfo.timeout + N`, four that sat at exactly the default deleted. The console oracle stops judging setup — `collectConsoleErrors` returns a `mark()` / `sinceMark()` handle and all seven `keyboard-ux` windows now cover the act phase only (E2E-B28). Six more deleted-file comments, one of them assertion text (E2E-B36). |
+
+`git rev-list --count origin/fix/e2e-elysium..HEAD` = **49**, not the 35 §9 recorded.
+
+### The 2026-09-04 full run is void. Do not quote a number from it.
+
+It ran 00:39 → 13:42 — **783 minutes, 13.1 hours** wall clock — and produced **50 `timedOut` of 112
+results** with single tests at 13-14 minutes. Host load average 36; **our own cgroup used 0.07 of
+its 5 allowed cores for the duration**, so the load came from outside this container, which is the
+one thing `scripts/lib-runtime-guard.sh` documents that it cannot see. `test-results/.last-run.json`
+still records that run: `status: "failed"`, 71 entries in `failedTests`.
+
+Two things followed from it, both now fixed, and both discovered *by using* the instrument rather
+than by reading it:
+
+- The residue gate judged that run's residue and printed eleven models as debt. Those counts
+  measure contention. `5a5b937f` makes a missing report `unknown` rather than zero, which skips.
+- The test result itself still read as a verdict on the code — "71 failed" and nothing else.
+  `31763aa9` makes it print the same three numbers the gate reads and say what they mean.
+
+A leftover dev server from that run held **5.6 GB for 13 h 50 min** and would have counted toward
+the pre-run guard on the next attempt — blocking the very run that would have replaced it. That is
+why `31763aa9` stops the server the wrapper started.
+
+### What is now waiting specifically on a quiet full run
+
+Everything below is written, reviewed and statically verified; none of it has been measured
+end-to-end, because no run since 2026-09-04 00:39 has been trustworthy. `278ad940`, `8c72d743`,
+`5a5b937f`, `31763aa9` and `98f4ce4a` each record "no test was run" or a per-spec measurement only.
+
+1. **The residue gate's end-to-end path.** Its five branches were exercised against fixture reports
+   in isolation (missing → skip, quiet → judge, 5 timeouts → skip, unprovisioned → skip, rc=2 →
+   skip). The path where the wrapper writes its own JSON report and the gate reads it has never run
+   for real.
+2. **`Task +6 → 0` and `Activity 0` at suite scale.** Measured on `task-crud` alone. The aria-hidden
+   fix touched four helpers in three files; only profile-crud and task-crud were measured, each
+   alone.
+3. **`Company` reaching zero in profile-crud** (E2E-B26). `"E2E Corp"` is now registered for
+   teardown and the app-side guard no longer blocks once the resume is gone, but the measured list
+   in E2E-B25 omits `Company` and `Company:E2E-B25` is still in `KNOWN_DEBT`.
+4. **The seven re-windowed console assertions** (E2E-B28). `sinceMark()` without a `mark()` reports
+   everything, so a forgotten mark makes a test noisier rather than blind — but no run has confirmed
+   that none of the seven went vacuous.
+5. **E2E-B39**, the ordering-dependent `profile-crud` failure. Reproduced twice on the unmodified
+   baseline (`profile-crud` alone 16/16 green; after `task-crud` + `activity-crud`, red at "add work
+   experience"). Not diagnosed.
+6. **E2E-B35**, the `keyboard-ux` timing cluster. Its whole thesis is about behaviour under load, so
+   a contended run cannot test it and a quiet one is the only instrument.
+7. **Whether the two `KNOWN_DEBT` entries for `Task` and `Activity` can be deleted** — the array is
+   the gate's classifier, so deleting them converts the measured fix into enforcement, and that is
+   only safe once a clean run confirms the zeros. See E2E-B24 in `docs/BUGS.md`.
+
+### Corrections to §9's "Open, in order"
+
+- **E2E-B36 is done.** Zero `cleanup-stale-data` references remain in `scripts/` or `e2e/`; the one
+  in `scripts/e2e-db.sh:10` is deliberate history, describing what the file replaced.
+- **E2E-B28 is done** (`98f4ce4a`).
+- **The `uniqueId` worker discriminator is done** (`4447b9fe`), and the **Jest swallowed-assertion
+  check exists** (`__tests__/e2e-no-swallowed-assertions.spec.ts`). Both were line 2's Phase 2
+  items, along with the residue gate.
+- **SPEC-B1's fix is present in the working tree but NOT committed.** Verified 2026-09-04:
+  `git status` shows `specs/cv-document.allium` modified, and the diff converts all three
+  `SetPublication(…, mode: <literal>, …)` triggers to a bare `mode` parameter plus a
+  `requires: mode = …` guard — the shape 3.6.1 wants — with a comment block above them explaining
+  that the dispatch moved one clause down and nothing about which rule fires changed. That edit was
+  made by another agent during this session and is not this document's to claim. `allium check` was
+  NOT run.
+- **SPEC-B2 is unchanged and still open.** `specs/e2e-test-infrastructure.allium` is also modified
+  in the working tree, but the diff is 135 added lines and no deletions — `DiscardRunDatabase` still
+  requires removal at run end while `test-e2e.sh:384` still defaults `E2E_KEEP_RUN_DB` to `1`.
+
+Every "done" above is a **static** verification — a file read or a diff — not a run result.
+`docs/BUGS.md` deliberately leaves E2E-B28 and E2E-B36 at `Open` pending adjudication; that is the
+honest state, not an oversight.
