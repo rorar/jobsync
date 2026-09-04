@@ -42,6 +42,12 @@ test.describe("Staging layout toggle", () => {
   test("switches to comfortable and persists across reload", async ({
     page,
   }) => {
+    // Deliberately absolute and BELOW the config default of 60 s
+    // (playwright.config.ts:23): this test only toggles a localStorage-backed
+    // control and reloads, so 45 s is a ceiling on how slow that may get.
+    // Do NOT convert it to `testInfo.timeout + Δ` like the others — that would
+    // LOOSEN it whenever the operator raises --timeout, which is the opposite
+    // of the intent.
     test.setTimeout(45_000);
 
     await navigateToStaging(page);

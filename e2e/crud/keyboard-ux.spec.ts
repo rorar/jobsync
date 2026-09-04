@@ -293,8 +293,32 @@ function hasAnnouncement(announcements: string[], substring: string): boolean {
 // Console error collector
 // ---------------------------------------------------------------------------
 
-function collectConsoleErrors(page: Page): string[] {
+/**
+ * A console-error oracle with an EXPLICIT observation window.
+ *
+ * The listeners go on at the top of the test body and cannot be moved later:
+ * `page.on` never sees what it missed. But the assertion must not judge
+ * everything they heard. Page load, the auth redirect and hydration all run
+ * before the behaviour under test, and their errors used to fail whichever
+ * interaction test happened to navigate afterwards — the oracle's window was
+ * wider than the behaviour it was written to observe (E2E-B28).
+ *
+ * `mark()` opens the window immediately before the act phase; `sinceMark()`
+ * reports only what arrived after it, filtered. A `sinceMark()` with no
+ * preceding `mark()` reports everything, i.e. the old behaviour, so forgetting
+ * the mark makes a test noisier rather than silently blind.
+ */
+type ConsoleErrorOracle = {
+  /** Open the observation window at the current position. */
+  mark: () => void;
+  /** Critical errors recorded since the last `mark()`. */
+  sinceMark: () => string[];
+};
+
+function collectConsoleErrors(page: Page): ConsoleErrorOracle {
   const errors: string[] = [];
+  let windowStart = 0;
+
   page.on("console", (msg) => {
     if (msg.type() === "error") {
       errors.push(msg.text());
@@ -303,7 +327,13 @@ function collectConsoleErrors(page: Page): string[] {
   page.on("pageerror", (err) => {
     errors.push(err.message);
   });
-  return errors;
+
+  return {
+    mark: () => {
+      windowStart = errors.length;
+    },
+    sinceMark: () => filterCriticalErrors(errors.slice(windowStart)),
+  };
 }
 
 function filterCriticalErrors(errors: string[]): string[] {
@@ -358,11 +388,16 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
 
   test("Enter key creates a new option in Title combobox", async ({ page }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const title = `KBTest Title ${uid}`;
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     // Open the Title combobox (first combobox in the dialog)
     await getTitleCombobox(page).click();
@@ -392,7 +427,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
       expect(hasAnnouncement(announcements, `${title} created`)).toBe(true);
     }).toPass({ timeout: 5000 });
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Enter key creates a new option in Company combobox", async ({
@@ -489,10 +524,15 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
   }) => {
     const uid = uniqueId();
     const title = `KBRapid ${uid}`;
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or search Title");
@@ -504,7 +544,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await titleInput.press("Enter");
 
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Click outside clears stale text on reopen", async ({ page }) => {
@@ -545,12 +585,17 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     page,
   }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const skill = `KBSkill ${uid}`;
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
     await openSkillsPopover(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     const skillInput = page.getByPlaceholder(/Type a skill/i);
     await expect(skillInput).toBeVisible();
@@ -580,7 +625,7 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
       ).toBe(true);
     }).toPass({ timeout: 5000 });
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Multiple tags can be added rapidly via Enter", async ({ page }) => {
@@ -696,7 +741,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     page,
   }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc1 ${uid}`;
 
     // Registered BEFORE the write. `ensureResumeExists` creates the row on its
@@ -731,6 +776,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const searchInput = page.getByPlaceholder(/Search occupations/i);
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
+
     const keyword = `KBKeyword ${uid}`;
     await searchInput.fill(keyword);
     // The occupation list is fetched from the ESCO proxy behind a debounce.
@@ -752,7 +802,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
       expect(hasAnnouncement(announcements, "added")).toBe(true);
     }).toPass({ timeout: 5000 });
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
 
     await deleteResumeTracked(page, resumeTitle);
   });
@@ -853,7 +903,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     page,
   }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc4 ${uid}`;
 
     // Registered BEFORE the write. `ensureResumeExists` creates the row on its
@@ -882,11 +932,16 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const searchInput = page.getByPlaceholder(/Search occupations/i);
 
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
+
     await searchInput.type(`QuickKW ${uid}`, { delay: 10 });
     await searchInput.press("Enter");
 
     await expect(page.getByText(`QuickKW ${uid}`).first()).toBeVisible();
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
 
     await deleteResumeTracked(page, resumeTitle);
   });
@@ -935,7 +990,7 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
 
   test("Search for country and select via click", async ({ page }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
 
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -959,6 +1014,11 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible({ timeout: 5000 });
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     await locationInput.fill("Germany");
 
@@ -987,7 +1047,7 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       test.skip(true, "EURES location options unavailable — external service");
     }
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Country with regions: click expands/collapses", async ({ page }) => {
@@ -1046,10 +1106,15 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
   }) => {
     const uid = uniqueId();
     const title = `KBMobile ${uid}`;
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or search Title");
@@ -1081,7 +1146,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(companyInput).not.toBeVisible();
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("CommandList has touch-action: pan-y on mobile", async ({ page }) => {

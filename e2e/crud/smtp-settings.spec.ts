@@ -201,8 +201,8 @@ test.describe("SMTP Settings", () => {
 
   test("should configure SMTP and display the saved config", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);
@@ -234,8 +234,8 @@ test.describe("SMTP Settings", () => {
     await deleteSmtpConfig(page);
   });
 
-  test("should edit SMTP configuration", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should edit SMTP configuration", async ({ page }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);
@@ -277,8 +277,8 @@ test.describe("SMTP Settings", () => {
     await deleteSmtpConfig(page);
   });
 
-  test("should delete SMTP configuration", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should delete SMTP configuration", async ({ page }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);
@@ -311,8 +311,8 @@ test.describe("SMTP Settings", () => {
 
   test("should show test email button with cooldown text", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);

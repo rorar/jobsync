@@ -172,8 +172,10 @@ async function purgeApiKey(page: Page, keyName: string) {
     await deleteDialog.getByRole("button", { name: /Delete/i }).click();
     await deleteDialog.waitFor({ state: "hidden", timeout: 5000 });
   } catch {
-    // Key already gone, or the page is unusable — cleanup-stale-data.ts
-    // (step 13, name startsWith "E2E ") is the backstop.
+    // Key already gone, or the page is unusable. There is no cross-run backstop
+    // any more and none is needed: the run database is a disposable copy of the
+    // seed template (scripts/e2e-db.sh, ADR-045), which holds no PublicApiKey
+    // rows, so a key that survives here is only charged against this run's cap.
   }
 }
 
@@ -216,8 +218,9 @@ test.describe("Public API Key Management", () => {
           console.warn(
             `[settings-api-keys] leaked key survived cleanup: ${keyName} ` +
               `— an ACTIVE key counts against the limit of 10 ` +
-              `(publicApiKey.actions.ts:38) until the next run's ` +
-              `cleanup-stale-data.ts step 13 removes it.`,
+              `(publicApiKey.actions.ts:38) for the REST OF THIS RUN. The ` +
+              `next run copies the seed template again, and that holds no ` +
+              `PublicApiKey rows (scripts/e2e-db.sh).`,
           );
         }
       }
@@ -231,7 +234,6 @@ test.describe("Public API Key Management", () => {
   test("should create a new API key and display it in the list", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
     const uid = uniqueId();
     const keyName = `E2E Key ${uid}`;
 
@@ -252,7 +254,6 @@ test.describe("Public API Key Management", () => {
   });
 
   test("should revoke an active API key", async ({ page }) => {
-    test.setTimeout(60_000);
     const uid = uniqueId();
     const keyName = `E2E Key ${uid}`;
 
@@ -276,7 +277,6 @@ test.describe("Public API Key Management", () => {
   });
 
   test("should delete a revoked API key", async ({ page }) => {
-    test.setTimeout(60_000);
     const uid = uniqueId();
     const keyName = `E2E Key ${uid}`;
 

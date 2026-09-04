@@ -56,8 +56,6 @@ test.describe("Staging details sheet", () => {
   test("opens, shows vacancy title, and closes without losing position", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
-
     await navigateToStaging(page);
 
     // The "New" tab is the default; we want to look at staged vacancies.

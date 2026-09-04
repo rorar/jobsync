@@ -215,8 +215,8 @@ test.describe("Job Detail Panels", () => {
 
   test("enrichment status panel renders on job detail page", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
 
     const uid = uniqueId();
     const jobTitle = `E2E Detail ${uid}`;
@@ -267,8 +267,8 @@ test.describe("Job Detail Panels", () => {
 
   test("status history timeline renders on job detail page", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
 
     const uid = uniqueId();
     const jobTitle = `E2E Timeline ${uid}`;
@@ -313,8 +313,8 @@ test.describe("Job Detail Panels", () => {
 
   test("status history timeline shows status change after update", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
 
     const uid = uniqueId();
     const jobTitle = `E2E StatusChg ${uid}`;

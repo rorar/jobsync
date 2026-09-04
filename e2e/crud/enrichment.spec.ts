@@ -153,8 +153,8 @@ test.describe("Enrichment", () => {
 
   test("company logo component renders after job creation", async ({
     page,
-  }) => {
-    test.setTimeout(120_000); // Create + verify + cleanup can be slow
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Create + verify + cleanup can be slow
 
     const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
@@ -245,8 +245,6 @@ test.describe("Enrichment", () => {
   });
 
   test("module activation toggle persists after reload", async ({ page }) => {
-    test.setTimeout(60_000);
-
     await navigateToEnrichmentSettings(page);
 
     // Find the Google Favicon module toggle (credential-free, safe to toggle)

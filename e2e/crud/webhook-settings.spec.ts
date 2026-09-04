@@ -232,8 +232,9 @@ test.describe("Webhook Settings", () => {
         if ((await getEndpointCard(page, url).count()) > 0) {
           console.warn(
             `[webhook-settings] leaked endpoint survived cleanup: ${url} ` +
-              `— it counts against MAX_ENDPOINTS_PER_USER until the next run's ` +
-              `cleanup-stale-data.ts step 0a removes it.`,
+              `— it counts against MAX_ENDPOINTS_PER_USER for the REST OF ` +
+              `THIS RUN. The next run copies the seed template again, and ` +
+              `that holds no WebhookEndpoint rows (scripts/e2e-db.sh).`,
           );
         }
       }
@@ -274,8 +275,8 @@ test.describe("Webhook Settings", () => {
 
   test("should create a webhook endpoint and display it in the list", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 
@@ -298,8 +299,10 @@ test.describe("Webhook Settings", () => {
     await deleteWebhookEndpoint(page, webhookUrl);
   });
 
-  test("should toggle webhook endpoint active state", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should toggle webhook endpoint active state", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 
@@ -335,8 +338,8 @@ test.describe("Webhook Settings", () => {
     await deleteWebhookEndpoint(page, webhookUrl);
   });
 
-  test("should delete a webhook endpoint", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should delete a webhook endpoint", async ({ page }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 
@@ -361,8 +364,8 @@ test.describe("Webhook Settings", () => {
 
   test("should expand endpoint details to show subscribed events", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 

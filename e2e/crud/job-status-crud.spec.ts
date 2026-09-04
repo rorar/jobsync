@@ -160,8 +160,8 @@ test.describe("Custom JobStatus → dynamic Kanban", () => {
 
   test("re-selecting the current interviewing status logs a new round (self-transition)", async ({
     page,
-  }) => {
-    test.setTimeout(180_000); // create + 2 edits + detail nav on a cold dev server
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 120_000); // create + 2 edits + detail nav on a cold dev server
     const uid = uniqueId();
     const jobTitle = `E2E RoundJob ${uid}`;
     const company = `E2E RoundCo ${uid}`;

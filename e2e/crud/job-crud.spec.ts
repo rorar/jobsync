@@ -242,8 +242,10 @@ test.describe("Job CRUD", () => {
     ]);
   });
 
-  test("should create a new job with all fields", async ({ page }) => {
-    test.setTimeout(120_000); // first crud job compiles the Add Job route on the dev server → >60s
+  test("should create a new job with all fields", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // first crud job compiles the Add Job route on the dev server → >60s
     const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -269,8 +271,8 @@ test.describe("Job CRUD", () => {
 
   test("should create a job with a structured salary range (Welle 2 Phase 3)", async ({
     page,
-  }) => {
-    test.setTimeout(120_000); // Resume + full job + salary fields requires >60s on slow dev server
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Resume + full job + salary fields requires >60s on slow dev server
     const uid = uniqueId();
     const jobTitle = `E2E Salary Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -299,8 +301,8 @@ test.describe("Job CRUD", () => {
 
   test("should edit the job description and verify updated values", async ({
     page,
-  }) => {
-    test.setTimeout(120_000); // Create + Edit requires >60s on slow dev server
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Create + Edit requires >60s on slow dev server
     const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -367,8 +369,10 @@ test.describe("Job CRUD", () => {
     await deleteResume(page, resumeTitle);
   });
 
-  test("should delete the job and verify removal", async ({ page }) => {
-    test.setTimeout(120_000); // Create + Delete requires >60s on slow dev server
+  test("should delete the job and verify removal", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Create + Delete requires >60s on slow dev server
     const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -404,8 +408,8 @@ test.describe("Job CRUD", () => {
   // F-AJ-04: due date is optional — a job can be created with no due date.
   test("should create a job with the due date cleared (F-AJ-04)", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
     const uid = uniqueId();
     const jobTitle = `E2E NoDue ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -439,8 +443,8 @@ test.describe("Job CRUD", () => {
   // -------------------------------------------------------------------------
   test("should create a job with a point of contact and surface it on the contact's Related Jobs", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
     const uid = uniqueId();
     const jobTitle = `E2E Contact Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -507,8 +511,8 @@ test.describe("Job CRUD", () => {
   // round-trips through JOB_*_SELECT.
   test("should create a job with a recruiter triangle and prefill it on edit (F-AJ-08)", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
     const uid = uniqueId();
     const jobTitle = `E2E Recruiter Job ${uid}`;
     const company = `E2E Company ${uid}`;

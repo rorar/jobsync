@@ -119,15 +119,24 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
     // an absent option is absent — passing while proving nothing — so the
     // precondition is loud rather than skipped. Usual cause: a previous run
     // deactivated JSearch and left it that way (this test deliberately does
-    // not restore it — see the note at the end of the test). The state is
-    // reset centrally by e2e/cleanup-stale-data.ts step 0b, which deletes
-    // every ModuleRegistration row so the manifest default (active) reapplies
-    // — but only from the NEXT dev-server start, since syncRegistryFromDb
-    // latches on `dbSynced` and reads the table once per process
-    // (src/actions/module.actions.ts:430).
+    // not restore it — see the note at the end of the test).
+    //
+    // Nothing resets the state any more, because nothing has to: every run gets
+    // a fresh copy of a template built from prisma/seed.ts + prisma/seed-e2e.ts
+    // (scripts/e2e-db.sh, ADR-045), and NEITHER seed writes a
+    // ModuleRegistration row — so the run database starts with the table empty
+    // and the manifest default (active) applies. Deactivation writes a row into
+    // a database that dies with the run.
+    //
+    // Two ways the precondition can still be false, both per-PROCESS rather
+    // than per-database: a second run against the SAME dev server, since
+    // syncRegistryFromDb latches on `dbSynced` and reads the table once per
+    // process (src/actions/module.actions.ts:437) — scripts/test-e2e.sh starts a
+    // fresh server for exactly this reason — and E2E_REUSE_SERVER=1, which both
+    // reuses the process AND keeps prisma/dev.db.
     expect(
       wasActive,
-      "JSearch must start ACTIVE or this test proves nothing; a previous run likely left it inactive (cleanup-stale-data.ts step 0b resets ModuleRegistration, effective after the dev server restarts)",
+      "JSearch must start ACTIVE or this test proves nothing; the run database starts with no ModuleRegistration rows (scripts/e2e-db.sh), so a false here means this dev-server PROCESS already deactivated it — re-run without E2E_REUSE_SERVER=1",
     ).toBe(true);
 
     // Deactivate JSearch. Unconditional: the assertion above admits no other
@@ -156,10 +165,11 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
     await page.keyboard.press("Escape");
 
     // No per-test restore of the module state, deliberately. Module state is
-    // GLOBAL (ModuleRegistration has no user column) and is now reset centrally
-    // by e2e/cleanup-stale-data.ts step 0b, which deletes every row so the
-    // manifest-declared default reapplies on the next run. Per-test restoration
-    // only ever existed because that reset did not.
+    // GLOBAL (ModuleRegistration has no user column), but it is written to a
+    // database that does not outlive the run: the next run copies the template
+    // again, and the template has no ModuleRegistration rows, so the
+    // manifest-declared default reapplies (scripts/e2e-db.sh, ADR-045).
+    // Per-test restoration only ever existed because that was not true.
     //
     // A UI restore is impossible here regardless: JSearch is credential-gated
     // (credential.type "api_key", required: true, credential.moduleId
