@@ -258,7 +258,29 @@ echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E
 #   E2E_CPU_QUOTA   cgroup CPUQuota                          (default 400%)
 MEM_MAX="${E2E_MEM_MAX:-6G}"
 CPU_QUOTA="${E2E_CPU_QUOTA:-400%}"
-RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@")
+# The residue gate refuses to judge a swamped run, and it counts the timeouts
+# from a JSON report. Nothing produced one: the default reporter is `list`, so
+# `PLAYWRIGHT_JSON_OUTPUT_NAME` was unset on every ordinary invocation, the file
+# was absent, and the absence was read as "zero timeouts". The guard added in
+# `1cd54f8d` had therefore never fired in a default run and could not — measured
+# 2026-09-04 on a run with 50 timedOut tests, which the gate went on to judge.
+#
+# So the wrapper produces the report itself. A caller who overrides `--reporter`
+# takes that guarantee away, and the gate then SKIPS rather than assume: absence
+# of evidence is not evidence of a healthy run.
+E2E_REPORT_JSON="${E2E_REPORT_JSON:-$PWD/test-results/.e2e-run-report.json}"
+mkdir -p "$(dirname "$E2E_REPORT_JSON")"
+rm -f "$E2E_REPORT_JSON"
+export PLAYWRIGHT_JSON_OUTPUT_NAME="$E2E_REPORT_JSON"
+
+REPORTER_ARGS=()
+case " $* " in
+  *" --reporter"*|*" -r "*) : ;;   # caller owns the reporter; see above
+  *) REPORTER_ARGS=(--reporter=list,json) ;;
+esac
+
+RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" \
+     "${REPORTER_ARGS[@]}" "$@")
 
 echo "[test-e2e] limits: mem=${MEM_MAX} cpu=${CPU_QUOTA}"
 if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 \
@@ -294,17 +316,24 @@ RC=$?
 #     reached their cleanup. Playwright's exit code cannot express this -- it was
 #     1, meaning "ran and reported" -- so the count comes from the JSON report
 #     when one was produced.
-TIMED_OUT=0
-if [ -n "${PLAYWRIGHT_JSON_OUTPUT_NAME:-}" ] && [ -f "${PLAYWRIGHT_JSON_OUTPUT_NAME}" ]; then
+# A MISSING report is not a quiet run. The previous version initialised the
+# count to 0 and left it there when the file was absent, which is the one value
+# that lets the gate proceed — so the check was strongest exactly when it knew
+# least. Three states now, and only one of them judges.
+if [ -f "${PLAYWRIGHT_JSON_OUTPUT_NAME:-}" ]; then
   TIMED_OUT="$(grep -o '"status": *"timedOut"' "$PLAYWRIGHT_JSON_OUTPUT_NAME" 2>/dev/null | wc -l)"
+else
+  TIMED_OUT="unknown"
 fi
 
 if [ "${E2E_DB_PROVISIONED:-0}" = "1" ] && { [ "$RC" = "0" ] || [ "$RC" = "1" ]; } &&
-   [ "${TIMED_OUT:-0}" -lt 3 ]; then
+   [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -lt 3 ]; then
   if ! bash "$DIR/check-e2e-residue.sh"; then
     [ "$RC" = "0" ] && RC=1
   fi
-elif [ "${TIMED_OUT:-0}" -ge 3 ]; then
+elif [ "$TIMED_OUT" = "unknown" ]; then
+  echo "[residue] SKIPPED — no JSON report at ${PLAYWRIGHT_JSON_OUTPUT_NAME:-<unset>}, so the timeout count is unknown and a swamped run cannot be told from a quiet one. A custom --reporter suppresses it."
+elif [ "$TIMED_OUT" -ge 3 ]; then
   echo "[residue] SKIPPED — ${TIMED_OUT} tests timed out; a test killed mid-body leaves rows that say nothing about ownership."
 elif [ "${E2E_DB_PROVISIONED:-0}" != "1" ]; then
   echo "[residue] SKIPPED — this run did not provision a database (E2E_REUSE_SERVER)."
