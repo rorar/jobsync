@@ -7,9 +7,12 @@
 # working database, the same file the dev server uses. Everything downstream of
 # that fact was a workaround for it:
 #
-#   - e2e/cleanup-stale-data.ts, 330 lines of foreign-key-ordered deletes, whose
+#   - e2e/cleanup-stale-data.ts — 330 lines of foreign-key-ordered deletes whose
 #     only job was removing the previous run's residue from a database that was
-#     never supposed to hold it.
+#     never supposed to hold it. DELETED on 2026-09-02 by the change this file
+#     implements (ADR-045), so it is history: do not go looking for the file,
+#     and do not restore a between-runs purge to fix a leak. A leak is now a
+#     finding the residue gate prints (scripts/check-e2e-residue.sh).
 #   - The "E2E " name prefix, a convention living in prose and in a `startsWith`
 #     filter, which is what that cleanup matched on. It has been broken twice
 #     (E2E-B3, and E2E-B22 where four specs write `E2E${uid}` with no space), and

@@ -30,6 +30,8 @@
 #   E2E_WORKERS            playwright workers              (default 1)
 #   E2E_LOGIN_TIMEOUT_MS   global-setup login wait, ms     (default 90000)
 #   E2E_SERVER_WAIT        seconds to await cold server    (default 150)
+#   E2E_KEEP_SERVER        1 = leave OUR dev server up     (default 0: stopped
+#                          after the run, because a reused one is never reused)
 #   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH  chromium binary   (auto: NixOS path if
 #                                        present, else Playwright's own download)
 set -uo pipefail
@@ -147,9 +149,11 @@ export NEXTAUTH_URL="$E2E_BASE_URL"
 # database, so reuse carries state across runs that the cleanup cannot reach:
 #
 #   - Module activation. `syncRegistryFromDb` (src/actions/module.actions.ts:437)
-#     latches on `dbSynced` and reads ModuleRegistration ONCE per process, so
-#     cleanup-stale-data.ts step 0b — which deletes every row so the manifest
-#     default reapplies — has no effect on a server that already synced.
+#     latches on `dbSynced` and reads ModuleRegistration ONCE per process, so a
+#     fresh run database — which holds NO ModuleRegistration rows at all, since
+#     neither seed writes one, and therefore lets the manifest defaults reapply —
+#     has no effect on a server that already synced. A per-run database fixes
+#     the state on disk; it cannot reach state latched in a process.
 #     automation-wizard-modules.spec.ts deactivates JSearch and cannot restore it
 #     (credential-gated), so on a reused server its own precondition fails on the
 #     SECOND run. Measured 2026-09-01: same process, DB already reset, test red at
@@ -176,11 +180,13 @@ if [ "${E2E_REUSE_SERVER:-0}" = "1" ] &&
   echo "                   names neither. Your working data WILL be written to."
 else
   # Give this run its own database. Everything the suite writes lands in a copy
-  # of a seeded template that dies with the next run, so prisma/dev.db is never
-  # opened: see scripts/e2e-db.sh for why that replaces cleanup-stale-data.ts
-  # rather than improving it. Must happen BEFORE the server starts — the export
-  # reaches the app only through dev-e2e.sh's environment, and the Playwright
-  # process needs it too (e2e/cleanup-stale-data.ts opens its own PrismaClient).
+  # of a seeded template that the next run replaces, so prisma/dev.db is never
+  # opened: scripts/e2e-db.sh and ADR-045 say why a disposable copy REPLACED the
+  # old between-runs purge rather than improving it. Must happen BEFORE the
+  # server starts — the export below reaches the app only through the
+  # environment dev-e2e.sh is spawned with, and a running server cannot be
+  # re-pointed afterwards; provisioning under one is how a run ends up with the
+  # app on one database and its checks on another, a failure that names neither.
   e2e_db_provision_run || exit 1
   E2E_DB_PROVISIONED=1
 
@@ -210,6 +216,10 @@ else
   echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
   nohup bash "$DIR/dev-e2e.sh" >/tmp/jobsync-e2e-dev.log 2>&1 &
   STARTER_PID=$!
+  # Recorded HERE, on the only branch that starts a server, because the teardown
+  # at the end of this script may stop OURS and must never stop anyone else's:
+  # under E2E_REUSE_SERVER the server predates this run and outlives it.
+  E2E_SERVER_STARTED=1
 
   # Wait for the OLD server to go down before waiting for the new one to come
   # up. dev-e2e.sh pkills and sleeps 1s before exec'ing, so polling for "ready"
@@ -320,11 +330,38 @@ RC=$?
 # count to 0 and left it there when the file was absent, which is the one value
 # that lets the gate proceed — so the check was strongest exactly when it knew
 # least. Three states now, and only one of them judges.
+#
+# ONE pass over the report, three numbers, TWO readers: the gate below, which
+# refuses to JUDGE a swamped run, and the verdict at the end of this script,
+# which refuses to let one be READ as a verdict on the code.
+#
+#   timeouts — `"status": "timedOut"` is written on RESULT objects only.
+#   results  — counted by `"workerIndex"`, which the reporter emits exactly once
+#              per result (node_modules/playwright/lib/reporters/json.js). NOT by
+#              `"status"`: TEST objects carry that same key with outcome values
+#              (expected/unexpected/flaky/skipped), so counting it double-counts.
+#   duration — stats.duration, the run's wall clock in ms. It is the first
+#              `"duration"` AFTER `"stats": {`; every earlier one belongs to a
+#              single result. The reporter pretty-prints (indent 2), so one key
+#              per line holds.
+RESULT_COUNT=0
+RUN_MS="unknown"
 if [ -f "${PLAYWRIGHT_JSON_OUTPUT_NAME:-}" ]; then
-  TIMED_OUT="$(grep -o '"status": *"timedOut"' "$PLAYWRIGHT_JSON_OUTPUT_NAME" 2>/dev/null | wc -l)"
+  read -r TIMED_OUT RESULT_COUNT RUN_MS < <(awk '
+    /"status": *"timedOut"/   { t++ }
+    /"workerIndex":/          { n++ }
+    /"stats": *\{/            { in_stats = 1; next }
+    in_stats && /"duration":/ { d = $2; sub(/,$/, "", d); in_stats = 0 }
+    END { printf "%d %d %s\n", t, n, (d == "" ? "unknown" : d) }
+  ' "$PLAYWRIGHT_JSON_OUTPUT_NAME" 2>/dev/null)
 else
   TIMED_OUT="unknown"
 fi
+# A count that is not a count must say so. A truncated or unreadable report
+# otherwise leaves this empty, every `-lt`/`-ge` below fails with "integer
+# expression expected", and the gate takes a branch whose message names the
+# wrong reason.
+case "${TIMED_OUT:-}" in ''|*[!0-9]*) TIMED_OUT="unknown" ;; esac
 
 if [ "${E2E_DB_PROVISIONED:-0}" = "1" ] && { [ "$RC" = "0" ] || [ "$RC" = "1" ]; } &&
    [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -lt 3 ]; then
@@ -346,6 +383,71 @@ fi
 # operator with a server bound to a deleted inode. The next run replaces it.
 if [ "${E2E_KEEP_RUN_DB:-1}" = "0" ] && [ "${E2E_DB_PROVISIONED:-0}" = "1" ]; then
   e2e_db_discard_run
+fi
+
+# Stop the server this run started.
+#
+# Since 47369e15 every run starts its OWN, so the process still resident when the
+# suite ends is ours and nothing else's — and on 2026-09-04 that one stayed up
+# for 13 h 50 m holding 5.6 GB after its run had finished. Nothing needed it: the
+# next run would have replaced it anyway, and until then it was the top consumer
+# the pre-run guard aborts on, so it also blocked the run that would have
+# reclaimed it.
+#
+# devserver_stop, not a kill of our own: it refuses a pid whose /proc/<pid>/cwd
+# is not this worktree, and it walks UP to the supervisor, because `next dev`
+# respawns `next-server` within seconds and killing the listener alone looks like
+# it worked. `pkill -f "next dev"` matches a command line every worktree shares
+# and has taken a sibling's server down.
+#
+# A server we did not start is left alone — E2E_SERVER_STARTED is set only on the
+# branch that starts one, so E2E_REUSE_SERVER's borrowed server survives.
+if [ "${E2E_SERVER_STARTED:-0}" = "1" ]; then
+  if [ "${E2E_KEEP_SERVER:-0}" = "1" ]; then
+    echo "[test-e2e] leaving the dev server on :${PORT} up (E2E_KEEP_SERVER=1)."
+  else
+    echo "[test-e2e] stopping the dev server this run started on :${PORT} (E2E_KEEP_SERVER=1 keeps it)."
+    devserver_stop "$PORT"
+  fi
+fi
+
+# Contention verdict: say when the run measured the machine.
+#
+# On 2026-09-04 a full run reported "71 failed" and nothing said that 50 of those
+# results were timedOut, that the run had taken 13.1 hours, or that the host was
+# loaded from outside this container. The list was read as a verdict on the code.
+# It was a verdict on the machine, and the reading cost more than the run did.
+# The residue gate above already refuses to judge such a run; this makes the TEST
+# RESULT say the same thing, in the place the operator is told to read.
+#
+# It reports, it does not decide: RC is Playwright's and stays Playwright's, so
+# the `[test-e2e] EXIT=<rc>` contract is unchanged. Silent when no report was
+# produced — absence of evidence is handled by the gate's SKIP above, and a
+# second guess here would be worse than none.
+if [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -ge 3 ]; then
+  RUN_WALL="$(awk -v ms="${RUN_MS:-unknown}" 'BEGIN{
+      if (ms !~ /^[0-9.]+$/ || ms + 0 <= 0) { print "unknown"; exit }
+      s = ms / 1000
+      if (s >= 3600)     printf "%.1f h", s / 3600
+      else if (s >= 60)  printf "%.1f min", s / 60
+      else               printf "%.0f s", s
+    }')"
+  TOTAL_DESC="$RESULT_COUNT"
+  case "${RESULT_COUNT:-0}" in ''|0|*[!0-9]*) TOTAL_DESC="an unknown number of" ;; esac
+
+  echo
+  echo "[test-e2e] ============= CONTENDED RUN — READ BEFORE THE FAILURES ============="
+  echo "[test-e2e] ${TIMED_OUT} of ${TOTAL_DESC} results timed out; wall clock ${RUN_WALL}."
+  echo "[test-e2e] A run this shape measures the MACHINE, not the code: a test killed by"
+  echo "           its own timeout dies mid-body and proves nothing about the tree. The"
+  echo "           failures above are not findings — do not file them, and do not 'fix'"
+  echo "           them as test drift."
+  echo "[test-e2e] The pre-run guard can be quiet while this happens. It samples THIS"
+  echo "           container's cgroup cpu.stat, so load in other containers on the same"
+  echo "           host is invisible to it, and /proc/loadavg cannot stand in because it"
+  echo "           is not namespaced here. See scripts/lib-runtime-guard.sh."
+  echo "[test-e2e] Re-run on an idle host before believing anything above."
+  echo "[test-e2e] ===================================================================="
 fi
 
 report_exit "test-e2e" "$RC"

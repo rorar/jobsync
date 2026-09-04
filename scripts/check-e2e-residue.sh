@@ -106,18 +106,32 @@ KNOWN_DEBT=(
   "Job:E2E-B38"           # inline delete, so a failing assertion leaves the row
 )
 
-# The nine entries above ResumeSection came from the audit; the ten below it came
-# from the GATE, on its first full run. That asymmetry is the finding recorded as
-# E2E-B38: this list was seeded from a document when a measurement of the same
-# thing already existed, and the document was less complete than the data. The
-# gate now reports the whole set, and the numbers match the full-run measurement
-# of 2026-09-02 exactly.
-
-# Those last three were found by this gate, not by the audit that wrote the
-# others: they leaked before too, and e2e/cleanup-stale-data.ts steps 2, 3 and 12
-# removed them BETWEEN runs, so nothing ever surfaced them. Deleting the purge
-# did not create the leak; it stopped hiding it. That is the gate earning its
-# place on its first day of real use.
+# WHERE THESE ENTRIES CAME FROM — the split is itself a finding.
+#
+# Three groups, in array order. Read the boundaries by NAME; the counts are only
+# a recount aid and go stale the moment a fixed entry is deleted:
+#
+#   Resume … Referral          the 2026-09-02 audit, i.e. a document   (7 today)
+#   Task, Activity, ActivityType   THIS GATE, on two rewritten specs   (3 today)
+#   ResumeSection … Job        THIS GATE, on its first full run        (9 today)
+#
+# Twelve of the nineteen therefore came from the gate, not from the audit that
+# was supposed to have catalogued them — and every one of the last nine already
+# sat, at the same counts, in a full-run measurement taken the day before the
+# list was written. That is the finding recorded as E2E-B38: the list was seeded
+# from a document when a measurement of the same thing already existed on disk,
+# and the document was the less complete of the two.
+#
+# The sentence this replaces said "nine above ResumeSection, ten below". Both
+# numbers were wrong on the day they were written (85efc2fd), and the shape was
+# wrong too — it described two groups where there are three. Recounted against
+# the array on 2026-09-04.
+#
+# The middle three leaked before this gate existed as well. The between-runs
+# purge that ADR-045 deleted (its steps 2, 3 and 12) removed them at the START of
+# the next run, so no run ever ENDED visibly dirty and nothing surfaced them.
+# Deleting that purge did not create the leak; it stopped hiding it. That is the
+# gate earning its place on its first day of real use.
 
 # Seeded rows these models are allowed to have modified. Keep this list short
 # and hostile: every entry is a place where a test changed shared state and
