@@ -68,39 +68,74 @@ export function emitDegradationEvents(
 /**
  * When a module's credential becomes invalid during operation, pause affected automations.
  * Called by modules when they detect auth failure (e.g., 401/403 response).
+ *
+ * Returns `escalated: false` when the AuthFailureEscalation rule was NOT applied —
+ * either because a precondition did not hold (unknown module, module not ACTIVE,
+ * credential not required) or because the error status could not be persisted.
+ * `pausedCount` is then always 0: this function never pauses automations without
+ * a durable record of why. See MOD-B1 in docs/BUGS.md.
  */
 export async function handleAuthFailure(
   moduleId: string,
   errorDetail: string,
-): Promise<{ pausedCount: number }> {
+): Promise<{ pausedCount: number; escalated: boolean }> {
   const registered = moduleRegistry.get(moduleId);
-  if (!registered) return { pausedCount: 0 };
+  if (!registered) return { pausedCount: 0, escalated: false };
 
   // Guard: only escalate for currently active modules (CB-7)
   // Prevents spurious escalation on already-errored or inactive modules
-  if (registered.status !== ModuleStatus.ACTIVE) return { pausedCount: 0 };
+  if (registered.status !== ModuleStatus.ACTIVE) return { pausedCount: 0, escalated: false };
 
   // Spec precondition: only escalate for modules that require credentials
   // See specs/module-lifecycle.allium, rule AuthFailureEscalation (line 548):
   //   requires: module.manifest.credential.required = true
-  if (!registered.manifest.credential.required) return { pausedCount: 0 };
+  if (!registered.manifest.credential.required) return { pausedCount: 0, escalated: false };
 
-  // Set module to error status
-  moduleRegistry.setStatus(moduleId, ModuleStatus.ERROR);
-
+  // MOD-B1: persist the error status BEFORE mutating the in-memory registry,
+  // and abort the entire escalation when that write fails.
+  //
+  // Why abort rather than continue — the question the old try/catch answered
+  // silently, and answered wrongly. The registry is per-process and is re-read
+  // from `ModuleRegistration` on the next process start (`syncRegistryFromDb`,
+  // src/actions/module.actions.ts). A memory-only ERROR is therefore invisible
+  // to every other process and temporary here, while the automations paused
+  // alongside it are durable and global. Continuing produced the worst of the
+  // three outcomes: paused automations, a module that reads healthy, and
+  // nothing recording the connection between them.
+  //
+  // Leaving the module ACTIVE is also the only RETRYABLE outcome. The CB-7
+  // guard above skips escalation for any module that is not ACTIVE, so a
+  // memory-only ERROR permanently suppresses every later attempt — the
+  // escalation could never repair itself. Failing before the mutation means
+  // the next auth failure re-enters here and tries the write again.
+  //
+  // The cost of aborting is that automations keep running against a credential
+  // we already know is dead until the database recovers. That cost is bounded:
+  // each failed run re-enters this function (retrying the persist) and feeds
+  // `checkConsecutiveRunFailures`, which pauses the automation after five
+  // failures through a different write on a different table.
   try {
     await prisma.moduleRegistration.upsert({
       where: { moduleId },
       update: { status: "error" },
       create: {
         moduleId,
-        connectorType: moduleRegistry.get(moduleId)?.manifest.connectorType ?? "unknown",
+        connectorType: registered.manifest.connectorType,
         status: "error",
       },
     });
   } catch (err) {
-    console.warn("[Degradation] Failed to persist module error status:", err);
+    console.error(
+      `[Degradation] Auth failure escalation ABORTED for module "${moduleId}" ` +
+        `(${errorDetail}): could not persist the error status, so no automations ` +
+        `were paused. The module stays ACTIVE; the next auth failure retries.`,
+      err,
+    );
+    return { pausedCount: 0, escalated: false };
   }
+
+  // Only now mirror the persisted state into the in-memory registry.
+  moduleRegistry.setStatus(moduleId, ModuleStatus.ERROR);
 
   // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
   // of automations that will be paused, before any concurrent changes.
@@ -143,7 +178,7 @@ export async function handleAuthFailure(
     `[Degradation] Auth failure for module "${moduleId}": ${errorDetail}. Paused ${affectedAutomations.length} automation(s).`,
   );
 
-  return { pausedCount: affectedAutomations.length };
+  return { pausedCount: affectedAutomations.length, escalated: true };
 }
 
 // =============================================================================

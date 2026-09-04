@@ -212,10 +212,13 @@ export async function activateModule(
       }
     }
 
-    // Update in-memory registry
-    moduleRegistry.setStatus(moduleId, ModuleStatus.ACTIVE);
-
-    // Persist to DB
+    // MOD-B1 (symmetric twin of the deactivateModule ordering below): persist
+    // FIRST, then mirror into the in-memory registry. With the old order a
+    // rejected write left memory asserting ACTIVE while the database still said
+    // inactive, and the `registered.status === ACTIVE` short-circuit above then
+    // returned success on every retry without writing. Persisting first leaves
+    // memory untouched on failure, so the short-circuit does not engage and the
+    // next call retries — no DB read is needed on that path to repair it.
     await prisma.moduleRegistration.upsert({
       where: { moduleId },
       update: {
@@ -230,6 +233,9 @@ export async function activateModule(
         activatedAt: new Date(),
       },
     });
+
+    // Only now mirror the persisted state into the in-memory registry.
+    moduleRegistry.setStatus(moduleId, ModuleStatus.ACTIVE);
 
     // Emit ModuleReactivated domain event per distinct affected user
     // (Sprint 2 H-A-01: close the symmetric twin of Sprint 1 CRIT-A1 — the
@@ -335,16 +341,47 @@ export async function deactivateModule(
     }
 
     if (registered.status === ModuleStatus.INACTIVE) {
-      return {
-        success: true,
-        data: { moduleId, status: ModuleStatus.INACTIVE, pausedAutomations: 0 },
-      };
+      // MOD-B1: the in-memory registry is per-process and can disagree with the
+      // database. Short-circuiting on memory ALONE made that disagreement
+      // permanent: a call whose write failed left memory INACTIVE, and every
+      // retry then answered `success: true` without attempting the write again.
+      // The only recovery was activate-then-deactivate, which nobody would guess.
+      //
+      // So the short-circuit now requires the DATABASE to agree. An ABSENT row
+      // does NOT agree: per ADR-043/ADR-044 absence means the schema default
+      // `active`, so a missing row must fall through and be written. If this
+      // read itself throws we deliberately do not catch it — the outer handler
+      // returns `success: false` rather than guessing.
+      const persisted = await prisma.moduleRegistration.findUnique({
+        where: { moduleId },
+        select: { status: true },
+      });
+
+      if (persisted?.status === ModuleStatus.INACTIVE) {
+        return {
+          success: true,
+          data: { moduleId, status: ModuleStatus.INACTIVE, pausedAutomations: 0 },
+        };
+      }
+
+      // Memory-only INACTIVE — fall through and repair the record. The write
+      // path below is idempotent: `setStatus` is a no-op for the value memory
+      // already holds, the upsert asserts the same status in both branches, and
+      // the automation query filters on `status: "active"` so automations paused
+      // by the earlier attempt are not touched twice.
+      console.warn(
+        `[deactivateModule] Module "${moduleId}" is INACTIVE in memory but ` +
+          `${persisted ? `"${persisted.status}"` : "absent"} in the database — ` +
+          `re-running the deactivation to repair the record.`,
+      );
     }
 
-    // Update in-memory registry
-    moduleRegistry.setStatus(moduleId, ModuleStatus.INACTIVE);
-
-    // Persist module status to DB
+    // MOD-B1: persist FIRST, then mirror into the in-memory registry.
+    // The old order mutated memory here and persisted second, so a rejected
+    // write left this process asserting INACTIVE while the database still said
+    // active — and the early return above then reported success forever.
+    // Persisting first means a failed write throws to the outer catch, returns
+    // `success: false`, and leaves memory untouched, so the next call retries.
     await prisma.moduleRegistration.upsert({
       where: { moduleId },
       update: {
@@ -358,6 +395,9 @@ export async function deactivateModule(
         deactivatedAt: new Date(),
       },
     });
+
+    // Only now mirror the persisted state into the in-memory registry.
+    moduleRegistry.setStatus(moduleId, ModuleStatus.INACTIVE);
 
     // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
     // of automations that will be paused, before any concurrent changes.

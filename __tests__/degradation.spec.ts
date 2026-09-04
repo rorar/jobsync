@@ -135,7 +135,7 @@ describe("Degradation Rules", () => {
 
       const result = await handleAuthFailure("jsearch", "Invalid API key");
 
-      expect(result).toEqual({ pausedCount: 5 });
+      expect(result).toEqual({ pausedCount: 5, escalated: true });
     });
 
     it("should skip escalation when credential.required is false", async () => {
@@ -146,7 +146,7 @@ describe("Degradation Rules", () => {
 
       const result = await handleAuthFailure("eures", "401 Unauthorized");
 
-      expect(result).toEqual({ pausedCount: 0 });
+      expect(result).toEqual({ pausedCount: 0, escalated: false });
       expect(mockRegistry.setStatus).not.toHaveBeenCalled();
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
@@ -159,7 +159,7 @@ describe("Degradation Rules", () => {
 
       const result = await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(result).toEqual({ pausedCount: 0 });
+      expect(result).toEqual({ pausedCount: 0, escalated: false });
       expect(mockRegistry.setStatus).not.toHaveBeenCalled();
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
@@ -172,7 +172,7 @@ describe("Degradation Rules", () => {
 
       const result = await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(result).toEqual({ pausedCount: 0 });
+      expect(result).toEqual({ pausedCount: 0, escalated: false });
       expect(mockRegistry.setStatus).not.toHaveBeenCalled();
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
@@ -265,6 +265,104 @@ describe("Degradation Rules", () => {
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
 
+    // =========================================================================
+    // MOD-B1 — a lost write must not be reported as a completed escalation
+    //
+    // AuthFailureEscalation (specs/module-lifecycle.allium) ensures BOTH
+    // `module.status = error` AND that every affected automation is paused.
+    // The old code set the in-memory status first, swallowed a failing
+    // `moduleRegistration` write with a console.warn, and then paused the
+    // automations anyway — durably, and globally, with nothing recording why.
+    // The module read healthy again the moment any process re-synced its
+    // registry from the database, and the CB-7 guard above meant the
+    // escalation could never be retried in this process.
+    //
+    // The contract these tests pin: no automation is paused unless the module's
+    // error status was persisted, memory is never moved ahead of the database,
+    // and the caller is told (`escalated: false`).
+    // =========================================================================
+    describe("MOD-B1 — persist before mutating memory", () => {
+      const activeCredentialedModule = {
+        manifest: {
+          name: "JSearch",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+          credential: { required: true },
+        },
+        status: ModuleStatus.ACTIVE,
+      };
+
+      it("does not mutate the in-memory status when the error status cannot be persisted", async () => {
+        (mockRegistry.get as jest.Mock).mockReturnValue(activeCredentialedModule);
+        (mockPrisma.moduleRegistration.upsert as jest.Mock).mockRejectedValueOnce(
+          new Error("SQLITE_BUSY: database is locked"),
+        );
+        // Deliberately available: if the implementation regressed to pausing
+        // anyway, these mocks let it succeed and the assertions below catch it.
+        (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", userId: "user-1", name: "Alpha Search" },
+        ]);
+        (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+        const result = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        // The caller is told the rule was not applied — not a silent success.
+        expect(result).toEqual({ pausedCount: 0, escalated: false });
+        // Memory never moves ahead of the database.
+        expect(mockRegistry.setStatus).not.toHaveBeenCalled();
+        // The rule is not half-applied: nothing is paused without a record.
+        expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+        expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
+        expect(mockEmitEvent).not.toHaveBeenCalled();
+      });
+
+      it("stays retryable — a later auth failure escalates once the write succeeds", async () => {
+        // The point of leaving memory ACTIVE: the CB-7 guard skips any module
+        // that is not ACTIVE, so a memory-only ERROR would suppress every
+        // subsequent attempt forever. The registry mock here does not apply
+        // setStatus to its map, which is faithful precisely because the first
+        // call must not have called setStatus at all.
+        (mockRegistry.get as jest.Mock).mockReturnValue(activeCredentialedModule);
+        (mockPrisma.moduleRegistration.upsert as jest.Mock).mockRejectedValueOnce(
+          new Error("SQLITE_BUSY: database is locked"),
+        );
+        (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", userId: "user-1", name: "Alpha Search" },
+        ]);
+        (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+        const first = await handleAuthFailure("jsearch", "401 Unauthorized");
+        expect(first).toEqual({ pausedCount: 0, escalated: false });
+
+        // Second attempt: the upsert mock falls back to its resolving default.
+        const second = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        expect(second).toEqual({ pausedCount: 1, escalated: true });
+        expect(mockRegistry.setStatus).toHaveBeenCalledWith("jsearch", ModuleStatus.ERROR);
+        expect(mockEmitEvent).toHaveBeenCalledTimes(1);
+      });
+
+      it("persists the error status BEFORE mutating the in-memory registry", async () => {
+        // Order, not just outcome: the fix is the ordering, so pin the ordering.
+        const callOrder: string[] = [];
+        (mockRegistry.get as jest.Mock).mockReturnValue(activeCredentialedModule);
+        (mockPrisma.moduleRegistration.upsert as jest.Mock).mockImplementationOnce(
+          async () => {
+            callOrder.push("persist");
+            return {};
+          },
+        );
+        (mockRegistry.setStatus as jest.Mock).mockImplementationOnce(() => {
+          callOrder.push("memory");
+          return true;
+        });
+        (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+
+        await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        expect(callOrder).toEqual(["persist", "memory"]);
+      });
+    });
+
     it("should return pausedCount and emit event (fire-and-forget)", async () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
@@ -278,7 +376,7 @@ describe("Degradation Rules", () => {
       const result = await handleAuthFailure("jsearch", "403 Forbidden");
 
       // Degradation returns pausedCount; event emission is fire-and-forget
-      expect(result).toEqual({ pausedCount: 1 });
+      expect(result).toEqual({ pausedCount: 1, escalated: true });
       expect(mockEmitEvent).toHaveBeenCalledTimes(1);
     });
   });
@@ -741,7 +839,7 @@ describe("Degradation Rules", () => {
       const result = await handleAuthFailure("jsearch", "401 Unauthorized");
 
       // Degradation pauses and emits — notification routing is downstream
-      expect(result).toEqual({ pausedCount: 1 });
+      expect(result).toEqual({ pausedCount: 1, escalated: true });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
       expect(mockEmitEvent).toHaveBeenCalledTimes(1);
       expect(mockCreateEvent).toHaveBeenCalledWith(
