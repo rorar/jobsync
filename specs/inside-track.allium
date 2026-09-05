@@ -770,6 +770,13 @@ invariant TipsterReferenceResolvesLive {
         d.tipster_reference.person.status != anonymized
 }
 
+-- Note (2026-09-05, deliberately NOT changed): this invariant and its
+-- neighbours iterate type names in the singular -- `for r in NetworkPath`,
+-- `for r in Referral` -- where the language calls for the natural plural of the
+-- entity name. Both types exist and the intent is unambiguous, the file is
+-- consistent about it, and NetworkPath is a variant, so whether to write
+-- `NetworkPaths` or to narrow `Referrals` by `kind` is a modelling choice
+-- rather than a typo. Left alone rather than half-corrected.
 invariant NetworkPathViaConnectsTipsterToInsider {
     -- P-C: if a NetworkPath records its `via` edge, that edge must actually
     -- connect the tipster to the insider (from_person -> to_person). When the
