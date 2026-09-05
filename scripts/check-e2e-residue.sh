@@ -84,10 +84,26 @@ ALLOWED_GROWTH=(
 #
 # The distinction matters: ALLOWED_GROWTH says "this is not a leak";
 # KNOWN_DEBT says "this is a leak we have not fixed yet, and here is its number".
+#
+# WHAT THIS MAPPING CANNOT DO, stated because its output has already been read
+# as more than it is. The key is a MODEL, not a spec. When a JobTitle row
+# survives a run, this gate knows the model and prints the finding id filed
+# against that model -- it does NOT know which spec wrote the row, and it has
+# no way to find out. So the id is a POINTER TO A FINDING, never an
+# attribution of blame to a test file.
+#
+# Measured 2026-09-05, which is why this paragraph exists: the run reported
+# JobTitle +15 / Company +15 / Location +13 against E2E-B25, whose subject is
+# keyboard-ux.spec.ts. Querying the kept run database showed keyboard-ux had
+# left ZERO rows -- every one of them belonged to job-crud, job-detail-panels,
+# job-status-crud, contact-company-link, profile-crud, automation-crud or
+# question-crud. The gate was right about the leak and wrong about the owner,
+# and the wrong owner was acted on. To find the real one, read the row names
+# out of `prisma/.e2e-run.db` and match their prefixes against the specs.
 KNOWN_DEBT=(
-  "Resume:E2E-B25"     # keyboard-ux creates KBOcc1-4 and its cleanup does not always run
-  "JobTitle:E2E-B25"   # KBTest Title / KBRapid / KBMobile — created, never removed
-  "Company:E2E-B25"    # KBTest Co, and profile-crud's unprefixed reference data
+  "Resume:E2E-B25"     # 5 survived 2026-09-05, all automation-crud's; keyboard-ux left none
+  "JobTitle:E2E-B25"   # 15 survived 2026-09-05: job-crud, job-detail-panels, job-status-crud
+  "Company:E2E-B25"    # 15 survived 2026-09-05, incl. contact-company-link's "E2E Firma"
   "Location:E2E-B25"   # KBTest Loc, "location test", "Boston", "Cambridge"
   "Tag:E2E-B24"        # KBSkill / KBMulti / KBDupe / KBAria — no cleanup exists at all
   "Person:E2E-B22"     # four specs archive but never delete
@@ -229,7 +245,12 @@ done
 if [ -z "$growth_violations" ] && [ -z "$mutation_violations" ]; then
   echo "[residue] OK — no NEW unowned rows and no modified seed data."
   [ -n "$allowed_seen" ] && printf "[residue] allowed, for the record:\n%b" "$allowed_seen"
-  [ -n "$debt_seen" ] && printf "[residue] OUTSTANDING DEBT — leaks with a finding, not permission:\n%b" "$debt_seen"
+  [ -n "$debt_seen" ] && {
+    printf "[residue] OUTSTANDING DEBT — leaks with a finding, not permission:\n%b" "$debt_seen"
+    echo "[residue]   the id names the FINDING filed against that model, NOT the spec that wrote"
+    echo "[residue]   the row. This gate cannot tell them apart. Read the names out of the run"
+    echo "[residue]   database before acting on an attribution."
+  }
   exit 0
 fi
 
