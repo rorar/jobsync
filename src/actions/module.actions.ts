@@ -190,7 +190,45 @@ export async function activateModule(
     }
 
     if (registered.status === ModuleStatus.ACTIVE) {
-      return { success: true, data: { moduleId, status: ModuleStatus.ACTIVE } };
+      // MOD-B1, second half — the symmetric twin of the check in
+      // `deactivateModule` below. The ordering fix further down closes the case
+      // where OUR write failed; it does not close the case where memory was
+      // never right to begin with.
+      //
+      // `syncRegistryFromDb` latches on `dbSynced` (`:477`) and therefore reads
+      // `ModuleRegistration` exactly ONCE per process, and that table is
+      // deployment-global — no `userId` column (`prisma/schema.prisma:602`). So
+      // any change made outside this process, by another instance or by hand,
+      // is invisible here for the rest of the process lifetime. Memory then
+      // says ACTIVE while the row says `inactive`, this short-circuit engages,
+      // and the caller is told `success: true` for a write that never happened
+      // — "silent success over a lost write", the exact shape MOD-B1 names,
+      // left standing in the twin function.
+      //
+      // An ABSENT row AGREES here, unlike in `deactivateModule`: the schema
+      // default is `active` (`prisma/schema.prisma:606`), so nothing needs
+      // writing. If this read throws we deliberately do not catch it — the
+      // outer handler returns `success: false` rather than guessing.
+      const persisted = await prisma.moduleRegistration.findUnique({
+        where: { moduleId },
+        select: { status: true },
+      });
+
+      if (!persisted || persisted.status === ModuleStatus.ACTIVE) {
+        return {
+          success: true,
+          data: { moduleId, status: ModuleStatus.ACTIVE },
+        };
+      }
+
+      // Memory-only ACTIVE — fall through and repair the record. The write path
+      // below is idempotent: the upsert asserts the same status in both
+      // branches and `setStatus` is a no-op for the value memory already holds.
+      console.warn(
+        `[activateModule] Module "${moduleId}" is ACTIVE in memory but ` +
+          `"${persisted.status}" in the database — re-running the activation ` +
+          `to repair the record.`,
+      );
     }
 
     // Guard: reject activation if credential is required but not configured
@@ -218,7 +256,13 @@ export async function activateModule(
     // inactive, and the `registered.status === ACTIVE` short-circuit above then
     // returned success on every retry without writing. Persisting first leaves
     // memory untouched on failure, so the short-circuit does not engage and the
-    // next call retries — no DB read is needed on that path to repair it.
+    // next call retries.
+    //
+    // That argument is sound for a write WE lost, and it was once given as the
+    // reason the activate path needs no DB read. It does not cover memory that
+    // was never right — a per-process registry against a deployment-global
+    // table — which is why the short-circuit above now confirms against the
+    // row. Two different ways to be wrong, two guards.
     await prisma.moduleRegistration.upsert({
       where: { moduleId },
       update: {

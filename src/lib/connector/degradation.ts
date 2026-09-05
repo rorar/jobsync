@@ -72,6 +72,15 @@ export function emitDegradationEvents(
  * Returns `escalated: false` when the AuthFailureEscalation rule was NOT applied —
  * either because a precondition did not hold (unknown module, module not ACTIVE,
  * credential not required) or because the error status could not be persisted.
+ *
+ * That list is not the whole story, and reading it as exhaustive is the trap:
+ * this function can also REJECT. The only try/catch guards the persist; the
+ * status mirror, the automation query and the pause that follow it are
+ * unguarded. A throw there leaves the error status durably written with NOTHING
+ * paused, and the CB-7 guard above then declines every future escalation for
+ * the life of the process, so nothing retries. The sole caller
+ * (`ai-provider/providers.ts`) is `void … .catch(...)`, so no one observes it
+ * either.
  * `pausedCount` is then always 0: this function never pauses automations without
  * a durable record of why. See MOD-B1 in docs/BUGS.md.
  */

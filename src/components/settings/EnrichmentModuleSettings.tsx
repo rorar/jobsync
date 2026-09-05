@@ -113,7 +113,12 @@ function EnrichmentModuleSettings() {
         toast({
           variant: "destructive",
           title: t("settings.error"),
-          description: result.message || t("settings.unexpectedError"),
+          // `message` is an i18n KEY (see module.actions.ts), not display text
+          // — without t() the user reads e.g. "errors.deactivateModule"
+          // verbatim. ApiKeySettings.tsx documents the same trap.
+          description: result.message
+            ? t(result.message)
+            : t("settings.unexpectedError"),
         });
       }
     } catch (error) {
@@ -149,7 +154,12 @@ function EnrichmentModuleSettings() {
         toast({
           variant: "destructive",
           title: t("settings.error"),
-          description: result.message || t("settings.unexpectedError"),
+          // `message` is an i18n KEY (see module.actions.ts), not display text
+          // — without t() the user reads e.g. "errors.deactivateModule"
+          // verbatim. ApiKeySettings.tsx documents the same trap.
+          description: result.message
+            ? t(result.message)
+            : t("settings.unexpectedError"),
         });
       }
     } catch (error) {
