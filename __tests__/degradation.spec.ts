@@ -16,6 +16,11 @@ jest.mock("@/lib/db", () => {
     automationRun: {
       findMany: jest.fn(),
     },
+    // handleAuthFailure runs the error-status write and the pause cascade
+    // inside ONE interactive transaction (MOD-B1 residual). The default
+    // implementation is installed in beforeEach so individual tests can swap in
+    // one that distinguishes a commit from a rollback.
+    $transaction: jest.fn(),
     // Note: prisma.notification is no longer used directly by degradation.ts.
     // Notifications are dispatched via AutomationDegraded events.
   };
@@ -68,6 +73,17 @@ describe("Degradation Rules", () => {
     mockEmitEvent.mockClear();
     mockCreateEvent.mockClear();
     mockRegistry._testMap.clear();
+    // Default $transaction: run the callback against the same mock client, so
+    // every per-model assertion in this file keeps working unchanged whether the
+    // statement runs inside the transaction or not. A rejection propagates —
+    // which is the only part of "rollback" a mock can honestly model. The tests
+    // that care about rollback SEMANTICS model the rest explicitly.
+    (mockPrisma.$transaction as unknown as jest.Mock).mockImplementation(
+      async (arg: unknown) =>
+        typeof arg === "function"
+          ? await (arg as (tx: typeof mockPrisma) => Promise<unknown>)(mockPrisma)
+          : Promise.all(arg as unknown[]),
+    );
     // Suppress console output in tests
     jest.spyOn(console, "error").mockImplementation(() => {});
     jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -360,6 +376,204 @@ describe("Degradation Rules", () => {
         await handleAuthFailure("jsearch", "401 Unauthorized");
 
         expect(callOrder).toEqual(["persist", "memory"]);
+      });
+    });
+
+    // =========================================================================
+    // MOD-B1 RESIDUAL — the escalation commits as ONE unit
+    //
+    // The tests above pin the first statement: nothing is paused unless the
+    // error status was written. They say nothing about a throw AFTER it, and
+    // that gap was the residual. The old code guarded only the persist, so a
+    // failure in the automation query or in the pause left the module DURABLY
+    // in `error` with some or none of its automations paused — and the CB-7
+    // guard, which skips any module that is not ACTIVE, then declined every
+    // later auth failure for the life of the process. Nothing retried it, and
+    // the sole caller (`ai-provider/providers.ts:22`, `void ….catch(...)`)
+    // observed nothing.
+    //
+    // What these tests pin: the status write and the cascade share a commit
+    // boundary; the in-memory mirror and the domain events sit strictly AFTER
+    // it (an event emitted before the commit announces a pause that may still
+    // roll back); and a failure anywhere inside leaves the module ACTIVE, which
+    // is the only state from which the escalation can be retried.
+    // =========================================================================
+    describe("MOD-B1 residual — status and cascade commit together", () => {
+      const activeCredentialedModule = {
+        manifest: {
+          name: "JSearch",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+          credential: { required: true },
+        },
+        status: ModuleStatus.ACTIVE,
+      };
+
+      it("writes the status and pauses inside ONE transaction, and only then touches memory and the bus", async () => {
+        const trace: string[] = [];
+        (mockRegistry.get as jest.Mock).mockReturnValue(activeCredentialedModule);
+        (mockPrisma.$transaction as unknown as jest.Mock).mockImplementationOnce(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            trace.push("tx:begin");
+            try {
+              const out = await fn(mockPrisma);
+              trace.push("tx:commit");
+              return out;
+            } catch (err) {
+              trace.push("tx:rollback");
+              throw err;
+            }
+          },
+        );
+        (mockPrisma.moduleRegistration.upsert as jest.Mock).mockImplementationOnce(
+          async () => {
+            trace.push("persist");
+            return {};
+          },
+        );
+        (mockPrisma.automation.findMany as jest.Mock).mockImplementationOnce(async () => {
+          trace.push("query");
+          return [{ id: "auto-1", userId: "user-1", name: "Alpha Search" }];
+        });
+        (mockPrisma.automation.updateMany as jest.Mock).mockImplementationOnce(async () => {
+          trace.push("pause");
+          return { count: 1 };
+        });
+        (mockRegistry.setStatus as jest.Mock).mockImplementationOnce(() => {
+          trace.push("memory");
+          return true;
+        });
+        mockEmitEvent.mockImplementationOnce(() => {
+          trace.push("emit");
+        });
+
+        const result = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        expect(result).toEqual({ pausedCount: 1, escalated: true });
+        // Both halves of the rule are inside the same transaction, and NOTHING
+        // that is not a database write is: the mirror and the event follow the
+        // commit. Ordering is the assertion — a set-equality check here would
+        // pass on the very arrangement this closes.
+        expect(trace).toEqual([
+          "tx:begin",
+          "persist",
+          "query",
+          "pause",
+          "tx:commit",
+          "memory",
+          "emit",
+        ]);
+        expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      });
+
+      it("returns escalated:false instead of rejecting when the pause cascade fails", async () => {
+        // The caller is `void handleAuthFailure(...).catch(...)`, so a rejection
+        // is observed by nobody. An outcome that is not in the return value is
+        // not reported at all.
+        const trace: string[] = [];
+        (mockRegistry.get as jest.Mock).mockReturnValue(activeCredentialedModule);
+        (mockPrisma.$transaction as unknown as jest.Mock).mockImplementationOnce(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            trace.push("tx:begin");
+            try {
+              const out = await fn(mockPrisma);
+              trace.push("tx:commit");
+              return out;
+            } catch (err) {
+              trace.push("tx:rollback");
+              throw err;
+            }
+          },
+        );
+        (mockPrisma.moduleRegistration.upsert as jest.Mock).mockImplementationOnce(
+          async () => {
+            trace.push("persist");
+            return {};
+          },
+        );
+        (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", userId: "user-1", name: "Alpha Search" },
+        ]);
+        (mockPrisma.automation.updateMany as jest.Mock).mockRejectedValueOnce(
+          new Error("SQLITE_BUSY: database is locked"),
+        );
+
+        const result = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        expect(result).toEqual({ pausedCount: 0, escalated: false });
+        // The status write is INSIDE the unit that rolled back — not a separate
+        // write that survived the failure.
+        expect(trace).toEqual(["tx:begin", "persist", "tx:rollback"]);
+        expect(mockRegistry.setStatus).not.toHaveBeenCalled();
+        expect(mockEmitEvent).not.toHaveBeenCalled();
+      });
+
+      it("does not disarm CB-7 — a rolled-back escalation is retried by the next auth failure", async () => {
+        // The residual's actual cost, and the reason a bare try/catch around the
+        // cascade would NOT have closed it: a durable `error` beside a cascade
+        // that never ran makes `registered.status !== ACTIVE` true forever, and
+        // CB-7 then declines every later auth failure with nothing to repair it.
+        //
+        // The model below is the smallest thing that can tell a commit from a
+        // rollback: a write made INSIDE the transaction is applied only when the
+        // callback resolves, a write made outside one is durable immediately —
+        // which is exactly what the unfixed code does.
+        let memoryStatus: ModuleStatus = ModuleStatus.ACTIVE;
+        let rowStatus = "active";
+        let pendingRowStatus: string | null = null;
+        let inTransaction = false;
+
+        (mockRegistry.get as jest.Mock).mockImplementation(() => ({
+          ...activeCredentialedModule,
+          status: memoryStatus,
+        }));
+        (mockRegistry.setStatus as jest.Mock).mockImplementation(
+          (_id: string, status: ModuleStatus) => {
+            memoryStatus = status;
+            return true;
+          },
+        );
+        (mockPrisma.moduleRegistration.upsert as jest.Mock).mockImplementation(
+          async () => {
+            if (inTransaction) pendingRowStatus = "error";
+            else rowStatus = "error";
+            return {};
+          },
+        );
+        (mockPrisma.$transaction as unknown as jest.Mock).mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            inTransaction = true;
+            pendingRowStatus = null;
+            try {
+              const out = await fn(mockPrisma);
+              if (pendingRowStatus !== null) rowStatus = pendingRowStatus;
+              return out;
+            } finally {
+              inTransaction = false;
+              pendingRowStatus = null;
+            }
+          },
+        );
+        (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", userId: "user-1", name: "Alpha Search" },
+        ]);
+        (mockPrisma.automation.updateMany as jest.Mock)
+          .mockRejectedValueOnce(new Error("SQLITE_BUSY: database is locked"))
+          .mockResolvedValue({ count: 1 });
+
+        const first = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        expect(first).toEqual({ pausedCount: 0, escalated: false });
+        // Nothing durable, nothing remembered — so CB-7 is still armed.
+        expect(rowStatus).toBe("active");
+        expect(memoryStatus).toBe(ModuleStatus.ACTIVE);
+
+        const second = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+        // The escalation that could never retry now does, and it pauses.
+        expect(second).toEqual({ pausedCount: 1, escalated: true });
+        expect(rowStatus).toBe("error");
+        expect(memoryStatus).toBe(ModuleStatus.ERROR);
+        expect(mockEmitEvent).toHaveBeenCalledTimes(1);
       });
     });
 

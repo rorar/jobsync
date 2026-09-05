@@ -426,45 +426,75 @@ export async function deactivateModule(
     // active — and the early return above then reported success forever.
     // Persisting first means a failed write throws to the outer catch, returns
     // `success: false`, and leaves memory untouched, so the next call retries.
-    await prisma.moduleRegistration.upsert({
-      where: { moduleId },
-      update: {
-        status: ModuleStatus.INACTIVE,
-        deactivatedAt: new Date(),
-      },
-      create: {
-        moduleId,
-        connectorType: registered.manifest.connectorType,
-        status: ModuleStatus.INACTIVE,
-        deactivatedAt: new Date(),
-      },
-    });
-
-    // Only now mirror the persisted state into the in-memory registry.
-    moduleRegistry.setStatus(moduleId, ModuleStatus.INACTIVE);
-
-    // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
-    // of automations that will be paused, before any concurrent changes.
-    // Global scope (all users) — consistent with degradation.ts handlers
-    // (handleAuthFailure, handleCircuitBreakerTrip) per Allium spec.
-    const affectedAutomations = await prisma.automation.findMany({
-      where: {
-        jobBoard: moduleId,
-        status: "active",
-      },
-      select: { id: true, name: true, userId: true },
-    });
-
-    if (affectedAutomations.length > 0) {
-      // Update by the specific IDs we captured (no TOCTOU)
-      await prisma.automation.updateMany({
-        where: { id: { in: affectedAutomations.map((a) => a.id) } },
-        data: {
-          status: "paused",
-          pauseReason: "module_deactivated",
+    //
+    // MOD-B1 residual, closed 2026-09-05: ordering alone only ever covered a
+    // failure of the FIRST statement. The status write and the pause cascade now
+    // commit together or not at all, because the partial state was worse than
+    // either whole one AND was self-concealing: the row said inactive, memory
+    // said INACTIVE, the two agreed — so the short-circuit above took the
+    // agreement at face value and every retry returned `success: true` with
+    // `pausedAutomations: 0`, while the automations it claimed to have paused
+    // kept running. A rollback cannot produce that agreement: the row stays
+    // `active`, memory is never touched (the mirror is below the commit), and
+    // the next call re-runs the whole cascade.
+    //
+    // Cross-user by design (CLAUDE.md § Cross-User Degradation) — the cascade
+    // spans every tenant's automations for this module, which argues FOR
+    // all-or-nothing, not against it: a half-applied cascade pauses an arbitrary
+    // subset of tenants with nothing recording which. SQLite serializes writers
+    // at the database file, not per row or per tenant, so this is the same three
+    // statements under one write lock instead of two.
+    //
+    // Nothing that is not a database write belongs inside. The in-memory mirror
+    // and the ModuleDeactivated events are below, AFTER the commit — an event
+    // published from inside would announce a pause that may still roll back, and
+    // its consumers write through the non-transactional client into a database
+    // this transaction is still holding open.
+    const affectedAutomations = await prisma.$transaction(async (tx) => {
+      await tx.moduleRegistration.upsert({
+        where: { moduleId },
+        update: {
+          status: ModuleStatus.INACTIVE,
+          deactivatedAt: new Date(),
+        },
+        create: {
+          moduleId,
+          connectorType: registered.manifest.connectorType,
+          status: ModuleStatus.INACTIVE,
+          deactivatedAt: new Date(),
         },
       });
 
+      // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
+      // of automations that will be paused, before any concurrent changes.
+      // Global scope (all users) — consistent with degradation.ts handlers
+      // (handleAuthFailure, handleCircuitBreakerTrip) per Allium spec.
+      const affected = await tx.automation.findMany({
+        where: {
+          jobBoard: moduleId,
+          status: "active",
+        },
+        select: { id: true, name: true, userId: true },
+      });
+
+      if (affected.length > 0) {
+        // Update by the specific IDs we captured (no TOCTOU)
+        await tx.automation.updateMany({
+          where: { id: { in: affected.map((a) => a.id) } },
+          data: {
+            status: "paused",
+            pauseReason: "module_deactivated",
+          },
+        });
+      }
+
+      return affected;
+    });
+
+    // Committed. Only now mirror the persisted state into the in-memory registry.
+    moduleRegistry.setStatus(moduleId, ModuleStatus.INACTIVE);
+
+    if (affectedAutomations.length > 0) {
       // Emit ONE ModuleDeactivated domain event per distinct affected user.
       // The notification-dispatcher consumer (in-app + webhook + email + push
       // channels) is the single writer — see ADR-030 / specs/notification-dispatch.allium

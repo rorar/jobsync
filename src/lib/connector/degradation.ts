@@ -71,18 +71,60 @@ export function emitDegradationEvents(
  *
  * Returns `escalated: false` when the AuthFailureEscalation rule was NOT applied —
  * either because a precondition did not hold (unknown module, module not ACTIVE,
- * credential not required) or because the error status could not be persisted.
+ * credential not required) or because the escalation could not be committed.
  *
- * That list is not the whole story, and reading it as exhaustive is the trap:
- * this function can also REJECT. The only try/catch guards the persist; the
- * status mirror, the automation query and the pause that follow it are
- * unguarded. A throw there leaves the error status durably written with NOTHING
- * paused, and the CB-7 guard above then declines every future escalation for
- * the life of the process, so nothing retries. The sole caller
- * (`ai-provider/providers.ts`) is `void … .catch(...)`, so no one observes it
- * either.
- * `pausedCount` is then always 0: this function never pauses automations without
- * a durable record of why. See MOD-B1 in docs/BUGS.md.
+ * That list IS the whole story, and keeping it so is the point: this function
+ * does not reject. Its sole caller (`ai-provider/providers.ts:22`) is
+ * `void handleAuthFailure(...).catch(...)`, so a rejection is observed by nobody
+ * — an outcome that is not in the return value is not reported at all.
+ *
+ * MOD-B1 residual, closed 2026-09-05: the error status and the pause cascade are
+ * ONE transaction. Until this change only the persist was guarded, so a throw in
+ * the automation query or the pause left the module DURABLY in `error` with some
+ * or none of its automations paused — and because the CB-7 guard above skips any
+ * module that is not ACTIVE, no later auth failure could retry the cascade for
+ * the life of the process. Nothing repaired it and nobody observed it.
+ *
+ * What the commit boundary buys, precisely:
+ *   1. No automation is paused unless the error status commits. That was the
+ *      original MOD-B1 property, previously enforced by statement ORDER, which
+ *      only ever covered a failure of the first statement.
+ *   2. The error status is not durable unless the cascade committed with it, so
+ *      the state that permanently disarms CB-7 cannot arise from a partial run.
+ *   3. A rollback leaves the module ACTIVE and memory untouched, which is the
+ *      only RETRYABLE outcome: the next auth failure re-enters and tries again.
+ *
+ * The cascade is cross-user by design (CLAUDE.md § Cross-User Degradation). That
+ * makes all-or-nothing MORE important, not less: a partial cascade pauses an
+ * arbitrary subset of tenants with nothing recording which ones. SQLite
+ * serializes writers at the database file — not per row, and not per tenant — so
+ * this trades two short write locks for one slightly longer one over the same
+ * three statements. Under contention it fails as SQLITE_BUSY and rolls back
+ * whole, which is exactly the outcome wanted here.
+ *
+ * The in-memory mirror and the domain events sit AFTER the commit deliberately.
+ * A registry mutation before the commit is the MOD-B1 shape again. An event
+ * before the commit announces a pause that may still roll back, and its
+ * consumers write through the NON-transactional client into a database this
+ * transaction is still holding open.
+ *
+ * The cost of aborting is that automations keep running against a credential we
+ * already know is dead until the database recovers. That cost is bounded: each
+ * failed run re-enters this function (retrying the escalation) and feeds
+ * `checkConsecutiveRunFailures`, which pauses the automation after five failures
+ * through a different write on a different table.
+ *
+ * Two residuals, named rather than hidden, both in the window after the commit:
+ *   - Events are fire-and-forget (IF-10), so a crash between commit and dispatch
+ *     pauses automations without telling anyone. Same class as every other
+ *     `emitEvent` call site.
+ *   - A crash before `setStatus` leaves memory ACTIVE over a durable `error`.
+ *     That self-repairs: the next auth failure re-enters, the upsert re-asserts
+ *     `error`, the query finds no active automations left, and the call returns
+ *     `{ pausedCount: 0, escalated: true }`.
+ *
+ * See MOD-B1 in docs/BUGS.md and specs/module-lifecycle.allium invariants
+ * LifecycleStatusIsDurable + EscalationIsNotAtomic.
  */
 export async function handleAuthFailure(
   moduleId: string,
@@ -100,72 +142,64 @@ export async function handleAuthFailure(
   //   requires: module.manifest.credential.required = true
   if (!registered.manifest.credential.required) return { pausedCount: 0, escalated: false };
 
-  // MOD-B1: persist the error status BEFORE mutating the in-memory registry,
-  // and abort the entire escalation when that write fails.
+  // MOD-B1 + its residual: the error status AND the pause cascade commit
+  // together, or neither does. The persist stays first inside the transaction
+  // so the statement order still reads as the rule does, but correctness no
+  // longer rests on that order — it rests on the commit.
   //
-  // Why abort rather than continue — the question the old try/catch answered
-  // silently, and answered wrongly. The registry is per-process and is re-read
-  // from `ModuleRegistration` on the next process start (`syncRegistryFromDb`,
-  // src/actions/module.actions.ts). A memory-only ERROR is therefore invisible
-  // to every other process and temporary here, while the automations paused
-  // alongside it are durable and global. Continuing produced the worst of the
-  // three outcomes: paused automations, a module that reads healthy, and
-  // nothing recording the connection between them.
-  //
-  // Leaving the module ACTIVE is also the only RETRYABLE outcome. The CB-7
-  // guard above skips escalation for any module that is not ACTIVE, so a
-  // memory-only ERROR permanently suppresses every later attempt — the
-  // escalation could never repair itself. Failing before the mutation means
-  // the next auth failure re-enters here and tries the write again.
-  //
-  // The cost of aborting is that automations keep running against a credential
-  // we already know is dead until the database recovers. That cost is bounded:
-  // each failed run re-enters this function (retrying the persist) and feeds
-  // `checkConsecutiveRunFailures`, which pauses the automation after five
-  // failures through a different write on a different table.
+  // Nothing that is not a database write belongs in here. The in-memory mirror
+  // and the event emission are below, after the commit.
+  let affectedAutomations: { id: string; userId: string; name: string }[];
   try {
-    await prisma.moduleRegistration.upsert({
-      where: { moduleId },
-      update: { status: "error" },
-      create: {
-        moduleId,
-        connectorType: registered.manifest.connectorType,
-        status: "error",
-      },
+    affectedAutomations = await prisma.$transaction(async (tx) => {
+      await tx.moduleRegistration.upsert({
+        where: { moduleId },
+        update: { status: "error" },
+        create: {
+          moduleId,
+          connectorType: registered.manifest.connectorType,
+          status: "error",
+        },
+      });
+
+      // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
+      // of automations that will be paused, before any concurrent changes.
+      const affected = await tx.automation.findMany({
+        where: {
+          jobBoard: moduleId,
+          status: "active",
+        },
+        select: { id: true, userId: true, name: true },
+      });
+
+      if (affected.length > 0) {
+        // Update by the specific IDs we captured (no TOCTOU)
+        await tx.automation.updateMany({
+          where: { id: { in: affected.map((a) => a.id) } },
+          data: {
+            status: "paused",
+            pauseReason: "auth_failure",
+          },
+        });
+      }
+
+      return affected;
     });
   } catch (err) {
     console.error(
       `[Degradation] Auth failure escalation ABORTED for module "${moduleId}" ` +
-        `(${errorDetail}): could not persist the error status, so no automations ` +
-        `were paused. The module stays ACTIVE; the next auth failure retries.`,
+        `(${errorDetail}): the escalation could not be committed, so the module ` +
+        `is NOT recorded as errored and no automations were paused. The module ` +
+        `stays ACTIVE; the next auth failure retries.`,
       err,
     );
     return { pausedCount: 0, escalated: false };
   }
 
-  // Only now mirror the persisted state into the in-memory registry.
+  // Committed. Only now mirror the persisted state into the in-memory registry.
   moduleRegistry.setStatus(moduleId, ModuleStatus.ERROR);
 
-  // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
-  // of automations that will be paused, before any concurrent changes.
-  const affectedAutomations = await prisma.automation.findMany({
-    where: {
-      jobBoard: moduleId,
-      status: "active",
-    },
-    select: { id: true, userId: true, name: true },
-  });
-
   if (affectedAutomations.length > 0) {
-    // Update by the specific IDs we captured (no TOCTOU)
-    await prisma.automation.updateMany({
-      where: { id: { in: affectedAutomations.map((a) => a.id) } },
-      data: {
-        status: "paused",
-        pauseReason: "auth_failure",
-      },
-    });
-
     const safeModuleName = truncate(registered.manifest.name);
     emitDegradationEvents(
       affectedAutomations,
