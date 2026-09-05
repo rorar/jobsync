@@ -30,8 +30,14 @@
 #   E2E_WORKERS            playwright workers              (default 1)
 #   E2E_LOGIN_TIMEOUT_MS   global-setup login wait, ms     (default 90000)
 #   E2E_SERVER_WAIT        seconds to await cold server    (default 150)
-#   E2E_KEEP_SERVER        1 = leave OUR dev server up     (default 0: stopped
-#                          after the run, because a reused one is never reused)
+#   E2E_KEEP_SERVER        1 = leave OUR dev server up     (default 0: stopped,
+#                          because THIS wrapper always starts a fresh one. Note
+#                          the cost: a following E2E_REUSE_SERVER=1 run has
+#                          nothing left to borrow and silently pays a cold
+#                          compile, so set this when looping with that flag)
+#   E2E_REPORT_JSON        path of the JSON report this    (default
+#                          wrapper produces for the gate    test-results/.e2e-run-report.json)
+#   E2E_KEEP_RUN_DB        0 = discard the run database    (default 1: kept)
 #   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH  chromium binary   (auto: NixOS path if
 #                                        present, else Playwright's own download)
 set -uo pipefail
@@ -142,13 +148,60 @@ export E2E_BASE_URL="http://localhost:${PORT}"
 # choice, so pin it. This is the value CI already uses (ci.yml).
 export NEXTAUTH_URL="$E2E_BASE_URL"
 
+# Teardown, reachable from EVERY exit rather than only from the bottom.
+#
+# The stop used to live at the end of the script, which meant it ran only when
+# the script fell off the end. This script is `set -uo pipefail` WITHOUT `-e`,
+# so nothing else routed control there -- and the `exit 1` on "dev server not
+# ready" therefore leaked exactly the server this teardown exists to reclaim.
+# That path is not the unlikely one: a readiness timeout means the server is
+# ALIVE and still compiling, and a cold compile overruns SERVER_WAIT precisely
+# when the host is loaded. The leaked `next dev` then holds the port lock and
+# its heap, becomes the top consumer the pre-run guard aborts on, and so blocks
+# the next run -- the one that would have replaced it.
+#
+# Three properties this has to keep, because each was a way to get it wrong:
+#   - It must not change the exit status. An EXIT trap that does not itself
+#     call `exit` leaves the script's status alone, so nothing here may `exit`.
+#   - It must not fire twice. The bottom of the script still calls it directly
+#     so the stop is printed BEFORE the contention verdict rather than after
+#     it; the latch makes the trap's later call a no-op.
+#   - It must not fire for a server that is not ours. `E2E_SERVER_STARTED` is
+#     set only on the branch that starts one, so an early exit BEFORE that --
+#     a failed guard, a missing browser, a lock we could not take -- runs
+#     nothing, and `E2E_REUSE_SERVER`'s borrowed server survives the run.
+e2e_teardown() {
+  [ "${E2E_TEARDOWN_DONE:-0}" = "1" ] && return 0
+  E2E_TEARDOWN_DONE=1
+  [ "${E2E_SERVER_STARTED:-0}" = "1" ] || return 0
+
+  if [ "${E2E_KEEP_SERVER:-0}" = "1" ]; then
+    echo "[test-e2e] leaving the dev server on :${PORT} up (E2E_KEEP_SERVER=1)."
+    return 0
+  fi
+  echo "[test-e2e] stopping the dev server this run started on :${PORT} (E2E_KEEP_SERVER=1 keeps it)."
+  # devserver_stop, not a kill of our own: it refuses a pid whose /proc/<pid>/cwd
+  # is not this worktree, and it walks UP to the supervisor, because `next dev`
+  # respawns `next-server` within seconds and killing the listener alone looks
+  # like it worked. `pkill -f "next dev"` matches a command line every worktree
+  # shares and has taken a sibling's server down.
+  devserver_stop "$PORT"
+}
+# INT/TERM get their own handlers because bash does not run the EXIT trap for an
+# untrapped fatal signal: an operator who ^Cs a run that is measuring the machine
+# is exactly the case that most needs the server reclaimed. They re-exit with the
+# conventional 128+signal so callers still see why the run ended.
+trap 'e2e_teardown' EXIT
+trap 'e2e_teardown; exit 130' INT
+trap 'e2e_teardown; exit 143' TERM
+
 # 1. Start a FRESH env-correct dev server for every run.
 #
 # This used to reuse whatever answered on :3737, and that reuse was silently
 # unsound. Two run-scoped fixtures live in the server PROCESS, not in the
 # database, so reuse carries state across runs that the cleanup cannot reach:
 #
-#   - Module activation. `syncRegistryFromDb` (src/actions/module.actions.ts:437)
+#   - Module activation. `syncRegistryFromDb` (src/actions/module.actions.ts:476)
 #     latches on `dbSynced` and reads ModuleRegistration ONCE per process, so a
 #     fresh run database — which holds NO ModuleRegistration rows at all, since
 #     neither seed writes one, and therefore lets the manifest defaults reapply —
@@ -269,15 +322,32 @@ echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E
 MEM_MAX="${E2E_MEM_MAX:-6G}"
 CPU_QUOTA="${E2E_CPU_QUOTA:-400%}"
 # The residue gate refuses to judge a swamped run, and it counts the timeouts
-# from a JSON report. Nothing produced one: the default reporter is `list`, so
-# `PLAYWRIGHT_JSON_OUTPUT_NAME` was unset on every ordinary invocation, the file
-# was absent, and the absence was read as "zero timeouts". The guard added in
-# `1cd54f8d` had therefore never fired in a default run and could not — measured
-# 2026-09-04 on a run with 50 timedOut tests, which the gate went on to judge.
+# from a JSON report. Nothing produced one: `PLAYWRIGHT_JSON_OUTPUT_NAME` was
+# unset on every ordinary invocation, the file was absent, and the absence was
+# read as "zero timeouts". The guard added in `1cd54f8d` had therefore never
+# fired in a default run and could not — measured 2026-09-04 on a run with 50
+# timedOut tests, which the gate went on to judge.
 #
 # So the wrapper produces the report itself. A caller who overrides `--reporter`
 # takes that guarantee away, and the gate then SKIPS rather than assume: absence
 # of evidence is not evidence of a healthy run.
+#
+# `html` is named EXPLICITLY here, and that is not decoration. A CLI `--reporter`
+# REPLACES the configured list rather than adding to it —
+# `node_modules/playwright/lib/common/config.js:90` resolves it as
+# `takeFirst(configCLIOverrides.reporter, resolveReporters(userConfig.reporter, …))`
+# — so `--reporter=list,json` silently dropped `playwright.config.ts:25`'s
+# `["html", { open: "never" }]` and stopped producing `playwright-report/` on
+# every default run. The earlier version of this comment said the wrapper "ran
+# with the default `list` reporter", which is what made the replacement look
+# free: `list` is Playwright's default, but it is not what this repo configures.
+#
+# `open: "never"` does NOT survive that move either — it is a config option, and
+# a CLI-named html reporter falls back to its own default of opening the report
+# on failure, which would block this script waiting on a browser. The env var is
+# the only way to say it from here; `html.js:154` reads
+# `PLAYWRIGHT_HTML_OPEN || PW_TEST_HTML_REPORT_OPEN`.
+export PLAYWRIGHT_HTML_OPEN="${PLAYWRIGHT_HTML_OPEN:-never}"
 E2E_REPORT_JSON="${E2E_REPORT_JSON:-$PWD/test-results/.e2e-run-report.json}"
 mkdir -p "$(dirname "$E2E_REPORT_JSON")"
 rm -f "$E2E_REPORT_JSON"
@@ -285,8 +355,12 @@ export PLAYWRIGHT_JSON_OUTPUT_NAME="$E2E_REPORT_JSON"
 
 REPORTER_ARGS=()
 case " $* " in
-  *" --reporter"*|*" -r "*) : ;;   # caller owns the reporter; see above
-  *) REPORTER_ARGS=(--reporter=list,json) ;;
+  # Caller owns the reporter; see above. Only `--reporter` is matched: playwright
+  # 1.57 has no `-r` alias (`node_modules/playwright/lib/program.js:140` declares
+  # `--reporter <reporter>` and nothing shorter), so testing for one could only
+  # ever produce a false positive and silently disarm the gate.
+  *" --reporter"*) : ;;
+  *) REPORTER_ARGS=(--reporter=html,list,json) ;;
 esac
 
 RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" \
@@ -363,26 +437,64 @@ fi
 # wrong reason.
 case "${TIMED_OUT:-}" in ''|*[!0-9]*) TIMED_OUT="unknown" ;; esac
 
+# The SAME argument applies to the report as a whole, and validating only the
+# timeout count left the hole half-open. A TRUNCATED report yields a perfectly
+# numeric `TIMED_OUT` -- often 0, because the timeouts had not been written yet
+# -- beside an empty duration. The count then passes every check below while
+# being an undercount of unknown size, and the gate judges a partial database as
+# if it were a finished run. Same class as the bug this gate was built to fix:
+# missing evidence taking the permissive branch.
+#
+# The reachable route is NOT a killed runner, which was the first guess and is
+# wrong: a cgroup SIGKILL exits 137 and the RC condition below already refuses
+# it. It is a reporter error that never reaches the exit code.
+# `multiplexer.js:87-93` wraps every `onEnd` in a try/catch that logs and
+# swallows, and `:57-58` only assigns `result.status` when the reporter returned
+# one -- so a throw leaves Playwright exiting 0 or 1, inside the allowed set.
+# `json.js:228-233` does one `JSON.stringify` and one `writeFile`, so an ENOSPC
+# or EIO landing mid-write leaves a partial file behind that status.
+#
+# `RUN_MS` is the sentinel, because `stats` is the LAST top-level key emitted
+# (`json.js:64-93`: config, suites, errors, stats — and `JSON.stringify`
+# preserves object-literal order), so truncation removes the duration before it
+# removes anything the count is read from. "Saw a duration" is therefore
+# equivalent to "read a whole report". Should a future Playwright reorder those
+# keys the oracle degrades toward a false "truncated" and a SKIP — the safe
+# direction.
+REPORT_COMPLETE=1
+case "${RUN_MS:-}" in ''|*[!0-9.]*|0|0.0) REPORT_COMPLETE=0 ;; esac
+
+#
+# The branch ORDER below is part of the correctness, not cosmetics. Each SKIP
+# names a reason, and a reason that is wrong is worse than a generic one: it
+# sends the reader after the wrong thing. The previous order tested "no JSON
+# report" before the exit code, so a runner killed by the cgroup -- which writes
+# no report at all, since `json.js` writes only in `onEnd` -- was told a custom
+# `--reporter` had suppressed it. That is precisely the case the exit-code
+# condition exists for. Most specific cause first: the run did not finish, then
+# the database is not ours, then the evidence is unusable, then the run was
+# swamped.
 if [ "${E2E_DB_PROVISIONED:-0}" = "1" ] && { [ "$RC" = "0" ] || [ "$RC" = "1" ]; } &&
-   [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -lt 3 ]; then
+   [ "$TIMED_OUT" != "unknown" ] && [ "$REPORT_COMPLETE" = "1" ] && [ "$TIMED_OUT" -lt 3 ]; then
   if ! bash "$DIR/check-e2e-residue.sh"; then
     [ "$RC" = "0" ] && RC=1
   fi
+elif [ "$RC" != "0" ] && [ "$RC" != "1" ]; then
+  echo "[residue] SKIPPED — playwright exited $RC, so it did not run and report; a run that did not finish leaves a database nobody should judge."
+elif [ "${E2E_DB_PROVISIONED:-0}" != "1" ]; then
+  echo "[residue] SKIPPED — this run did not provision a database (E2E_REUSE_SERVER)."
 elif [ "$TIMED_OUT" = "unknown" ]; then
   echo "[residue] SKIPPED — no JSON report at ${PLAYWRIGHT_JSON_OUTPUT_NAME:-<unset>}, so the timeout count is unknown and a swamped run cannot be told from a quiet one. A custom --reporter suppresses it."
 elif [ "$TIMED_OUT" -ge 3 ]; then
   echo "[residue] SKIPPED — ${TIMED_OUT} tests timed out; a test killed mid-body leaves rows that say nothing about ownership."
-elif [ "${E2E_DB_PROVISIONED:-0}" != "1" ]; then
-  echo "[residue] SKIPPED — this run did not provision a database (E2E_REUSE_SERVER)."
-else
-  echo "[residue] SKIPPED — playwright exited $RC; a run that did not finish leaves a database nobody should judge."
-fi
-
-# The run database is kept by default: a red run leaves its data inspectable,
-# and unlinking the file under a still-running dev server would leave the
-# operator with a server bound to a deleted inode. The next run replaces it.
-if [ "${E2E_KEEP_RUN_DB:-1}" = "0" ] && [ "${E2E_DB_PROVISIONED:-0}" = "1" ]; then
-  e2e_db_discard_run
+elif [ "$REPORT_COMPLETE" != "1" ]; then
+  # LAST, deliberately, and after the ≥3 branch rather than before it:
+  # truncation can only UNDERCOUNT, so "at least 3 timed out" stays true of a
+  # truncated report and is the more actionable reason to skip. This branch is
+  # for the genuinely dangerous shape the other four let through — provisioned,
+  # exit 0 or 1, a report present and its count below the threshold, and no way
+  # to know how much of the run that count actually covers.
+  echo "[residue] SKIPPED — the JSON report at ${PLAYWRIGHT_JSON_OUTPUT_NAME:-<unset>} has no run duration, so it was truncated before the reporter finished. Its ${TIMED_OUT} timeouts are a lower bound of unknown slack, not a clean bill."
 fi
 
 # Stop the server this run started.
@@ -394,21 +506,21 @@ fi
 # the pre-run guard aborts on, so it also blocked the run that would have
 # reclaimed it.
 #
-# devserver_stop, not a kill of our own: it refuses a pid whose /proc/<pid>/cwd
-# is not this worktree, and it walks UP to the supervisor, because `next dev`
-# respawns `next-server` within seconds and killing the listener alone looks like
-# it worked. `pkill -f "next dev"` matches a command line every worktree shares
-# and has taken a sibling's server down.
+# Called explicitly HERE, though an EXIT trap would reach it anyway, so the stop
+# is reported before the contention verdict rather than after it. The function
+# latches, so the trap's later call is a no-op. Its reasoning, and why it refuses
+# a server we did not start, is at its definition above.
+e2e_teardown
+
+# The run database is kept by default: a red run leaves its data inspectable,
+# and unlinking the file under a still-running dev server would leave the
+# operator with a server bound to a deleted inode. The next run replaces it.
 #
-# A server we did not start is left alone — E2E_SERVER_STARTED is set only on the
-# branch that starts one, so E2E_REUSE_SERVER's borrowed server survives.
-if [ "${E2E_SERVER_STARTED:-0}" = "1" ]; then
-  if [ "${E2E_KEEP_SERVER:-0}" = "1" ]; then
-    echo "[test-e2e] leaving the dev server on :${PORT} up (E2E_KEEP_SERVER=1)."
-  else
-    echo "[test-e2e] stopping the dev server this run started on :${PORT} (E2E_KEEP_SERVER=1 keeps it)."
-    devserver_stop "$PORT"
-  fi
+# Discarded AFTER the stop above, for exactly the reason that sentence gives:
+# while this ran first, the one path that discards was the one path that unlinked
+# the file under a live server — the case the comment was written to rule out.
+if [ "${E2E_KEEP_RUN_DB:-1}" = "0" ] && [ "${E2E_DB_PROVISIONED:-0}" = "1" ]; then
+  e2e_db_discard_run
 fi
 
 # Contention verdict: say when the run measured the machine.
@@ -424,7 +536,32 @@ fi
 # the `[test-e2e] EXIT=<rc>` contract is unchanged. Silent when no report was
 # produced — absence of evidence is handled by the gate's SKIP above, and a
 # second guess here would be worse than none.
+#
+# The count ALONE must not trigger it, and the first version's `>= 3` did. This
+# banner tells the operator to disbelieve the failures above it, so a false
+# positive destroys real evidence — which is the opposite failure from the
+# residue gate's, where the same threshold is safe because its action is merely
+# to decline to judge. Two genuine, uncontended reports from this repo sit at
+# ONE timeout in 23.7 min and TWO in 40.2 min, both over 112 results. Three is
+# therefore one step above the observed noise floor, and three real hangs from a
+# single broken shared helper would have been waved off as "not findings".
+#
+# So the shape decides, not the count: a contended run is distinguished by the
+# SHARE of results that timed out, or by how long each result took. The
+# separation is not marginal — the uncontended runs sit at 0.9%/1.8% and
+# 12.7 s/21.5 s per result, the 13.1-hour run at 45% and 421 s. Thresholds of 5%
+# and 120 s sit clear of both, and `mean` is skipped when the report carried no
+# usable duration rather than guessed at.
+CONTENDED=0
 if [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -ge 3 ]; then
+  CONTENDED="$(awk -v t="$TIMED_OUT" -v n="${RESULT_COUNT:-0}" -v ms="${RUN_MS:-unknown}" 'BEGIN{
+      share = (n + 0 > 0) ? t / n : 0
+      mean  = (ms ~ /^[0-9.]+$/ && n + 0 > 0) ? ms / n : 0
+      print (share >= 0.05 || mean >= 120000) ? 1 : 0
+    }')"
+fi
+
+if [ "$CONTENDED" = "1" ]; then
   RUN_WALL="$(awk -v ms="${RUN_MS:-unknown}" 'BEGIN{
       if (ms !~ /^[0-9.]+$/ || ms + 0 <= 0) { print "unknown"; exit }
       s = ms / 1000
@@ -448,6 +585,16 @@ if [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -ge 3 ]; then
   echo "           is not namespaced here. See scripts/lib-runtime-guard.sh."
   echo "[test-e2e] Re-run on an idle host before believing anything above."
   echo "[test-e2e] ===================================================================="
+elif [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -ge 3 ]; then
+  # Timeouts, but not the shape of a contended run. Say so WITHOUT telling the
+  # operator to discard anything: the residue gate above still declines to judge
+  # at this count, and that asymmetry is deliberate — declining to judge costs a
+  # check, disbelieving costs a finding.
+  echo
+  echo "[test-e2e] ${TIMED_OUT} tests timed out, but this run does not have the shape of a"
+  echo "           contended one (${TIMED_OUT} of ${RESULT_COUNT} results; see the durations above)."
+  echo "[test-e2e] Treat them as findings until something shows otherwise. The residue gate"
+  echo "           still skipped, because a test killed mid-body leaves rows it cannot judge."
 fi
 
 report_exit "test-e2e" "$RC"
