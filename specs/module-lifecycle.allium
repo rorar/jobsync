@@ -716,6 +716,17 @@ rule AuthFailureEscalation {
         -- point retrying with the same invalid credential. Distinct from CB escalation
         -- where transient failures are expected and the threshold allows recovery.
         -- The module transitions to error status, requiring reconfiguration before reactivation.
+        --
+        -- The ensures clauses above describe the escalation APPLYING. There is a
+        -- third outcome they do not cover: escalation may not apply at all, when
+        -- the error status cannot be durably recorded. Nothing is then paused —
+        -- deliberately, because pausing every tenant's automations on the basis
+        -- of a status nobody can read back is worse than not escalating.
+        -- See invariant LifecycleStatusIsDurable.
+        --
+        -- And once the status IS recorded the cascade is not atomic. See
+        -- invariant EscalationIsNotAtomic, which records that limitation rather
+        -- than promising it away.
 }
 
 -- =============================================================================
@@ -738,6 +749,55 @@ invariant PausedAutomationHasReason {
     for automation in Automations:
         automation.status = paused implies automation.pause_reason != null
 }
+
+-- Prose invariant: LifecycleStatusIsDurable
+-- A lifecycle status change that was not durably recorded is not reported as
+-- applied, and a status that is merely remembered is not authoritative.
+--
+-- This is the opposite of the rule stated on the circuit-breaker fields above,
+-- and the contrast is deliberate. For CB state the spec says storage location is
+-- implementation. For `status` it is not: `status` is shared across every caller
+-- and every process, it survives restarts, and it gates ModuleActivation,
+-- ModuleDeactivation, DeactivatedModulesHidden and AuthFailureEscalation.
+--
+-- Three consequences, all behavioural, none prescribing a mechanism:
+--   1. If the durable record cannot be written, the change did not happen and
+--      the caller is told so. Reporting success for a lost write is the defect
+--      MOD-B1 names; it made every retry repeat the same false answer, because
+--      the retry consulted only what the failed attempt had already remembered.
+--   2. Re-issuing an activation or deactivation for a module that already holds
+--      the target status is a no-op ONLY when the durable record agrees. A
+--      remembered status that disagrees with the record must be repaired, not
+--      short-circuited.
+--   3. Absence of a record is not absence of a status: an unrecorded module is
+--      ACTIVE. So absence AGREES with activation and DISAGREES with
+--      deactivation, and the two rules are asymmetric on that point.
+--
+-- Deliberately prose, not an expression: stating it formally would require a
+-- field holding "the durably recorded status" beside the observable one, and
+-- that field does not exist. Inventing it would produce an invariant that reads
+-- something real code has no counterpart for — and `allium check` proves syntax
+-- only, so nothing would report the mistake.
+--
+-- Implemented in src/actions/module.actions.ts (activateModule,
+-- deactivateModule) and src/lib/connector/degradation.ts (handleAuthFailure).
+
+-- Prose invariant: EscalationIsNotAtomic
+-- AuthFailureEscalation is all-or-nothing up to the status change, and NOT
+-- beyond it. This records a limitation rather than a guarantee.
+--
+-- If the error status cannot be recorded, nothing is escalated and nothing is
+-- paused — that much is honest and is what rule AuthFailureEscalation's
+-- "escalation did not apply" outcome describes. But once the status IS
+-- recorded, the pause cascade over affected automations can still fail
+-- part-way. The module is then durably in error with some or none of its
+-- automations paused, and because the escalation precondition requires the
+-- module to be ACTIVE, no later auth failure will retry the cascade for the
+-- life of that process.
+--
+-- Stated here so the rule above is not read as promising atomicity it does not
+-- have. Closing it needs either a transactional cascade or a retry path that
+-- can re-enter escalation for a module already in error; neither exists today.
 
 -- Prose invariant: AdminOnlyModuleLifecycle
 -- Only admins can activate or deactivate a module.
