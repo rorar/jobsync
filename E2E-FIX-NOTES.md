@@ -719,6 +719,10 @@ a pinned `NEXTAUTH_URL`, and a `nohup`ed dev server that survives the shell). Ch
 the brief's `~/.cache/ms-playwright/...` path via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`, which the
 wrapper honours as an override.
 
+> **Do not copy that invocation.** An explicit `--reporter` takes the caller-owns-the-reporter
+> arm in `scripts/test-e2e.sh`, which suppresses the JSON report the residue gate and the
+> contention verdict both read — so the run silently loses both checks. The record above stands
+> as what was actually run; it is not a recommendation. Use the bare wrapper.
 ### Resource limiting (operator request, 2026-09-01 13:45)
 
 Measured first, 2 min into the verification run:
