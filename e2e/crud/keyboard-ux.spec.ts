@@ -47,11 +47,6 @@ const ADMIN_TAB = {
   tag: "skills",
 } as const;
 
-/** Escape a value for use inside a `RegExp` row-name matcher. */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
  * Click "Load More" until the named row is visible, or until there is nothing
  * left to load. Adapted from `company-crud.spec.ts:24-55`, the one existing
@@ -62,18 +57,29 @@ function escapeRegExp(value: string): string {
  * The 10-iteration cap means a table beyond 250 rows would report "not found"
  * for a row that exists; the seeded template starts with zero of all four
  * models, so that is far out of reach.
+ *
+ * EVERY read below is a DOM locator, and none of them may become a `getByRole`
+ * (E2E-B40). This helper is called in a loop over several names against the
+ * same table, and a delete that the server refused leaves its AlertDialog on
+ * screen; Radix's `hideOthers()` (`@radix-ui/react-dialog/dist/index.mjs:137`)
+ * then sets `aria-hidden="true"` on the table behind it and the accessibility
+ * tree is EMPTY for that whole window. A role locator would report "row not
+ * found" for every remaining name — and `deleteAdminReferenceRow` reads that
+ * as "the row was never written", so the leak would be reported as cleaned.
+ * The blinding is silent, permanent and green, which is why it is spelled out
+ * here rather than left to the reader of `getByRole`.
  */
 async function loadUntilAdminRowVisible(
   page: Page,
   name: string,
 ): Promise<boolean> {
-  const row = page
-    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
-    .first();
+  const row = rowsByText(page, name).first();
+  // `tr` under any table on the page: the count only has to MOVE for the
+  // Load More poll below, so it does not matter that the header is included.
+  const allRows = page.locator("table tr");
 
   // Row 0 is the header, so row 1 appearing means data has loaded.
-  await page
-    .getByRole("row")
+  await allRows
     .nth(1)
     .waitFor({ state: "visible", timeout: 15000 })
     .catch(() => null);
@@ -82,10 +88,10 @@ async function loadUntilAdminRowVisible(
     if (await row.isVisible().catch(() => false)) return true;
     const loadMore = page.getByRole("button", { name: /Load More/i });
     if (!(await loadMore.isVisible().catch(() => false))) break;
-    const rowsBefore = await page.getByRole("row").count();
+    const rowsBefore = await allRows.count();
     await loadMore.click();
     await expect
-      .poll(() => page.getByRole("row").count(), { timeout: 15000 })
+      .poll(() => allRows.count(), { timeout: 15000 })
       .toBeGreaterThan(rowsBefore);
   }
   return row.isVisible().catch(() => false);
@@ -102,8 +108,9 @@ async function deleteAdminReferenceRow(
   page: Page,
   name: string,
 ): Promise<boolean> {
-  // DOM locator, not `getByRole`. Both reads below — the proof and the re-check
-  // in the catch — happen with the DeleteAlertDialog open or closing, and Radix
+  // DOM locator, not `getByRole`. Every read below that touches the TABLE — the
+  // trigger, the proof, and the re-check in the catch — happens with the
+  // DeleteAlertDialog open or closing, and Radix
   // sets `aria-hidden` on the table behind it, so a role locator matches NOTHING
   // for that window and every phrasing of "the row is gone" is satisfied by a
   // row still on screen and still in the database (E2E-B40, `rowsByText` in
@@ -111,7 +118,12 @@ async function deleteAdminReferenceRow(
   const row = rowsByText(page, name).first();
   try {
     if (!(await loadUntilAdminRowVisible(page, name))) return true;
-    await row.getByRole("button", { name: "Delete" }).click();
+    // DOM locator again, and for the same reason as `loadUntilAdminRowVisible`:
+    // this read happens against the TABLE, which is what Radix blanks. The
+    // button carries `aria-label={t("common.delete")}` (JobTitlesTable.tsx:94,
+    // CompaniesTable.tsx:122, JobLocationsTable.tsx:95, TagsTable.tsx:100), so
+    // this selects exactly what `getByRole` did.
+    await row.locator('button[aria-label="Delete"]').first().click();
     const dialog = page.getByRole("alertdialog");
     await dialog.waitFor({ state: "visible", timeout: 5000 });
     // `DeleteAlertDialog` renders Cancel + Delete; the destructive one is
@@ -126,6 +138,22 @@ async function deleteAdminReferenceRow(
     // swallow-ok: cleanup net — a throwing teardown would replace the real test
     // failure with its own. Re-check instead of assuming, so a row the net
     // failed to delete is reported rather than passing in silence.
+    //
+    // Dismiss whatever is still on screen before that re-check and before the
+    // next name in the loop. Two of the three ways this catch is reached leave
+    // an AlertDialog OPEN: the row is still referenced, so `DeleteAlertDialog`
+    // renders no destructive action at all (`DeleteAlertDialog.tsx:47` —
+    // `{deleteAction && <AlertDialogAction/>}`) and the click above times out;
+    // or the delete was refused server-side and the row never detached. An
+    // open dialog is not inert — Radix blanks the accessibility tree behind it
+    // and its overlay swallows the pointer, so the NEXT name would fail to
+    // click its own Delete button and be reported as a second leak that never
+    // existed. Escape is the dialog's own documented dismissal.
+    await page.keyboard.press("Escape").catch(() => null);
+    await page
+      .getByRole("alertdialog")
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => null);
     return !(await row.isVisible().catch(() => false));
   }
 }
@@ -261,20 +289,6 @@ async function openAddJobDialog(page: Page) {
   }).toPass({ timeout: 20000 });
 }
 
-async function deleteJob(page: Page, jobTitle: string) {
-  await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("domcontentloaded");
-  try {
-    const row = page.getByRole("row", { name: new RegExp(jobTitle, "i") });
-    await row.first().waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("job-actions-menu-btn").first().click();
-    await page.getByRole("menuitem", { name: "Delete" }).click();
-    await page.getByRole("button", { name: "Delete" }).click();
-  } catch {
-    // Job may not exist — skip cleanup
-  }
-}
-
 /**
  * Open the skills/tag popover in the AddJob dialog.
  */
@@ -303,6 +317,106 @@ function hasAnnouncement(announcements: string[], substring: string): boolean {
 // Console error collector
 // ---------------------------------------------------------------------------
 
+type ConsoleErrorOracle = {
+  /** Open the observation window at the current position. */
+  mark: () => void;
+  /**
+   * APPLICATION console errors recorded since the last `mark()`.
+   *
+   * Browser transport failures are deliberately not among them; they are
+   * warned about instead. See `classifyConsoleErrors`.
+   */
+  sinceMark: () => string[];
+};
+
+/**
+ * Split a console-error window into what the APPLICATION did and what the
+ * HARNESS did. Only the first half may fail a test.
+ *
+ * WHY THE TRANSPORT HALF MUST NOT FAIL A TEST — MEASURED, NOT ASSUMED
+ * -------------------------------------------------------------------
+ * On the 2026-09-05 full run, "Enter key creates a new option in Title
+ * combobox" failed at this oracle with eight entries, every one of them
+ * `Failed to load resource: net::ERR_CONNECTION_RESET` or `…_REFUSED`. The
+ * behaviour under test had already passed: the trigger showed the created
+ * title and the `${title} created` announcement had landed. The cause is in
+ * `/tmp/jobsync-e2e-dev.log`, one line above the second `✓ Ready in` —
+ * `⚠ Server is approaching used memory threshold, restarting...`. Next.js
+ * restarted ITSELF against the 3072 MB heap cap `scripts/dev-e2e.sh` sets, and
+ * every request in flight failed at the socket. No kernel OOM was involved,
+ * which is why looking for one found nothing.
+ *
+ * Three reasons that cannot be a test failure:
+ *   1. `Failed to load resource: net::ERR_*` is emitted by Chromium's network
+ *      stack. No application code ran to produce it, so it is not evidence
+ *      about application code — which is the only thing this oracle judges.
+ *   2. The restart is the dev server's DESIGNED response to its own heap
+ *      threshold. That makes it a recurring property of the harness, not an
+ *      accident, and an oracle that fails on it makes every long run randomly
+ *      red at an arbitrary test.
+ *   3. It lands on whichever test is mid-flight — the most misleading failure
+ *      shape available: a green behaviour reported as a code defect at a
+ *      file:line unrelated to the cause. Triaging that costs a full cycle and
+ *      teaches the team that the oracle is noise, which is how an oracle gets
+ *      deleted. This one exists because real console errors were being missed.
+ *
+ * They are still REPORTED — `sinceMark` warns them to stdout, which Playwright
+ * copies into the JSON report — because an oracle that silently discards the
+ * inconvenient half is worse than no oracle at all.
+ *
+ * WHY EVERY PREDICATE IS ANCHORED RATHER THAN A SUBSTRING (E2E-B28)
+ * -----------------------------------------------------------------
+ * What this replaces was three bare substrings — `favicon`, `404`,
+ * `Failed to fetch` — added in `9a891c32e` (2026-03-26) with no recorded
+ * reason and never edited since. `404` was the dangerous one: as a substring
+ * it also suppresses a GENUINE application error whose message embeds the
+ * status, and this app writes several (`api/logos/[id]/route.ts:67,96,102`,
+ * `api/profile/resume/route.ts:112`). Each rule below is anchored to the shape
+ * of a message the BROWSER emits, so an application error that merely mentions
+ * 404 now fails the test, as it always should have.
+ *
+ * Provenance, since the finding was that none was recorded: the `net::ERR_`
+ * rule is measured, above. The other two are RECONSTRUCTED intent. They are
+ * therefore written to suppress strictly less than the substrings did, never
+ * more — the reconstruction can be wrong in the direction of noise, not in the
+ * direction of silence.
+ */
+
+/** Chromium's network stack gave up on a request. Never application code. */
+const BROWSER_TRANSPORT_ERROR = /^Failed to load resource: net::ERR_/;
+
+/** A `fetch()` that never reached a server. Same class as `net::ERR_*`. */
+const FETCH_TRANSPORT_ERROR = /^(TypeError: )?Failed to fetch\b/;
+
+/** Chromium's own message for a request the server answered with a 404. */
+const BROWSER_RESOURCE_404 =
+  /^Failed to load resource: the server responded with a status of 404\b/;
+
+function classifyConsoleErrors(errors: string[]): {
+  app: string[];
+  transport: string[];
+} {
+  const app: string[] = [];
+  const transport: string[] = [];
+
+  for (const e of errors) {
+    if (BROWSER_TRANSPORT_ERROR.test(e) || FETCH_TRANSPORT_ERROR.test(e)) {
+      transport.push(e);
+      continue;
+    }
+    // A missing static asset is not an application fault. `favicon` is kept
+    // from the original filter and is UNMEASURED — Playwright's `msg.text()`
+    // for a resource-load failure carries no URL, so this may well match
+    // nothing. It is retained rather than deleted because removing it could
+    // only be justified by a run that proves it dead, and dropping it costs
+    // nothing while the 404 rule above already covers the case it named.
+    if (BROWSER_RESOURCE_404.test(e) || e.includes("favicon")) continue;
+    app.push(e);
+  }
+
+  return { app, transport };
+}
+
 /**
  * A console-error oracle with an EXPLICIT observation window.
  *
@@ -314,17 +428,10 @@ function hasAnnouncement(announcements: string[], substring: string): boolean {
  * wider than the behaviour it was written to observe (E2E-B28).
  *
  * `mark()` opens the window immediately before the act phase; `sinceMark()`
- * reports only what arrived after it, filtered. A `sinceMark()` with no
+ * reports only what arrived after it, classified. A `sinceMark()` with no
  * preceding `mark()` reports everything, i.e. the old behaviour, so forgetting
  * the mark makes a test noisier rather than silently blind.
  */
-type ConsoleErrorOracle = {
-  /** Open the observation window at the current position. */
-  mark: () => void;
-  /** Critical errors recorded since the last `mark()`. */
-  sinceMark: () => string[];
-};
-
 function collectConsoleErrors(page: Page): ConsoleErrorOracle {
   const errors: string[] = [];
   let windowStart = 0;
@@ -342,17 +449,24 @@ function collectConsoleErrors(page: Page): ConsoleErrorOracle {
     mark: () => {
       windowStart = errors.length;
     },
-    sinceMark: () => filterCriticalErrors(errors.slice(windowStart)),
+    sinceMark: () => {
+      const { app, transport } = classifyConsoleErrors(
+        errors.slice(windowStart),
+      );
+      if (transport.length > 0) {
+        // Not a failure, but not discarded either: this is the evidence that
+        // the dev server went away mid-test, and without it the next reader of
+        // a slow or red run has nothing to go on (E2E-B35).
+        console.warn(
+          `[keyboard-ux] ${transport.length} transport error(s) inside the ` +
+            `console window — the dev server was unreachable, which is a ` +
+            `statement about the harness and not about the app: ` +
+            `${JSON.stringify(transport)}`,
+        );
+      }
+      return app;
+    },
   };
-}
-
-function filterCriticalErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) =>
-      !e.includes("favicon") &&
-      !e.includes("404") &&
-      !e.includes("Failed to fetch"),
-  );
 }
 
 /**
@@ -1036,26 +1150,33 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .getByRole("option")
       .filter({ hasText: /Germany/i })
       .first();
-    try {
-      await germanyOption.waitFor({ state: "visible", timeout: 8000 });
-      await germanyOption.click();
-      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
-      await page.waitForLoadState("domcontentloaded");
 
-      await expect(page.getByText(/Germany|DE/i).first()).toBeVisible();
+    // ONLY the availability probe may skip; everything after it is this test's
+    // subject and must be able to FAIL.
+    //
+    // E2E-B27's shape here was a `try` that wrapped the assertions too. The
+    // first repair turned its `console.log("Note: …")` into `test.skip`, which
+    // moved the report from PASSED to NOT RUN — more honest, and still unable
+    // to tell "the EU service is down" from "select-by-click regressed". The
+    // combobox fetches /api/eures/locations, a proxy to a service this suite
+    // does not control, so an option list that never arrives is a legitimate
+    // reason not to run. A click that then does not select is a defect.
+    const optionsAvailable = await germanyOption
+      .waitFor({ state: "visible", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    test.skip(
+      !optionsAvailable,
+      "EURES location options unavailable — external service",
+    );
 
-      const announcements = await getAllAnnouncements(page);
-      const hasContent = announcements.some((a) => a.length > 0);
-      expect(hasContent).toBe(true);
-    } catch {
-      // The EuresLocationCombobox fetches /api/eures/locations, a proxy to an
-      // EU service this suite does not control. Skipping is honest — the run
-      // reports the test as NOT RUN. The console.log this replaces reported it
-      // as PASSED, which left the console-error oracle below as the only
-      // surviving assertion: green, measuring a page nobody interacted with
-      // (E2E-B27).
-      test.skip(true, "EURES location options unavailable — external service");
-    }
+    await germanyOption.click();
+    // No load-state wait: the page is already loaded, so `domcontentloaded`
+    // resolves instantly and proves nothing. The assertion below retries.
+    await expect(page.getByText(/Germany|DE/i).first()).toBeVisible();
+
+    const announcements = await getAllAnnouncements(page);
+    expect(announcements.some((a) => a.length > 0)).toBe(true);
 
     expect(consoleErrors.sinceMark()).toEqual([]);
   });
@@ -1085,18 +1206,21 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /▸/ })
       .first();
 
-    try {
-      await countryWithRegions.waitFor({ state: "visible", timeout: 5000 });
-      await countryWithRegions.click();
-      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
-      await page.waitForLoadState("domcontentloaded");
+    // Same external dependency as the test above, and the same split: the
+    // probe may skip, the expand/collapse behaviour below may not (E2E-B27).
+    const regionsAvailable = await countryWithRegions
+      .waitFor({ state: "visible", timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    test.skip(
+      !regionsAvailable,
+      "EURES country-with-regions unavailable — external service",
+    );
 
-      const expanded = page.getByText(/All of|▾/).first();
-      await expect(expanded).toBeVisible({ timeout: 3000 });
-    } catch {
-      // Same external dependency as above; same reasoning.
-      test.skip(true, "EURES country-with-regions unavailable — external service");
-    }
+    await countryWithRegions.click();
+    await expect(page.getByText(/All of|▾/).first()).toBeVisible({
+      timeout: 3000,
+    });
   });
 });
 
