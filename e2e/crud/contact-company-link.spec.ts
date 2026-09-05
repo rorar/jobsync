@@ -1,5 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { expectToast, safeWait, uniqueId } from "../helpers";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
 
 // ---------------------------------------------------------------------------
 // Contact (CRM Person) — company linking via CompanyPicker + inline create
@@ -29,7 +33,58 @@ async function navigateToContacts(page: Page) {
     .waitFor({ state: "visible" });
 }
 
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// The inline create in the CompanyPicker is the POINT of this test — it must
+// write a real `Company` row, or there would be no companyId for the assertion
+// below to find. Archiving the Person does not take that row with it: the
+// association lives as JSON on `Person.companies`, so there is no cascade and
+// nothing else in this file removes it. Measured on the 2026-09-05 run, where
+// this test PASSED and `E2E Firma mtov6uq4w0` was still in the database
+// afterwards.
+//
+// One row, one test, and it still gets the array-plus-hook shape rather than a
+// scalar and an inline delete: the inline path is the one a failed assertion
+// skips, and the assertions here sit BETWEEN the create and the end of the
+// body. See `question-crud.spec.ts` for the same argument at more length.
+let createdCompanies: string[] = [];
+
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
+  // navigates to an admin table. Buy the extra time explicitly.
+  test.setTimeout(testInfo.timeout + 30_000);
+
+  // Swap the registry out BEFORE the first await — clearing afterwards would
+  // carry entries into the next test if a delete throws.
+  const companies = createdCompanies;
+  createdCompanies = [];
+  if (companies.length === 0) return;
+
+  // Never throws, navigates itself, warns about anything that survives.
+  // `deleteCompanyById` (company.actions.ts:337-375) refuses only while a Job
+  // or WorkExperience references the row; an archived Person does not, so this
+  // succeeds with the contact left exactly as the body left it.
+  await sweepReferenceGroups(
+    page,
+    [{ tab: ADMIN_TAB.company, names: companies }],
+    "contact-company-link",
+  );
+});
+
 test.describe("Contact (CRM Person) — company link", () => {
+  test.beforeEach(async ({ context }) => {
+    // Every label this spec drives is English ("Add Contact", "First Name",
+    // "Archive"), and so is the `aria-label="Delete"` the teardown above clicks.
+    // That dependency was implicit until the teardown made it load-bearing:
+    // under a different NEXT_LOCALE the body fails, but the SWEEP would fail
+    // silently and report a leak that is really a locale mismatch.
+    await context.addCookies([
+      { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+    ]);
+  });
+
   test("creates a company inline from the contact form and persists the link", async ({
     page,
   }) => {
@@ -61,6 +116,10 @@ test.describe("Contact (CRM Person) — company link", () => {
     // Nothing matches a unique name -> the create item must be offered.
     const createItem = page.getByRole("option", { name: new RegExp(`Create`) });
     await expect(createItem).toBeVisible();
+    // Registered BEFORE the click that writes the row. The click is what calls
+    // findOrCreateCompany; a create that then fails the trigger assertion below
+    // has still left a Company behind, and only a registered name is swept.
+    createdCompanies.push(companyName);
     await createItem.click();
 
     // The trigger now shows the created company (proves it was selected).

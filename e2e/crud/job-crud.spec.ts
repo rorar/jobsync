@@ -1,6 +1,71 @@
 import { test, expect, type Page } from "@playwright/test";
 import { rowsByText, selectOrCreateComboboxOption, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
+
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// `deleteJob` removes the Job. It does not remove the `JobTitle`, `Company` and
+// `Location` rows the AddJob comboboxes wrote on the way there, and neither
+// does anything else in this file — so seven green tests left 8 job titles,
+// 9 companies (the seventh test also creates a recruiting agency) and 8
+// locations in the 2026-09-05 run database. That run had two unexpected
+// results; neither of them was in this file. The leak is the GREEN path.
+//
+// The pattern is the one `keyboard-ux.spec.ts` documents, with the two shared
+// deleters now in `../helpers/admin-reference-cleanup`:
+//   1. ARRAYS, not scalars — one `createJob` writes three rows, and the
+//      recruiter test writes a fourth.
+//   2. Registration sits where the row is WRITTEN and BEFORE the call that
+//      writes it: a `selectOrCreateComboboxOption` that creates the row and then
+//      fails its follow-up assertion has still leaked one.
+//   3. De-registration only on a PROVEN delete — there is none here, because
+//      nothing in a test body deletes a reference row.
+//   4. The afterEach swaps the registries out before its first await.
+//   5. It navigates itself, inside the sweep.
+//   6. Two tiers — the deleters swallow, the sweep re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:23) — and these
+  // bodies have already bought themselves 60 s extra, so teardown is competing
+  // with a body that is allowed to be slow. This one can visit three admin
+  // tables. Buy the extra time explicitly; keep it small enough that a body
+  // which has itself become slow still surfaces.
+  test.setTimeout(testInfo.timeout + 45_000);
+
+  // Swap the registries out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const groups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+
+  // The Job is deleted by the body — `deleteJob` proves removal rather than
+  // assuming it — and that ORDER is required rather than tidy:
+  // `deleteJobTitleById` (jobtitle.actions.ts:110-145) and `deleteCompanyById`
+  // (company.actions.ts:337-375) both count referencing Jobs first and refuse
+  // while one remains. On a red run the job survives and the sweep warns about
+  // three rows instead of silently leaving them, which is the honest outcome.
+  //
+  // The recruiting agency is the exception to the comment `deleteJob`'s caller
+  // used to carry ("left in place — there is no company hard-delete flow"):
+  // there is one, in the admin Companies tab, and it is what the sweep uses.
+  await sweepReferenceGroups(page, groups, "job-crud");
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,6 +138,12 @@ async function createJob(
     .getByPlaceholder("Copy and paste job link here")
     .fill(opts.url ?? "https://example.com/careers/e2e-test");
 
+  // Each name is registered immediately BEFORE the call that can write it. The
+  // helper's create path calls the server action and only then closes the
+  // popover, so a run that dies between the two — or that fails the
+  // `toContainText` below — has already left the row behind. Registering after
+  // a successful assertion would clean up exactly the cases that do not need it.
+  createdJobTitles.push(opts.title);
   await selectOrCreateComboboxOption(
     page,
     "Title",
@@ -83,6 +154,7 @@ async function createJob(
     opts.title,
   );
 
+  createdCompanies.push(opts.company);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -93,6 +165,7 @@ async function createJob(
     opts.company,
   );
 
+  createdLocations.push(opts.location);
   await selectOrCreateComboboxOption(
     page,
     "Location",
@@ -169,6 +242,12 @@ async function createJob(
   // "Create:" affordance. handleCreateOption unshifts the result + calls
   // field.onChange, so the trigger immediately shows the new agency label.
   if (opts.recruitingCompany) {
+    // Registered before the popover opens. The catch branch below clicks
+    // "Create:", which writes a second `Company` row — one this file's
+    // `deleteJob` never touched and which used to be left behind deliberately
+    // (see the caller's old note about there being no hard-delete flow). The
+    // admin Companies tab is that flow, so the row is swept like any other.
+    createdCompanies.push(opts.recruitingCompany);
     await page.getByLabel("Recruiting Agency", { exact: true }).click();
     const rcSearch = page.getByPlaceholder("Create or search Recruiting Agency");
     await rcSearch.fill(opts.recruitingCompany);
@@ -505,6 +584,17 @@ test.describe("Job CRUD", () => {
     await page.waitForLoadState("domcontentloaded");
     await page.getByText(fullName).first().click();
     await page.getByRole("button", { name: "Archive" }).click();
+    // A click is not an outcome, and this was the LAST line of the test: the
+    // page closes the moment the body returns, so the archive request was being
+    // abandoned in flight. Measured — `E2Emtov9xagw0 Recruiter` is still
+    // `status: "active"` in the 2026-09-05 run database, from a test that
+    // passed. "Reactivate" replacing "Archive" is the archived state's own
+    // control (PersonDetail), so waiting for it is both the proof and the thing
+    // that keeps the request alive. Same pattern as
+    // `contact-company-link.spec.ts:87-93`.
+    await expect(
+      page.getByRole("button", { name: "Reactivate" }),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   // -------------------------------------------------------------------------
@@ -578,8 +668,11 @@ test.describe("Job CRUD", () => {
       timeout: 10000,
     });
 
-    // Cleanup (job + resume). The agency company is left in place — there is no
-    // company hard-delete flow, and it carries no PII.
+    // Cleanup (job + resume). The agency Company is NOT left in place any more:
+    // the claim that "there is no company hard-delete flow" was wrong — the
+    // admin Companies tab has one, and the afterEach uses it. Deleting the JOB
+    // first is what makes that possible, since `deleteCompanyById` refuses
+    // while a Job still references the row.
     await deleteJob(page, jobTitle);
     await deleteResume(page, resumeTitle);
   });

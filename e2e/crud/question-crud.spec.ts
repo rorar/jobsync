@@ -1,5 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
-import { safeWait, uniqueId } from "../helpers";
+// `expectToast`, not `page.getByText(...)`, for every toast assertion below.
+// That is E2E-B20: a page-wide text match is satisfied by ANY element carrying
+// the string, and `e2e/helpers/index.ts` records two call sites that were
+// provably green without a toast ever appearing. Nothing on the questions page
+// renders these strings today, so the conversion closes a latent hazard rather
+// than a live one — but it narrows WHERE we look without changing WHAT is
+// matched, so it can only turn a false pass into a real one.
+import { expectToast, uniqueId } from "../helpers";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
 
 // storageState handles authentication — no per-test login needed
 
@@ -7,6 +18,59 @@ test.beforeEach(async ({ context }) => {
   await context.addCookies([
     { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24)
+// ---------------------------------------------------------------------------
+//
+// One row, and it still gets the whole pattern. The skill tag typed into the
+// Add Question dialog is a `Tag` row that outlives the Question: deleting the
+// question unlinks it, it does not remove it. Measured on the 2026-09-05 run,
+// where all three tests here PASSED and the tag survived anyway.
+//
+// WHY AN ARRAY AND A HOOK FOR A SINGLE VALUE
+// A scalar and an inline delete would be smaller and would also be wrong in the
+// one case teardown exists for. `scripts/check-e2e-residue.sh`'s own header
+// names this spec as an example: it "cleans up INLINE at the end of the test
+// body — the path a failed assertion skips". The hook runs either way. The
+// array costs one character over a scalar and removes the question of what
+// happens the day a second tag is added to a body.
+//
+// WHY THE TAG IS NO LONGER CALLED "TypeScript"
+// It was a hardcoded shared name, and the deleter matches by case-insensitive
+// SUBSTRING (`rowsByText` → `hasText`). "TypeScript" also matches a row called
+// "Advanced TypeScript", so sweeping it could delete a row this spec never
+// created — and, in the other direction, a parallel worker asserting the badge
+// while this one swept would fail for no reason. `uniqueId()` removes both, and
+// e2e/CONVENTIONS.md forbids hardcoded test-data names for the second of them.
+let createdTags: string[] = [];
+
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
+  // navigates to an admin table. Buy the extra time explicitly rather than let
+  // a green test start failing on its teardown. Kept small so that a body which
+  // has itself become slow still surfaces.
+  test.setTimeout(testInfo.timeout + 30_000);
+
+  // Swap the registry out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const tags = createdTags;
+  createdTags = [];
+  if (tags.length === 0) return;
+
+  // `sweepReferenceGroups` navigates itself and never throws — the Question is
+  // already gone by now (all three bodies delete it inline), which is what frees
+  // the tag: `deleteTagById` (tag.actions.ts:97-113) refuses while any Job or
+  // Question still links it. A question that survived its own delete therefore
+  // surfaces here as a warning about the tag, which is the correct order of
+  // events even though it names the wrong noun.
+  await sweepReferenceGroups(
+    page,
+    [{ tab: ADMIN_TAB.tag, names: tags }],
+    "question-crud",
+  );
 });
 
 async function navigateToQuestions(page: Page) {
@@ -37,6 +101,12 @@ async function createQuestion(
   // Add a skill tag if provided — TagInput uses a button with text "Search or add a skill..."
   // and an input with placeholder "Type a skill..."
   if (tagLabel) {
+    // Registered BEFORE the popover opens, i.e. before anything below can write
+    // the row. Either branch of the try/catch further down creates or selects a
+    // `Tag` that outlives this dialog, and a branch that writes the row and then
+    // fails its follow-up has still leaked one — only a registered name gets
+    // cleaned up.
+    createdTags.push(tagLabel);
     // Click the tag combobox trigger button. The button text is
     // t("jobs.searchSkill") = "Search or add a skill...". Use getByText to
     // locate it within the dialog context.
@@ -109,15 +179,15 @@ test.describe("Question CRUD", () => {
     const uid = uniqueId();
     const questionText = `E2E TypeScript experience ${uid}?`;
     const answerText = `E2E I have 5 years of TypeScript experience ${uid}.`;
-    const tagLabel = "TypeScript";
+    // Unique, not the hardcoded "TypeScript" this used to be — see
+    // "Reference-data cleanup" above for why the sweep needs it to be.
+    const tagLabel = `E2E Skill ${uid}`;
 
     await navigateToQuestions(page);
     await createQuestion(page, questionText, answerText, tagLabel);
 
     // Verify toast success message — t("questions.createdSuccess") = "Question has been created successfully"
-    await expect(page.getByText(/Question has been created/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expectToast(page, /Question has been created/);
 
     // Wait for the question list to reload after save
     await expect(page.getByText(questionText).first()).toBeVisible({
@@ -132,9 +202,7 @@ test.describe("Question CRUD", () => {
 
     // Clean up
     await deleteQuestion(page, questionText);
-    await expect(page.getByText(/Question has been deleted/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expectToast(page, /Question has been deleted/);
   });
 
   test("should edit an existing question", async ({ page }) => {
@@ -151,7 +219,15 @@ test.describe("Question CRUD", () => {
       timeout: 15000,
     });
 
-    // Wait for creation toast to auto-dismiss before clicking the question
+    // Wait for creation toast to auto-dismiss before clicking the question.
+    //
+    // DELIBERATELY still page-wide, unlike the six positive assertions in this
+    // file that were converted to `expectToast`. Locator width flips meaning
+    // with assertion polarity: for `toBeVisible` a wider locator is WEAKER
+    // (more ways to pass without the thing under test), which is E2E-B20; for
+    // `not.toBeVisible` a wider locator is STRONGER, because it demands the
+    // string be absent everywhere rather than merely absent from the toast
+    // viewport. Narrowing this one to match its neighbours would weaken it.
     await expect(
       page.getByText(/Question has been created/i).first(),
     ).not.toBeVisible({ timeout: 10000 });
@@ -182,9 +258,7 @@ test.describe("Question CRUD", () => {
     ).not.toBeVisible({ timeout: 15000 });
 
     // Verify toast success message — t("questions.updatedSuccess") = "Question has been updated successfully"
-    await expect(page.getByText(/Question has been updated/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expectToast(page, /Question has been updated/);
 
     // Verify the updated text appears (wait for list to reload)
     await expect(page.getByText(updatedQuestionText).first()).toBeVisible({
@@ -193,9 +267,7 @@ test.describe("Question CRUD", () => {
 
     // Clean up
     await deleteQuestion(page, updatedQuestionText);
-    await expect(page.getByText(/Question has been deleted/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expectToast(page, /Question has been deleted/);
   });
 
   test("should delete a question", async ({ page }) => {
@@ -207,9 +279,7 @@ test.describe("Question CRUD", () => {
     await createQuestion(page, deleteQuestionText, deleteAnswerText);
 
     // Wait for the toast and question list to reload
-    await expect(page.getByText(/Question has been created/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expectToast(page, /Question has been created/);
     await expect(page.getByText(deleteQuestionText).first()).toBeVisible({
       timeout: 10000,
     });
@@ -218,8 +288,6 @@ test.describe("Question CRUD", () => {
     await deleteQuestion(page, deleteQuestionText);
 
     // Verify toast success message — t("questions.deletedSuccess") = "Question has been deleted successfully"
-    await expect(page.getByText(/Question has been deleted/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    await expectToast(page, /Question has been deleted/);
   });
 });

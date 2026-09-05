@@ -6,6 +6,67 @@ import {
   rowsByText,
 } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
+
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// Each of the three tests below builds a job through the AddJob comboboxes, and
+// each combobox write leaves a REFERENCE row that the job does not own: a
+// `JobTitle`, a `Company` and a `Location`. `deleteJob` removes the Job and
+// nothing else — the rows it pointed at stay. Measured on the 2026-09-05 run,
+// where all three tests PASSED and left nine rows behind (`E2E Detail`,
+// `E2E Timeline`, `E2E StatusChg` and their `E2E Co`/`E2E Loc`/`E2E TimelineCo`
+// /`E2E TimelineLoc`/`E2E StatusCo`/`E2E StatusLoc` companions).
+//
+// The pattern is the one `keyboard-ux.spec.ts` documents, with the two shared
+// deleters now in `../helpers/admin-reference-cleanup`:
+//   1. ARRAYS, not scalars — one body writes three rows.
+//   2. Registration sits where the row is WRITTEN and BEFORE the call that
+//      writes it: a `selectOrCreateComboboxOption` that creates the row and then
+//      fails its follow-up assertion has still leaked one.
+//   3. De-registration only on a PROVEN delete — there is none here, because
+//      nothing in a test body deletes a reference row.
+//   4. The afterEach swaps the registries out before its first await.
+//   5. It navigates itself, inside the sweep.
+//   6. Two tiers — the deleters swallow, the sweep re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
+  // can visit three admin tables on top of bodies that already build a resume
+  // and a job. Buy the extra time explicitly rather than let a green test start
+  // failing on its teardown; keep it small enough that a body which has itself
+  // become slow still surfaces.
+  test.setTimeout(testInfo.timeout + 45_000);
+
+  // Swap the registries out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const groups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+
+  // The Job is deleted by the body, and that ORDER is required rather than
+  // tidy: `deleteJobTitleById` (jobtitle.actions.ts:110-145) and
+  // `deleteCompanyById` (company.actions.ts:337-375) both refuse while a Job
+  // still references the row. On a red run the job survives and the sweep warns
+  // about three rows instead of silently leaving them — which is the honest
+  // outcome, not a second bug.
+  await sweepReferenceGroups(page, groups, "job-detail-panels");
+});
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
@@ -67,6 +128,12 @@ async function createJob(
     .getByPlaceholder("Copy and paste job link here")
     .fill(opts.url ?? "https://example.com/careers/e2e-test");
 
+  // Each name is registered immediately BEFORE the call that can write it. The
+  // helper's create path calls the server action and only then closes the
+  // popover, so a run that dies between the two — or that fails the
+  // `toContainText` below — has already left the row behind. Registering after
+  // a successful assertion would clean up exactly the cases that do not need it.
+  createdJobTitles.push(opts.title);
   await selectOrCreateComboboxOption(
     page,
     "Title",
@@ -75,6 +142,7 @@ async function createJob(
   );
   await expect(page.getByLabel("Title")).toContainText(opts.title);
 
+  createdCompanies.push(opts.company);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -83,6 +151,7 @@ async function createJob(
   );
   await expect(page.getByLabel("Company")).toContainText(opts.company);
 
+  createdLocations.push(opts.location);
   await selectOrCreateComboboxOption(
     page,
     "Location",
