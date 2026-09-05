@@ -455,6 +455,11 @@ rule ModuleDeactivation {
 
     @guidance
         -- Only admins can deactivate modules. See invariant AdminOnlyModuleLifecycle.
+        --
+        -- The status change and the pause of every affected automation apply
+        -- together or not at all -- across every tenant using the module, not
+        -- just the caller's. The notification is outside that guarantee. See
+        -- invariant StatusAndPauseCommitTogether.
 }
 
 rule ConnectorDeactivation {
@@ -724,9 +729,10 @@ rule AuthFailureEscalation {
         -- of a status nobody can read back is worse than not escalating.
         -- See invariant LifecycleStatusIsDurable.
         --
-        -- And once the status IS recorded the cascade is not atomic. See
-        -- invariant EscalationIsNotAtomic, which records that limitation rather
-        -- than promising it away.
+        -- Past the status change, the pause of every affected automation applies
+        -- with it or not at all. See invariant StatusAndPauseCommitTogether,
+        -- which also says where that stops: the notification listed above is
+        -- NOT inside the guarantee.
 }
 
 -- =============================================================================
@@ -782,22 +788,53 @@ invariant PausedAutomationHasReason {
 -- Implemented in src/actions/module.actions.ts (activateModule,
 -- deactivateModule) and src/lib/connector/degradation.ts (handleAuthFailure).
 
--- Prose invariant: EscalationIsNotAtomic
--- AuthFailureEscalation is all-or-nothing up to the status change, and NOT
--- beyond it. This records a limitation rather than a guarantee.
+-- Prose invariant: StatusAndPauseCommitTogether
+-- A lifecycle status change and the automation pauses it causes are ONE unit:
+-- both apply or neither does. No observable state sits between them.
 --
--- If the error status cannot be recorded, nothing is escalated and nothing is
--- paused — that much is honest and is what rule AuthFailureEscalation's
--- "escalation did not apply" outcome describes. But once the status IS
--- recorded, the pause cascade over affected automations can still fail
--- part-way. The module is then durably in error with some or none of its
--- automations paused, and because the escalation precondition requires the
--- module to be ACTIVE, no later auth failure will retry the cascade for the
--- life of that process.
+-- This replaces the prose invariant EscalationIsNotAtomic, which recorded the
+-- absence of this guarantee. Until 2026-09-05 only the status change was
+-- protected, so a failure part-way through the cascade left a module durably
+-- in `error` (or `inactive`) with an arbitrary subset of automations paused.
+-- Arbitrary AND unrecorded, because the cascade spans every tenant using the
+-- module, and self-concealing, because that half-state then looked settled:
+-- both rules below require the module to be ACTIVE, so no later failure could
+-- re-enter and finish the work, and a repeat request found the target status
+-- already in place and reported success while the automations it claimed to
+-- have paused kept running.
 --
--- Stated here so the rule above is not read as promising atomicity it does not
--- have. Closing it needs either a transactional cascade or a retry path that
--- can re-enter escalation for a module already in error; neither exists today.
+-- Covers exactly the two rules that change `status` AND pause automations:
+--   - ModuleDeactivation
+--   - AuthFailureEscalation
+-- CircuitBreakerEscalation is deliberately NOT covered and does not need to
+-- be: it changes no durable status, so it has no second fact for its pauses to
+-- disagree with.
+--
+-- WHERE THE GUARANTEE ENDS. Stated explicitly, because both rules list a
+-- notification in the same ensures block as the pause and could otherwise be
+-- read as extending atomicity to it:
+--   1. It ends AT THE PAUSE. The notification is raised only after the change
+--      has applied, and is not retried, so a tenant's automations can be paused
+--      with nobody told. The pause is the durable fact; the notification is a
+--      best-effort announcement of it, and its delivery is
+--      notification-dispatch's concern, not this spec's.
+--   2. It says nothing about any process's REMEMBERED view of `status`, which
+--      is likewise reconciled after the fact. A remembered status that
+--      disagrees with the record does not violate this invariant -- see
+--      LifecycleStatusIsDurable, under which the record wins.
+--   3. It says nothing about ORDER between concurrent escalations. Two failures
+--      for the same module resolve as two whole units in an unspecified order;
+--      what it forbids is a unit interleaving with another.
+--
+-- Deliberately prose, not an expression: atomicity is a property of how a
+-- change is applied, not of any single state, so no expression over current
+-- entity state can assert it. The nearest expressible shape -- "a module in
+-- `error` has no active automations" -- is not merely weaker, it is FALSE:
+-- nothing stops a user resuming a paused automation while its module is still
+-- errored. See the open question on resume gating.
+--
+-- Implemented in src/lib/connector/degradation.ts (handleAuthFailure) and
+-- src/actions/module.actions.ts (deactivateModule).
 
 -- Prose invariant: AdminOnlyModuleLifecycle
 -- Only admins can activate or deactivate a module.
@@ -895,25 +932,28 @@ surface AutomationWizard {
         -- selectedModule.automationType
 }
 
-surface NotificationInbox {
-    facing viewer: EndUser
-
-    exposes:
-        viewer.user_id
-
-    provides:
-        MarkAsRead(notification_id)
-        MarkAllAsRead()
-        DismissNotification(notification_id)
-
-    @guarantee PersistentNotifications
-        -- Notifications persist across sessions (DB-backed, not ephemeral toasts)
-        -- Users see alerts even when not actively using the app
-
-    @guidance
-        -- Exposes: unread count, notification list (newest first),
-        -- type, message, moduleId, automationId, createdAt, read status
-}
+-- surface NotificationInbox: REMOVED 2026-09-05, closing SPEC-B3.
+--
+-- It advertised MarkAsRead(notification_id), MarkAllAsRead() and
+-- DismissNotification(notification_id), and no rule in any spec listened for
+-- any of them. The behaviour is real -- the app marks one read, marks all read
+-- and dismisses -- so the mismatch could have been closed by writing the three
+-- rules. It was closed the other way, for two reasons.
+--
+-- First, ownership. This spec's interest in a Notification ends at creating
+-- one; what a recipient then does with it is the notification's own lifecycle.
+-- The scope header above says as much, and reading/dismissal is not in it.
+--
+-- Second, and decisively: the same three operations were ALREADY declared, with
+-- the viewer in the signature, by surface NotificationBell in
+-- specs/notification-dispatch.allium -- which had the identical dangling-trigger
+-- defect, unreported, and a verbatim copy of this surface's
+-- PersistentNotifications guarantee. Writing rules here would have left one user
+-- action advertised by two specs at two different arities, which is worse than
+-- the defect being fixed. The rules now live in notification-dispatch.allium
+-- (MarkNotificationRead, MarkAllNotificationsRead, DismissNotificationFromInbox)
+-- and NotificationBell carries the boundary, including the module_id and
+-- automation_id this surface's guidance used to document.
 
 surface ModuleHealthOverview {
     facing viewer: EndUser
@@ -1076,6 +1116,8 @@ surface ModuleHealthOverview {
 -- promoted to a ModuleDependency that references registered modules by ID.
 
 -- Resolved: manifest_version: Integer added to ModuleManifest (all modules start at 1)
+
+open question "Should resuming a paused automation be refused while its module is inactive or errored? Today nothing gates it: a user can re-activate an automation against a module the system has just disabled, and ModuleDeactivation/AuthFailureEscalation will not pause it again until the module fails afresh. This is why StatusAndPauseCommitTogether cannot be narrowed to the expressible claim 'a module in error has no active automations' -- that claim is false, and the reason is this gap rather than anything about atomicity."
 
 open question "Should health check results be persisted (DB) or kept in-memory only?"
 
