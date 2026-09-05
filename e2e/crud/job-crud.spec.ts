@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
+import { rowsByText, selectOrCreateComboboxOption, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
@@ -226,6 +226,16 @@ async function deleteJob(page: Page, jobTitle: string) {
     .getByRole("alertdialog")
     .getByRole("button", { name: "Delete" })
     .click();
+
+  // A click is not an outcome. The container reloads only on success, so a
+  // delete the server REFUSED leaves the row exactly where it was and this
+  // function still returned. That matters beyond the one test that asserts
+  // removal itself: `deleteJob` is the inline cleanup of seven tests here, and
+  // a silent refusal is how rows survive a run Playwright reported as green —
+  // which is why `scripts/check-e2e-residue.sh` still carries `Job:E2E-B38` in
+  // its known-debt list. DOM locator, never `getByRole`, because this read
+  // happens as the AlertDialog closes (E2E-B40).
+  await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 15000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -396,10 +406,10 @@ test.describe("Job CRUD", () => {
     // Delete
     await deleteJob(page, jobTitle);
 
-    // Verify removed
-    await expect(
-      page.getByRole("row", { name: jobTitle }),
-    ).not.toBeVisible({ timeout: 10000 });
+    // Verify removed. `deleteJob` now proves this too, but the assertion stays
+    // here because removal is what THIS test is about — the helper's proof
+    // exists for the six tests that call it only to clean up.
+    await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 10000 });
 
     // Cleanup resume
     await deleteResume(page, resumeTitle);

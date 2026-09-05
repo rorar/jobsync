@@ -3,6 +3,7 @@ import {
   uniqueId,
   selectOrCreateComboboxOption,
   expectToast,
+  rowsByText,
 } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
@@ -145,6 +146,11 @@ async function deleteJob(page: Page, jobTitle: string) {
     .getByRole("alertdialog")
     .getByRole("button", { name: "Delete" })
     .click();
+
+  // A click is not an outcome — this copy had no proof at all, so a refused
+  // delete returned as success and left the row behind. DOM locator, because
+  // the read happens as the AlertDialog closes (E2E-B40).
+  await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 15000 });
 }
 
 /** Navigate to job detail by clicking the job title link in the table. */

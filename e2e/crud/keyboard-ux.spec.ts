@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId } from "../helpers";
+import { rowsByText, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
@@ -102,9 +102,13 @@ async function deleteAdminReferenceRow(
   page: Page,
   name: string,
 ): Promise<boolean> {
-  const row = page
-    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
-    .first();
+  // DOM locator, not `getByRole`. Both reads below — the proof and the re-check
+  // in the catch — happen with the DeleteAlertDialog open or closing, and Radix
+  // sets `aria-hidden` on the table behind it, so a role locator matches NOTHING
+  // for that window and every phrasing of "the row is gone" is satisfied by a
+  // row still on screen and still in the database (E2E-B40, `rowsByText` in
+  // e2e/helpers). `hasText` takes the string literally, so `escapeRegExp` goes.
+  const row = rowsByText(page, name).first();
   try {
     if (!(await loadUntilAdminRowVisible(page, name))) return true;
     await row.getByRole("button", { name: "Delete" }).click();
@@ -136,8 +140,14 @@ async function deleteAdminReferenceRow(
  */
 async function deleteResumeTracked(page: Page, title: string): Promise<boolean> {
   await deleteResume(page, title);
-  const gone = await page
-    .getByRole("row", { name: new RegExp(escapeRegExp(title), "i") })
+  // DOM locator (E2E-B40). This read is the one that MUST NOT be blinded: its
+  // result does not merely gate a warning, it decides whether the title is
+  // dropped from `createdResumes` below — the only registry the afterEach
+  // drains. `deleteResume` swallows every error by contract, so on the path
+  // that leaves the AlertDialog open a role locator matched nothing, `detached`
+  // resolved on its first poll, and a resume that still exists was
+  // de-registered: the leak became invisible AND permanent.
+  const gone = await rowsByText(page, title)
     .first()
     .waitFor({ state: "detached", timeout: 10000 })
     .then(() => true)

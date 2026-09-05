@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast } from "../helpers";
+import { uniqueId, expectToast, rowsByText } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
@@ -200,9 +200,15 @@ test.describe("Company CRUD", () => {
     // Verify success toast
     await expectToast(page, /Company has been deleted/i);
 
-    // Verify the company is removed from the table
-    await expect(
-      page.getByRole("row", { name: new RegExp(companyName, "i") }),
-    ).not.toBeVisible({ timeout: 10000 });
+    // Verify the company is removed from the table.
+    //
+    // DOM locator (E2E-B40): `not.toBeVisible()` is one of the three phrasings
+    // a role locator satisfies for free while the AlertDialog holds
+    // `aria-hidden` on the table behind it — nothing to be visible is not the
+    // same as gone. The toast above already proves the SERVER answered; this
+    // proves the list agrees, and it could not before.
+    await expect(rowsByText(page, companyName)).not.toBeVisible({
+      timeout: 10000,
+    });
   });
 });

@@ -305,8 +305,14 @@ test.afterEach(async ({ page }, testInfo) => {
         // swallow-ok: cleanup net — a hook that throws replaces the real test
         // failure with its own. Look again rather than assume: a resume that
         // was never created is not a leak, one that is still on screen is.
-        const stillThere = await page
-          .getByRole("row", { name: new RegExp(escapeRegExp(title), "i") })
+        // DOM locator, for the same reason as the converted re-check above:
+        // this catch runs when `deleteResumeAndVerifyGone` threw, and the most
+        // likely reason it threw is that the DeleteAlertDialog is still on
+        // screen — exactly the window in which a role locator matches nothing
+        // and reports "not there" about a row that is (E2E-B40). This warning
+        // is the ONLY signal left on this path: `createdResumes` was emptied
+        // before the loop, so nothing retries.
+        const stillThere = await rowsByText(page, title)
           .first()
           .isVisible()
           .catch(() => false);

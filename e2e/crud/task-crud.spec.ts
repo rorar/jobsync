@@ -241,9 +241,19 @@ async function revealAllTaskStatuses(page: Page) {
     }
     await page.keyboard.press("Escape");
   } catch {
-    // swallow-ok: teardown convenience — a task that stays hidden is reported
-    // by the afterEach's re-check, and a throwing hook would replace the real
+    // swallow-ok: teardown convenience — a throwing hook would replace the real
     // test failure with its own.
+    //
+    // The reassurance that used to stand here — "a task that stays hidden is
+    // reported by the afterEach's re-check" — was FALSE, and in the one
+    // direction that matters. If this widener fails, the row stays filtered out
+    // of the list; `purgeTask`'s `waitFor({ state: "visible" })` then throws
+    // into its own catch, AND the re-check counts zero rows, because the filter
+    // hides the row from both reads equally. Silent leak, no warning. This is
+    // the OTHER half of E2E-B40 — the originally-blamed status filter, not the
+    // aria-hidden blinding that the DOM locators fixed. A real fix has to ask
+    // the server rather than the list; until then, do not read a clean teardown
+    // here as proof that nothing leaked.
   }
 }
 
