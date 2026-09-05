@@ -1789,6 +1789,8 @@ surface DevServerControl {
 -- Open Questions
 ------------------------------------------------------------
 
+open question "How do RunAll / RunSmoke / RunCrud / RunSingleFile connect to TestRunStarted? Surfaces LocalExecution and CIExecution provide those four triggers and no rule listens for any of them, while five rules (GlobalSetupRunsFirst, ProvisionRunDatabase, DiscardRunDatabase, FreshDevServerPerRun, ReusedDevServerIsOptIn) all consume TestRunStarted(setup), which no surface provides. So the boundary and the rules are disconnected in both directions: a reader cannot get from `./scripts/test-e2e.sh` to the run database being provisioned. Two shapes resolve it -- four bridge rules that each emit TestRunStarted, or one provided trigger carrying the project scope as a parameter with the four command lines kept as comments. Neither was chosen here: the first needs a navigation from PlaywrightRunner to GlobalSetup that this model does not declare (so it would be invented), and the second discards the documented distinction between the four invocations."
+
 open question "Should storageState be refreshed mid-run if NextAuth session expires during long test suites?"
 open question "Should a future Phase introduce per-test database transactions for stronger isolation (e.g., SQLite savepoints)?"
 open question "Should waitForTimeout calls be systematically replaced with event-based waits, or is the debounce pattern acceptable?"

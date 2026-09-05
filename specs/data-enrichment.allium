@@ -57,7 +57,9 @@ value FallbackChainEntry {
 value FallbackChain {
   dimension: EnrichmentDimension
   entries: List<FallbackChainEntry>     -- Ordered by priority ascending
-  -- Invariant: entries.count >= 1 (enforced by FallbackChainNonEmpty invariant)
+  -- entries.count >= 1 -- see the prose invariant FallbackChainNonEmpty, which
+  -- is prose precisely because this is a value type and so has no collection
+  -- to quantify over.
 }
 
 value EnrichmentInput {
@@ -787,12 +789,24 @@ rule ApplyDeepLinkResult {
 -- Invariants
 -- =============================================================================
 
-invariant FallbackChainNonEmpty {
-  -- Every configured fallback chain has at least one module entry.
-  -- A chain with zero entries is a configuration error.
-  for chain in FallbackChains:
-    chain.entries.count >= 1
-}
+-- Prose invariant: FallbackChainNonEmpty
+-- Every configured fallback chain has at least one module entry. A chain with
+-- zero entries is a configuration error.
+--
+-- Demoted from an expression-bearing invariant to prose on 2026-09-05. It read
+-- `for chain in FallbackChains: chain.entries.count >= 1`, and FallbackChains
+-- is not a collection that exists: FallbackChain is a `value`, and values have
+-- no identity and therefore no addressable set of all instances. The claim was
+-- unresolvable, not merely unchecked -- and nothing said so, because
+-- `allium check` reports the same zero errors whether the name resolves or not.
+--
+-- Prose is the honest form while chains stay system configuration. Making the
+-- claim machine-checkable again would mean promoting FallbackChain to an
+-- entity, which is a modelling change (it would acquire identity and a
+-- lifecycle) and is only worth making if chains become user-configurable --
+-- which the Fallback Chain Configuration section below already anticipates.
+-- Restating it as an entity-level invariant is not available: the chain is not
+-- a field of any entity here.
 
 invariant DomainKeyUniquenessPerUser {
   -- Domain key is unique per user per dimension. Two users may have results
@@ -883,9 +897,21 @@ surface EnrichmentModuleSettings {
     module.lastHealthCheck
     module.circuitBreakerState
 
-  provides:
-    ActivateModule(module.manifest.id)
-    DeactivateModule(module.manifest.id)
+  -- Activation and deactivation are NOT provided here. This surface offered
+  -- ActivateModule(module.manifest.id) and DeactivateModule(module.manifest.id)
+  -- until 2026-09-05; no rule in any spec listened for either, and the
+  -- signature was wrong in a way that mattered. The rules that own these
+  -- operations are ModuleActivation and ModuleDeactivation in
+  -- module-lifecycle.allium, and they take (module_id, admin_user_id) -- the
+  -- second argument being the admin identity that invariant
+  -- AdminOnlyModuleLifecycle exists to require. Dropping it here advertised an
+  -- admin-gated, cross-tenant operation as though any viewer could invoke it.
+  --
+  -- This spec already excludes module lifecycle from its scope (see the header:
+  -- "Module registration/lifecycle -- covered by module-lifecycle.allium"), so
+  -- the boundary that offers the toggle is ModuleMarketplace there, not a
+  -- second copy here. The settings page still renders the control; what it
+  -- invokes belongs to the other bounded context.
 
   @guarantee SamePatternAsOtherConnectors
     -- The settings UI for enrichment modules follows the same layout

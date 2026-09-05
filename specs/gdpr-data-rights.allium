@@ -488,14 +488,23 @@ rule CleanOrphanedLogoAssetFiles {
 -- Invariants
 ------------------------------------------------------------
 
-invariant ExportContainsMetadata {
-    -- Every user data export must include GDPR metadata
-    -- (retention policies, processing purposes, third-party recipients).
-    for e in ExportMetadatas:
-        e.retention_policies.count > 0
-        and e.processing_purposes.count > 0
-        and e.third_party_recipients.count > 0
-}
+-- Prose invariant: ExportContainsMetadata
+-- Every user data export must include GDPR metadata: retention policies,
+-- processing purposes and third-party recipients. Art. 15(1)(a-h).
+--
+-- Demoted from an expression-bearing invariant to prose on 2026-09-05. It read
+-- `for e in ExportMetadatas: ...`, and ExportMetadatas is not a collection that
+-- exists -- ExportMetadata is a `value`, so there is no addressable set of all
+-- instances to quantify over. Nothing reported it: `allium check` resolves the
+-- name no better than it resolves a real one, and reports zero errors either
+-- way.
+--
+-- The claim is NOT lost, and this is the reason the invariant was not simply
+-- re-anchored on some entity: the same three conditions are already stated,
+-- formally and resolvably, as the postconditions of rule IncludeExportMetadata
+-- above -- which binds `metadata` from its own trigger and so has the thing the
+-- invariant lacked. The top-level form was a redundant restatement that could
+-- not be checked; the rule is the enforceable one.
 
 invariant CloudProvidersNeverReceiveContactPii {
     -- AI prompts sent to non-local providers must not contain

@@ -1063,7 +1063,13 @@ surface PromotionDialog {
 
     provides:
         PromoteVacancy(input, viewer)
-        CancelPromotion(viewer)
+
+    -- CancelPromotion(viewer) was listed here until 2026-09-05 and no rule
+    -- listened for it -- correctly, because there is nothing for a rule to say.
+    -- PreviewBeforeCommit below is the reason: no Job exists until the user
+    -- confirms, so dismissing the dialog changes no state that any rule governs.
+    -- A `provides` entry asserts an operation at the boundary; closing a dialog
+    -- that has not yet done anything is not one.
 
     @guarantee PreviewBeforeCommit
         -- User sees what will be created before confirming.
@@ -1153,8 +1159,19 @@ surface DeckView {
         DismissVacancy(vacancy_id, viewer)
         PromoteVacancy(input, viewer)
         UserBlocksCompany(company_name, viewer)
-        SkipVacancy(vacancy_id, viewer)
         Undo(token, viewer)
+
+    -- SkipVacancy(vacancy_id, viewer) was listed here until 2026-09-05 with no
+    -- rule listening for it, and this surface's own @guidance already said why
+    -- none could: skip "advances the deck to the next card without changing any
+    -- server state. The skipped card remains in the staging queue and will
+    -- reappear on next load." The surface therefore asserted an operation and
+    -- then documented that it does nothing -- a contradiction inside one
+    -- declaration. The guidance is the true half and is kept below; the
+    -- provides entry was the false one.
+    --
+    -- Skip is still a real control in the deck. It is cursor movement, not a
+    -- transition of the vacancy, so it leaves no trace for a rule to govern.
 
     @guarantee FocusManagement
         -- The deck container is focusable (tabIndex=0) with focus-visible ring styling.
