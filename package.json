@@ -15,6 +15,7 @@
     "i18n:compile": "lingui compile --typescript",
     "check:notification-writers": "bash scripts/check-notification-writers.sh",
     "check:e2e-residue": "bash scripts/check-e2e-residue.sh",
+    "check:spec-refs": "bash scripts/check-spec-refs.sh",
     "knip": "knip",
     "knip:prod": "knip --production"
   },
