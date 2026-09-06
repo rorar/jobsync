@@ -1,8 +1,12 @@
 # Handoff — E2E Elysium, 2026-09-05/06
 
-Branch `fix/e2e-elysium`, HEAD `9303b872`, **everything is pushed** (0 ahead, 0 behind
-`origin/fix/e2e-elysium`). 79 commits since `5e5d4ae8`, 27 of them in this session.
-Working tree clean.
+Branch `fix/e2e-elysium`. **Updated 2026-09-06 evening** — the section "The open thing"
+below is no longer open in the way it was written; read § The leak, named before
+acting on it.
+
+Run `git rev-parse HEAD` and `git status` rather than trusting a SHA in prose. The
+first version of this file said HEAD was `9303b872` and was right at the time; the
+point of the instruction is that "at the time" expires.
 
 Run `git rev-parse HEAD` rather than trusting a SHA in prose — the previous handoff said
 the same thing and was right.
@@ -79,8 +83,9 @@ Measured:
 - `next dev --webpack` (knob: `E2E_DEV_BUNDLER=webpack`): floors +672 MB. Ruled out.
 
 So ~34 KB is retained per request and the leak itself is the thing to fix. The suspects
-named in §5 of the analysis were audited and cleared. **Next honest step: a heap snapshot
-pair**, taken EARLY (1 GB vs 2.5 GB — growth is linear, so the small end shows the same
+named in §5 of the analysis were audited and cleared. **This was done — see § The leak,
+named. What follows is the reasoning that led there, kept because it is still the record
+of what was ruled out.** The step was: a heap snapshot pair, taken EARLY (1 GB vs 2.5 GB — growth is linear, so the small end shows the same
 accumulation with smaller files and shorter stop-the-world pauses), via
 `--heapsnapshot-signal=SIGUSR2` in `NODE_OPTIONS` and `kill -USR2` at the `next-server`.
 Do it on a run whose test results are discarded; the pause will fail tests.
@@ -126,3 +131,90 @@ Two operational lessons with teeth: **do not edit a shell script while it is exe
 (bash reads lazily by byte offset; it destroyed a 36-minute run), and **`TaskStop`, never
 `kill`**, for subagents — `kill` ends the process but leaves the session entry, so the user's
 TUI shows agents that no longer exist.
+
+
+---
+
+# Added 2026-09-06, evening
+
+## The leak, named
+
+The snapshot pair proposed above was taken, and it answers the question. **The retention
+is React's development Flight build.** Not Turbopack, not application code.
+
+`react-server-dom-webpack-server.node.development.js` installs a process-wide
+`async_hooks.createHook(...).enable()` at module load, unguarded, for React's async
+debug-info / owner-stack tracking. Each tracked operation is a node
+`{tag, owner, stack, start, end, promise, awaited, previous}`. `destroy` deletes the MAP
+entry; the nodes are also chained to each other through `previous`/`awaited`, and
+`promiseResolve` builds nodes that are assigned as `node.previous` and never entered into
+the Map at all — unreachable by `destroy` by construction.
+
+Evidence, one server lifetime, 701 MB and 1170 MB heapUsed, 401 requests apart:
+`object: WeakRef` +1,102,348 (~2,749 per request), each referenced by a distinct plain
+`Object` through a property `promise`, those Objects chaining through `awaited`
+(1,337,594) and `previous` (950,488). Full numbers and the code: second addendum in
+`docs/e2e-dev-server-restart-analysis.md`; tracked as `E2E-B42`.
+
+**What this changes for anyone continuing.** Three things:
+
+1. **Do not spend another run on bundlers or caps.** Both `app-page.runtime.dev.js` and
+   `app-page-turbo.runtime.dev.js` carry the hook, which is why the webpack measurement
+   grew identically. The bundler was never the cause and neither cap was ever a fix.
+2. **There is no runtime opt-out.** No `process.env` test within 200 lines of the
+   `.enable()` in either the stable or the `-experimental` React build; the feature is
+   gated at React's own build time.
+3. **The only remedy that addresses the cause is remedy (iii)** — run the suite against
+   `next build` + `next start`, where no development Flight bundle is loaded. Its blocker
+   is unchanged and unrelated: `E2E_AUTH_RATE_LIMIT_BYPASS` is deliberately inert under
+   `NODE_ENV=production`. **That is the open decision, and it is the only one left here.**
+   ROADMAP §8.5 Phase 3 already plans the move for other reasons.
+
+## Tools this leaves behind
+
+Three, in `tools/next-heap/`, each with a `--self-test` that proves it can fire:
+
+| | |
+|---|---|
+| `snapshot-pair.py` | takes two snapshots at `heapUsed` thresholds read from `.next/trace`. Refuses to signal a process that is not armed, because Node's default disposition for SIGUSR2 is to TERMINATE. |
+| `heap-classes.py` | streams a multi-GB snapshot and aggregates by class; `--diff` compares two. Refuses a truncated file by comparing the header's `node_count`. |
+| `heap-retainers.py` | walks the edge array to name what points at a class, with `--hop-through` for one more level. Excludes structural edges by default. |
+
+Armed with `E2E_DEV_HEAP_SNAPSHOT=1` on `scripts/dev-e2e.sh`.
+
+**If you take another snapshot, raise `E2E_DEV_MEM_MAX` first.** A snapshot raises the
+process's RSS floor permanently — V8 allocates to serialise and does not give it back.
+Measured: one snapshot at 1.0 GB heap, then an OOM kill four minutes later at 1.9 GB heap
+with anon-rss 7.81 GiB against `MemoryMax=8G`, with the heap nowhere near the watchdog
+threshold so the dev log said nothing. That is WORSE than a watchdog restart: SIGKILL
+leaves `next-dev.js:272` declining to respawn, so the port stays dead and every remaining
+test fails against nothing (80 of them, on that run). The second attempt used
+`E2E_DEV_MEM_MAX=11G` with thresholds 700/1150 MB and peaked at 6.8 GB.
+
+## Also closed since the first version of this file
+
+- **`job-crud.spec.ts:290`** — the missing toast half of its `deleteJob`, now present.
+- **`task-crud.spec.ts`** — the status-filter half of E2E-B40. The widener now confirms
+  each toggle reached `aria-checked="true"`, returns a boolean, and closes the menu in a
+  `finally`; the caller distinguishes "deleted" from "invisible" instead of printing
+  silence that reads as clean.
+- **`check-spec-refs.sh` is wired in.** Both CI (`.github/workflows/ci.yml`, with a pinned
+  allium 3.6.1 installed from the `juxt/allium-tools` release) and a local pre-push hook
+  (`scripts/hooks/pre-push`, armed by `scripts/install-hooks.sh` — **not installed for
+  you**; `core.hooksPath` is per-repository and takes effect for every linked worktree).
+
+## One more withdrawn claim, and how it was caught
+
+The first version of this file, and the analysis it points at, said the retention lived in
+the "Turbopack dev request path". That was wrong, and it was wrong in the way the previous
+four were: a hypothesis from static reading, written in the register of a finding. The
+webpack measurement had already contradicted it — floors rose identically — and the
+contradiction was recorded as "the upstream reports do not hold for this tree" rather than
+as "the hypothesis is dead". Reading the evidence as a surprise about webpack, instead of
+as a refutation of Turbopack, cost a measurement.
+
+It was also **caught by the user, not by me**: a claim in this session that `allium` had
+"no published install step" and could therefore not run in CI was concluded from a local
+check only — not in `package.json`, a hand-installed binary in `~/bin` — and the user asked
+for it to be checked independently. Upstream publishes prebuilt Linux archives per release.
+The pattern in both is the same: local absence read as global absence.
