@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { rowsByText, selectOrCreateComboboxOption, uniqueId } from "../helpers";
+import { expectToast, rowsByText, selectOrCreateComboboxOption, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 import {
   ADMIN_TAB,
@@ -306,14 +306,35 @@ async function deleteJob(page: Page, jobTitle: string) {
     .getByRole("button", { name: "Delete" })
     .click();
 
-  // A click is not an outcome. The container reloads only on success, so a
-  // delete the server REFUSED leaves the row exactly where it was and this
-  // function still returned. That matters beyond the one test that asserts
-  // removal itself: `deleteJob` is the inline cleanup of seven tests here, and
-  // a silent refusal is how rows survive a run Playwright reported as green —
-  // which is why `scripts/check-e2e-residue.sh` still carries `Job:E2E-B38` in
-  // its known-debt list. DOM locator, never `getByRole`, because this read
-  // happens as the AlertDialog closes (E2E-B40).
+  // A click is not an outcome, and proving a deletion takes TWO assertions —
+  // the server's answer, then the view's (e2e/CONVENTIONS.md, "Proving deletion
+  // takes two assertions, one wrong locator"). The container reloads only on
+  // success, so a delete the server REFUSED leaves the row exactly where it was
+  // and this function still returned. That matters beyond the one test that
+  // asserts removal itself: `deleteJob` is the inline cleanup of seven tests
+  // here, and a silent refusal is how rows survive a run Playwright reported as
+  // green — which is why `scripts/check-e2e-residue.sh` still carries
+  // `Job:E2E-B38` in its known-debt list.
+  //
+  // This copy carried only the second half. The gap is not cosmetic: the two
+  // failures are indistinguishable from the row's side and have opposite causes
+  // —
+  //
+  //   no toast at all   → the round trip never happened; nothing was decided.
+  //   destructive toast → the server decided, and refused.
+  //
+  // `job-detail-panels.spec.ts:262` documents the measurement that made the
+  // distinction matter: a dev-server restart between the Delete click and the
+  // server action landing, with no audit line and no error anywhere, reported
+  // here as "the row is still there" and sent an investigation into cleanup
+  // code that had done nothing wrong.
+  //
+  // 15 s rather than the helper's 10 s default, for the same reason given
+  // there: the route can be cold behind a recompile, and a legitimate delete
+  // must not be called a failure for being slow.
+  await expectToast(page, /Job has been deleted successfully/, 15000);
+  // DOM locator, never `getByRole`, because this read happens as the
+  // AlertDialog closes (E2E-B40).
   await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 15000 });
 }
 

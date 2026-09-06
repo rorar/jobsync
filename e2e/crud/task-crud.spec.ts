@@ -225,7 +225,7 @@ async function deleteActivity(page: Page, activityName: string) {
  * — invisible to the teardown net unless the filter is widened first. Silent:
  * this only ever runs from teardown.
  */
-async function revealAllTaskStatuses(page: Page) {
+async function revealAllTaskStatuses(page: Page): Promise<boolean> {
   try {
     await page
       .getByRole("button", { name: "Status", exact: true })
@@ -236,13 +236,22 @@ async function revealAllTaskStatuses(page: Page) {
       // Read aria-checked rather than isChecked(): the state lives on the
       // attribute for a menuitemcheckbox, and a toggle that is already on must
       // not be clicked back off.
-      if ((await item.getAttribute("aria-checked")) === "true") continue;
-      await item.click({ force: true });
+      if ((await item.getAttribute("aria-checked")) !== "true") {
+        await item.click({ force: true });
+      }
+      // CONFIRM the toggle took, rather than assuming the click landed. A
+      // forced click on an element under an overlay reports success and changes
+      // nothing, and every consequence of that is invisible downstream — see
+      // the caller.
+      await expect(item).toHaveAttribute("aria-checked", "true", {
+        timeout: 5000,
+      });
     }
-    await page.keyboard.press("Escape");
+    return true;
   } catch {
     // swallow-ok: teardown convenience — a throwing hook would replace the real
-    // test failure with its own.
+    // test failure with its own. Returning FALSE is what makes the swallow
+    // safe, and it is the change that closes this half of E2E-B40.
     //
     // The reassurance that used to stand here — "a task that stays hidden is
     // reported by the afterEach's re-check" — was FALSE, and in the one
@@ -251,9 +260,19 @@ async function revealAllTaskStatuses(page: Page) {
     // into its own catch, AND the re-check counts zero rows, because the filter
     // hides the row from both reads equally. Silent leak, no warning. This is
     // the OTHER half of E2E-B40 — the originally-blamed status filter, not the
-    // aria-hidden blinding that the DOM locators fixed. A real fix has to ask
-    // the server rather than the list; until then, do not read a clean teardown
-    // here as proof that nothing leaked.
+    // aria-hidden blinding that the DOM locators fixed.
+    //
+    // A real fix still has to ask the SERVER rather than the list; a zero count
+    // through a filter this function could not open establishes nothing either
+    // way. What the boolean buys is that the caller now knows which it is, and
+    // says so, instead of printing silence that reads as "clean".
+    return false;
+  } finally {
+    // In the `finally`, because a widener that threw leaves the dropdown OPEN,
+    // and an open Radix menu puts `aria-hidden` on the rest of the tree — so
+    // the very next `purgeTask` would fail for a second, unrelated reason and
+    // the report would name the wrong one.
+    await page.keyboard.press("Escape").catch(() => undefined);
   }
 }
 
@@ -351,13 +370,26 @@ test.describe("Task CRUD", () => {
 
       if (leakedTasks.length > 0) {
         await navigateToTasks(page);
-        await revealAllTaskStatuses(page);
+        const revealed = await revealAllTaskStatuses(page);
         for (const title of leakedTasks) {
           await purgeTask(page, title);
-          if ((await taskRows(page, title).count()) > 0) {
+          const remaining = await taskRows(page, title).count();
+          if (remaining > 0) {
             console.warn(
               `[task-crud] leaked task survived cleanup: ${title} ` +
                 `— it stays in the run database (E2E-B24).`,
+            );
+          } else if (!revealed) {
+            // A zero count is NOT good news here. The status filter hides a
+            // Complete or Cancelled row from `purgeTask`'s delete AND from this
+            // re-check, equally — so when the widener failed, "no rows" and
+            // "deleted" are the same reading. Saying which one this is costs a
+            // line; not saying it is how a leak gets reported as cleaned.
+            console.warn(
+              `[task-crud] cleanup could not widen the status filter, so ` +
+                `${title} reads as gone WITHOUT that having been established ` +
+                `— the filter hides the row from the delete and from this ` +
+                `check alike (E2E-B40).`,
             );
           }
         }
