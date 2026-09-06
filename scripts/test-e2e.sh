@@ -27,6 +27,14 @@
 #   ./scripts/test-e2e.sh --project=smoke
 #
 # Tunables (env):
+#   E2E_PROD               1 = run against `next build` +   (default 0: dev
+#                          `next start` instead of the dev   server)
+#                          server. Removes the cause of the mid-run restarts
+#                          (E2E-B42: the dev Flight bundle's async_hooks
+#                          retention, and a watchdog that only exists under
+#                          `isDev`), at the price of a build per code change.
+#                          scripts/e2e-prod-build.sh decides whether that build
+#                          is needed; E2E_PROD_BUILD=always|never overrides it.
 #   E2E_WORKERS            playwright workers              (default 1)
 #   E2E_LOGIN_TIMEOUT_MS   global-setup login wait, ms     (default 90000)
 #   E2E_SERVER_WAIT        seconds to await cold server    (default 150)
@@ -132,6 +140,27 @@ guard_host_load "test-e2e" || exit 75
 export E2E_LOGIN_TIMEOUT_MS="${E2E_LOGIN_TIMEOUT_MS:-90000}"
 WORKERS="${E2E_WORKERS:-1}"
 SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
+
+# Dev server or production server. Everything that differs between the two is
+# decided HERE, once, rather than tested again at each use site — the readiness
+# poll, the teardown message and the restart report all read these.
+#
+# E2E_PROD is exported because playwright.config.ts reads it: its `webServer`
+# block is a FALLBACK for a bare `playwright test`, and a fallback that starts a
+# dev server for a production run would answer the readiness check with the
+# wrong server entirely.
+export E2E_PROD="${E2E_PROD:-0}"
+if [ "$E2E_PROD" = "1" ]; then
+  SERVER_KIND="production"
+  SERVER_STARTER="$DIR/prod-e2e.sh"
+  SERVER_LOG=/tmp/jobsync-e2e-prod.log
+  # Must match what the build wrote; next.config.mjs reads it at both ends.
+  export NEXT_DIST_DIR="${NEXT_DIST_DIR:-.next-e2e}"
+else
+  SERVER_KIND="dev"
+  SERVER_STARTER="$DIR/dev-e2e.sh"
+  SERVER_LOG=/tmp/jobsync-e2e-dev.log
+fi
 # One port per worktree (scripts/lib-devserver.sh). The main checkout keeps
 # 3737; a linked worktree derives its own, so a suite here cannot take down a
 # server there. Playwright reads E2E_BASE_URL, NextAuth reads NEXTAUTH_URL, and
@@ -147,6 +176,23 @@ export E2E_BASE_URL="http://localhost:${PORT}"
 # no longer resolves at all. E2E must not depend on the operator's remote-access
 # choice, so pin it. This is the value CI already uses (ci.yml).
 export NEXTAUTH_URL="$E2E_BASE_URL"
+
+# Pass AUTH_SECRET through to the PLAYWRIGHT process.
+#
+# e2e/global-setup.ts mints the NextAuth session cookie instead of signing in,
+# which needs the same secret the server signs with. Next loads `.env` for the
+# SERVER; the Playwright process is an ordinary node process and loads nothing,
+# so without this the setup falls back to a real sign-in — correct, but it
+# spends one of the 5-per-15-minute signins for no reason, and under E2E_PROD=1
+# there is no bypass to absorb it.
+#
+# Read with `sed`, not by sourcing `.env`: that file legitimately contains values
+# with spaces and `#`, and sourcing it would also execute anything in it.
+if [ -z "${AUTH_SECRET:-}" ] && [ -f .env ]; then
+  AUTH_SECRET="$(sed -n 's/^AUTH_SECRET=//p' .env | head -1 |
+                 sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
+  [ -n "$AUTH_SECRET" ] && export AUTH_SECRET
+fi
 
 # Teardown, reachable from EVERY exit rather than only from the bottom.
 #
@@ -176,10 +222,10 @@ e2e_teardown() {
   [ "${E2E_SERVER_STARTED:-0}" = "1" ] || return 0
 
   if [ "${E2E_KEEP_SERVER:-0}" = "1" ]; then
-    echo "[test-e2e] leaving the dev server on :${PORT} up (E2E_KEEP_SERVER=1)."
+    echo "[test-e2e] leaving the ${SERVER_KIND} server on :${PORT} up (E2E_KEEP_SERVER=1)."
     return 0
   fi
-  echo "[test-e2e] stopping the dev server this run started on :${PORT} (E2E_KEEP_SERVER=1 keeps it)."
+  echo "[test-e2e] stopping the ${SERVER_KIND} server this run started on :${PORT} (E2E_KEEP_SERVER=1 keeps it)."
   # devserver_stop, not a kill of our own: it refuses a pid whose /proc/<pid>/cwd
   # is not this worktree, and it walks UP to the supervisor, because `next dev`
   # respawns `next-server` within seconds and killing the listener alone looks
@@ -223,7 +269,10 @@ trap 'e2e_teardown; exit 143' TERM
 # where you know the process state is clean. Do not use it for a full run.
 if [ "${E2E_REUSE_SERVER:-0}" = "1" ] &&
    curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null; then
-  echo "[test-e2e] reusing dev server already on :${PORT} (E2E_REUSE_SERVER=1)"
+  echo "[test-e2e] reusing the server already on :${PORT} (E2E_REUSE_SERVER=1)"
+  echo "[test-e2e] WARNING: this branch cannot tell a dev server from a production one."
+  echo "                   Whatever answers on the port is what the suite measures, so"
+  echo "                   E2E_PROD=${E2E_PROD} describes this run's INTENT and not its server."
   echo "[test-e2e] WARNING: module-state fixtures are per-process; a reused server"
   echo "                   can fail automation-wizard-modules on its precondition."
   echo "[test-e2e] WARNING: this run uses prisma/dev.db, NOT a disposable copy."
@@ -232,6 +281,17 @@ if [ "${E2E_REUSE_SERVER:-0}" = "1" ] &&
   echo "                   the test runner on DIFFERENT databases — a failure that"
   echo "                   names neither. Your working data WILL be written to."
 else
+  # Build first, before anything with side effects.
+  #
+  # A production run needs a build, and a build is the one step here that can
+  # take minutes and fail. Doing it FIRST means a failure costs nothing else:
+  # the operator's server is still up, no database has been provisioned, and the
+  # error names the build. e2e-prod-build.sh decides whether a build is actually
+  # needed, so a loop over one spec pays this only after a source change.
+  if [ "$E2E_PROD" = "1" ]; then
+    bash "$DIR/e2e-prod-build.sh" || exit 1
+  fi
+
   # Give this run its own database. Everything the suite writes lands in a copy
   # of a seeded template that the next run replaces, so prisma/dev.db is never
   # opened: scripts/e2e-db.sh and ADR-045 say why a disposable copy REPLACED the
@@ -266,7 +326,11 @@ else
     exit 1
   fi
 
-  echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
+  if [ "$E2E_PROD" = "1" ]; then
+    echo "[test-e2e] starting a fresh E2E production server (env.sh, ${NEXT_DIST_DIR}, NO auth bypass) ..."
+  else
+    echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
+  fi
   # Timestamped, so a dev-server event can be placed against the Playwright
   # timeline without summing test durations. The restart described below leaves
   # no trace on the runner's side, so the log is the only place the two can be
@@ -281,8 +345,8 @@ else
   #
   # `|| [ -n "$l" ]` keeps the LAST line when the server dies without a trailing
   # newline -- which is exactly the line a crashing server writes.
-  nohup bash -c "set -o pipefail; bash '$DIR/dev-e2e.sh' 2>&1 | while IFS= read -r l || [ -n \"\$l\" ]; do printf '%(%T)T %s\n' -1 \"\$l\"; done" \
-    >/tmp/jobsync-e2e-dev.log 2>&1 &
+  nohup bash -c "set -o pipefail; bash '$SERVER_STARTER' 2>&1 | while IFS= read -r l || [ -n \"\$l\" ]; do printf '%(%T)T %s\n' -1 \"\$l\"; done" \
+    >"$SERVER_LOG" 2>&1 &
   STARTER_PID=$!
   # Recorded HERE, on the only branch that starts a server, because the teardown
   # at the end of this script may stop OURS and must never stop anyone else's:
@@ -304,24 +368,33 @@ else
   # not the reason -- and if anything else is listening, no symptom at all.
   if ! kill -0 "$STARTER_PID" 2>/dev/null; then
     wait "$STARTER_PID"; STARTER_RC=$?
-    echo "[test-e2e] ERROR: the dev server starter exited immediately (rc=$STARTER_RC)." >&2
+    echo "[test-e2e] ERROR: the ${SERVER_KIND} server starter exited immediately (rc=$STARTER_RC)." >&2
     [ "$STARTER_RC" = "75" ] && echo "[test-e2e]        rc 75 means the port lock is held: $(devserver_lock_describe "$PORT")" >&2
-    tail -20 /tmp/jobsync-e2e-dev.log >&2
+    tail -20 "$SERVER_LOG" >&2
     exit 1
   fi
 
-  echo "[test-e2e] waiting up to ${SERVER_WAIT}s for cold compile (log: /tmp/jobsync-e2e-dev.log) ..."
+  # A production server has nothing to compile — it either binds the port or it
+  # does not — so naming a cold compile there would send the reader after a
+  # phase that does not exist. The BUDGET is unchanged: an overloaded host can
+  # still be slow to start a process, and shrinking the wait would only convert
+  # slowness into a different error message.
+  if [ "$E2E_PROD" = "1" ]; then
+    echo "[test-e2e] waiting up to ${SERVER_WAIT}s for the production server to bind (log: ${SERVER_LOG}) ..."
+  else
+    echo "[test-e2e] waiting up to ${SERVER_WAIT}s for cold compile (log: ${SERVER_LOG}) ..."
+  fi
   ready=0
   for _ in $(seq 1 "$SERVER_WAIT"); do
     if curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null; then ready=1; break; fi
     sleep 1
   done
   if [ "$ready" != 1 ]; then
-    echo "[test-e2e] ERROR: dev server not ready in ${SERVER_WAIT}s — see /tmp/jobsync-e2e-dev.log"
+    echo "[test-e2e] ERROR: ${SERVER_KIND} server not ready in ${SERVER_WAIT}s — see ${SERVER_LOG}"
     exit 1
   fi
 fi
-echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E2E_LOGIN_TIMEOUT_MS}ms chromium=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-playwright-bundled}"
+echo "[test-e2e] ${SERVER_KIND} server ready :${PORT} | workers=${WORKERS} loginTimeout=${E2E_LOGIN_TIMEOUT_MS}ms chromium=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-playwright-bundled}"
 
 # 2. Run Playwright gently (single worker + low CPU/IO priority), inside a
 #    transient cgroup so the runner and its Chromium children cannot take the
@@ -633,11 +706,16 @@ fi
 # Only for a run that started its OWN server: the E2E_REUSE_SERVER branch never
 # truncates this log, so the grep would count a PREVIOUS run's restarts and
 # report them as this one's.
-if [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f /tmp/jobsync-e2e-dev.log ]; then
+#
+# Skipped entirely for a production run, and not because it would find nothing:
+# the watchdog is inside `if (isDev)` at start-server.js:233, so under
+# `next start` it does not exist. A block that reported "0 restarts" there would
+# imply the count was measured against a mechanism that was running. It was not.
+if [ "$E2E_PROD" != "1" ] && [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f "$SERVER_LOG" ]; then
   # `|| true`, not `|| echo 0`: `grep -c` PRINTS 0 and EXITS 1 when nothing
   # matches, so the fallback appended a second zero and the test below failed
   # with "integer expected" -- on stderr, immediately above the EXIT= line.
-  RESTARTS="$(grep -c "approaching the used memory threshold" /tmp/jobsync-e2e-dev.log 2>/dev/null || true)"
+  RESTARTS="$(grep -c "approaching the used memory threshold" "$SERVER_LOG" 2>/dev/null || true)"
   case "${RESTARTS:-}" in ''|*[!0-9]*) RESTARTS=0 ;; esac
   if [ "${RESTARTS:-0}" -gt 0 ]; then
     echo
@@ -645,8 +723,10 @@ if [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f /tmp/jobsync-e2e-dev.log ]; then
     echo "[test-e2e] Any server action in flight at those moments was ABANDONED: no response, no"
     echo "           error, no audit entry. A test that failed on 'the row is still there' may be"
     echo "           reporting a request nobody answered rather than one the server refused."
-    echo "[test-e2e] Timestamps: grep -n 'approaching the used memory threshold' /tmp/jobsync-e2e-dev.log"
+    echo "[test-e2e] Timestamps: grep -n 'approaching the used memory threshold' ${SERVER_LOG}"
     echo "[test-e2e] Cause and remedies: docs/e2e-dev-server-restart-analysis.md"
+    echo "[test-e2e] The remedy that reaches the cause is E2E_PROD=1: a production server"
+    echo "           loads no development Flight bundle and has no watchdog at all."
   fi
 fi
 

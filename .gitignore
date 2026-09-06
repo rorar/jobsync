@@ -30,6 +30,10 @@ e2e/.auth/
 
 # next.js
 /.next/
+# The E2E production build (scripts/e2e-prod-build.sh). Kept out of /.next/ so a
+# `next start` build and the dev server's Turbopack cache cannot invalidate each
+# other; see next.config.mjs `distDir`.
+/.next-e2e/
 /out/
 
 # production

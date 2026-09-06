@@ -100,10 +100,18 @@ devserver_cwd_of() {
   readlink "/proc/$1/cwd" 2>/dev/null
 }
 
-# Is this process ours — same worktree, and actually a dev server?
+# Is this process ours — same worktree, and actually one of our servers?
 #
 # Both halves are needed. Path alone would match a shell; command alone is what
 # `pkill -f "next dev"` does, and every worktree produces the same string.
+#
+# `next start` is in the list because scripts/prod-e2e.sh starts one: without it
+# every caller of devserver_stop — test-e2e.sh's teardown, build-safe.sh, the
+# "always replaces" branch — printed "NOT ours, leaving it alone" and carried on,
+# which reads as a successful stop and leaves the port held. The two modes share
+# one port and one lock deliberately, so exactly one server can exist per
+# worktree whichever mode it is in; a production server this function did not
+# recognise would have blocked the next dev run and vice versa.
 devserver_is_ours() {
   local pid="$1" root="${2:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
   [ -n "$pid" ] || return 1
@@ -112,6 +120,7 @@ devserver_is_ours() {
   cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
   case "$cmd" in
     *"next dev"*|*next-server*|*"bun run dev"*|*"next-router-worker"*) return 0 ;;
+    *"next start"*|*"bun run start"*) return 0 ;;
     *) return 1 ;;
   esac
 }
