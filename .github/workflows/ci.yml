@@ -22,15 +22,39 @@ jobs:
 
       # Before anything is installed: pure bash + grep, so a violation is
       # reported in seconds rather than after a four-minute build.
-      #
-      # Its sibling `scripts/check-spec-refs.sh` is NOT here, and the reason is
-      # not that it matters less — it is the only gate in this repo that can
-      # catch a spec referring to something that does not exist, since
-      # `allium check` proves syntax only. It needs the `allium` binary, which
-      # has no published install step to put in a workflow. Until it has one,
-      # that gate runs from `scripts/hooks/pre-push` and nowhere else.
       - name: Notification writer invariant (ADR-030)
         run: bash scripts/check-notification-writers.sh
+
+      # Version PINNED to the one this repo's specs are checked against locally.
+      # `scripts/check-spec-refs.sh` reads the JSON that `allium parse` emits,
+      # so the AST shape is an interface: floating to "latest" would let an
+      # upstream release change what the gate sees without a commit here.
+      #
+      # The checksum is one this repository computed and verified, NOT an
+      # upstream one — the release's own SHA256SUMS.txt covers only the VS Code
+      # extension and the LSP tarball, not the CLI archives. Worth stating so
+      # nobody spends time looking for the file that would make this line
+      # redundant.
+      - name: Install allium (spec compiler)
+        run: |
+          set -euo pipefail
+          ver=3.6.1
+          sha=e00c99ae234b10207719257a70e7c2dcad73060864468cd293fb7ad40524e970
+          curl -fsSL -o allium.tar.gz \
+            "https://github.com/juxt/allium-tools/releases/download/v${ver}/allium-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${sha}  allium.tar.gz" | sha256sum -c -
+          tar -xzf allium.tar.gz
+          sudo install -m 0755 allium /usr/local/bin/allium
+          rm -f allium allium.tar.gz
+          allium --version
+
+      # The only gate in this repo that can catch a spec referring to something
+      # that does not exist: `allium check` proves SYNTAX and nothing else.
+      # Exit 2 means the checker could not run and NOTHING was examined, which
+      # is why the step must not swallow it — a green CI on an unexecuted gate
+      # is the failure this is guarding against.
+      - name: Spec reference integrity
+        run: bash scripts/check-spec-refs.sh
 
       - uses: oven-sh/setup-bun@v2
         with:

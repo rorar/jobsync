@@ -18,14 +18,18 @@
 #                               were found across eight files on 2026-09-05.
 #   check-notification-writers  the SingleNotificationWriter invariant (ADR-030).
 #
-# WHY NOT IN GITHUB CI
-# --------------------
-# `check-notification-writers.sh` is portable (bash + grep) and IS wired into
-# .github/workflows/ci.yml. `check-spec-refs.sh` is not, and cannot be today:
-# it needs the `allium` binary, which on this machine is a hand-installed ELF at
-# ~/bin/allium with no entry in package.json and no published install step to
-# put in a workflow. Until there is one, this hook is the only place that gate
-# runs, which is the reason the hook exists at all.
+# RELATION TO GITHUB CI
+# ---------------------
+# Both checks also run in .github/workflows/ci.yml, which installs a pinned
+# `allium` from the juxt/allium-tools releases. This hook is not a substitute
+# for that — it is the earlier of the two, and the only one that runs for a
+# push to a branch CI does not watch (CI triggers on main and dev).
+#
+# An earlier version of this comment claimed allium had "no published install
+# step" and that CI therefore could not run the spec gate. That was wrong, and
+# wrong from a local-only check: not being in package.json and sitting as a
+# hand-installed binary in ~/bin says nothing about how it is distributed.
+# Upstream ships prebuilt x86_64 Linux archives per release.
 #
 # EXIT 2 FROM check-spec-refs BLOCKS THE PUSH
 # -------------------------------------------
