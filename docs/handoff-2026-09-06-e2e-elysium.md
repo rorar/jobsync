@@ -218,3 +218,49 @@ It was also **caught by the user, not by me**: a claim in this session that `all
 check only — not in `package.json`, a hand-installed binary in `~/bin` — and the user asked
 for it to be checked independently. Upstream publishes prebuilt Linux archives per release.
 The pattern in both is the same: local absence read as global absence.
+
+## The production-build decision, sized
+
+Asked and answered after the above was written, so the numbers here are newer than
+§ The leak, named.
+
+**It is the common denominator under four open entries, not a fifth item beside
+them.** `E2E-B42` (the leak — the only remedy at the cause), `E2E-B11` (the
+hydration oracle is only meaningful where the tree is deterministic; that entry
+already names ROADMAP §8.5 Phase 3 itself), `E2E-B28` (the same dev-server
+warning is what its console oracle collects), and `E2E-B35` (whose own text says
+*"The real lever is not the timeouts: the dev server reaches 4-5 GB RSS during a
+run"* — a hypothesis in that entry, not a measurement). The other six open E2E
+entries are residue and hygiene and are untouched by it.
+
+The causal link to work already done is in the history, not in interpretation:
+`2da07586`'s body says the toast assertion exists because the watchdog restart
+swallowed a delete. Those assertions do NOT become redundant under a production
+build — they still separate "the server refused" from "the server never
+answered", and only the second cause disappears.
+
+**The auth blocker is smaller than this file and `docs/BUGS.md` say.** Both call
+`E2E_AUTH_RATE_LIMIT_BYPASS` *the* blocker. Counted rather than asserted: the
+limit is 5 signins per 15 minutes per IP (`src/lib/auth/auth-rate-limit.ts:24-25`)
+and a full run spends exactly **three** — `e2e/global-setup.ts:23`,
+`e2e/smoke/signin.spec.ts:15`, `e2e/smoke/locale-switching.spec.ts:247`. A single
+run fits comfortably; the SECOND run inside 15 minutes trips.
+
+And there is a clean way out that touches neither the rate limiter nor the
+production gate: this project uses **JWT sessions**, not database sessions
+(`src/auth.config.ts:13` declares `@auth/core/jwt`; there is no `model Session`
+in `prisma/schema.prisma`). A session is a cookie signed from `AUTH_SECRET`, so
+`global-setup.ts` could mint it directly instead of signing in — removing one of
+the three, and leaving two runs per 15 minutes comfortable. The double gate at
+`auth-rate-limit.ts:61-62` and its contract test
+(`__tests__/auth-rate-limit.spec.ts:229`) stay exactly as they are.
+
+**The real recurring cost is the build, not the auth**: every run needs
+`build-safe.sh` first (7 G cgroup), and again after every code change.
+`playwright.config.ts:59` also hardcodes `command: "bun run dev"`.
+
+**Correction to § Tools this leaves behind.** That section says the restart
+reporter and the heap tooling lose their purpose. True of about 8 of the 11
+commits in that chain — but NOT of `1d819221` and `c742d811`, which bound the
+dev server's memory and CPU. A production server needs those bounds too; it is
+merely thriftier.
