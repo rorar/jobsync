@@ -267,7 +267,12 @@ else
   fi
 
   echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
-  nohup bash "$DIR/dev-e2e.sh" >/tmp/jobsync-e2e-dev.log 2>&1 &
+  # Timestamped, so a dev-server event can be placed against the Playwright
+  # timeline without summing test durations. The restart described below leaves
+  # no trace on the runner's side, so the log is the only place the two can be
+  # correlated at all.
+  nohup bash -c "bash '$DIR/dev-e2e.sh' 2>&1 | while IFS= read -r l; do printf '%s %s\n' \"\$(date +%T)\" \"\$l\"; done" \
+    >/tmp/jobsync-e2e-dev.log 2>&1 &
   STARTER_PID=$!
   # Recorded HERE, on the only branch that starts a server, because the teardown
   # at the end of this script may stop OURS and must never stop anyone else's:
@@ -595,6 +600,37 @@ elif [ "$TIMED_OUT" != "unknown" ] && [ "$TIMED_OUT" -ge 3 ]; then
   echo "           contended one (${TIMED_OUT} of ${RESULT_COUNT} results; see the durations above)."
   echo "[test-e2e] Treat them as findings until something shows otherwise. The residue gate"
   echo "           still skipped, because a test killed mid-body leaves rows it cannot judge."
+fi
+
+# Dev-server restarts: the failure mode that leaves no evidence on this side.
+#
+# `next dev` runs its own watchdog after EVERY request
+# (node_modules/next/dist/server/lib/start-server.js:234) and calls
+# `process.exit(77)` the moment the used heap passes 80% of the cap. The request
+# that tripped it has already answered; every OTHER request in flight dies with
+# no response, no error and no end handler. The parent respawns on the same port,
+# so the suite continues and the only symptom is one test failing on an outcome
+# that never happened — no audit line, no error path, nothing decided.
+#
+# `scripts/dev-e2e.sh` caps the heap at 3072 MB, so the threshold is ~2.62 GB and
+# one server lifetime serves roughly 3,100 requests against a full run's ~6,000.
+# Expect one restart per run until that budget changes.
+#
+# This block exists because the failure has now been misdiagnosed twice — once as
+# a console-oracle defect and once as a reference-cleanup defect — each costing
+# hours and reaching the wrong file. It reports, it does not decide: RC stays
+# Playwright's.
+if [ -f /tmp/jobsync-e2e-dev.log ]; then
+  RESTARTS="$(grep -c "approaching the used memory threshold" /tmp/jobsync-e2e-dev.log 2>/dev/null || echo 0)"
+  if [ "${RESTARTS:-0}" -gt 0 ]; then
+    echo
+    echo "[test-e2e] ${RESTARTS} dev-server restart(s) during this run — Next's own memory watchdog."
+    echo "[test-e2e] Any server action in flight at those moments was ABANDONED: no response, no"
+    echo "           error, no audit entry. A test that failed on 'the row is still there' may be"
+    echo "           reporting a request nobody answered rather than one the server refused."
+    echo "[test-e2e] Timestamps: grep -n 'approaching the used memory threshold' /tmp/jobsync-e2e-dev.log"
+    echo "[test-e2e] Cause and remedies: docs/e2e-dev-server-restart-analysis.md"
+  fi
 fi
 
 report_exit "test-e2e" "$RC"
