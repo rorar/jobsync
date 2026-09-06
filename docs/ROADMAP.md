@@ -2636,7 +2636,18 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 - Dev Server Lifecycle: Auto-Restart bei Crash
 - `retries: 1` für transiente Failures
 - CI-Integration: E2E als Gate vor Merge
-- Production Build (`next start`) statt Dev Server für stabilere parallele Runs
+- ✅ **Production Build (`next start`) statt Dev Server** — `E2E_PROD=1 ./scripts/test-e2e.sh`
+  (2026-09-06). Der Grund war am Ende nicht „stabilere parallele Runs", sondern ein gemessener
+  Leak: `next dev` lädt Reacts Development-Flight-Bundle, das pro Request ~2749 Objekte
+  festhält (`E2E-B42`), woraufhin Nextss Watchdog den Server mitten im Lauf neu startet und
+  jede laufende Anfrage ohne Antwort, Fehler oder Audit-Zeile verwirft. Beide Bundler tragen
+  den Hook, es gibt kein Runtime-Opt-out — und der Watchdog steht in `start-server.js:233`
+  innerhalb von `if (isDev)`, existiert also im Produktionsserver gar nicht.
+  Neu: `scripts/prod-e2e.sh` (Server), `scripts/e2e-prod-build.sh` (Build nach `.next-e2e/`,
+  nur wenn nötig). Der Auth-Blocker war kleiner als angenommen: 5 Anmeldungen je 15 Minuten je
+  IP gegen zwei pro Lauf, seit `e2e/global-setup.ts` das JWT-Session-Cookie erzeugt statt sich
+  anzumelden. `E2E_AUTH_RATE_LIMIT_BYPASS` bleibt unter `NODE_ENV=production` inert und wird
+  von `prod-e2e.sh` aktiv entfernt.
 
 ### 8.10 Test Data Generator / Fake Input Data
 - Fake-Responses pro Connector-Modul für Automation-Tests ohne echte API-Calls

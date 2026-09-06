@@ -1015,8 +1015,43 @@ the decision it implemented; that decision is superseded, not wrong.
 
 # Local development — parallel workers:
 E2E_WORKERS=4 ./scripts/test-e2e.sh
+
+# Against a PRODUCTION build (`next build` + `next start`) instead of the dev server:
+E2E_PROD=1 ./scripts/test-e2e.sh
 ```
 On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
+
+**`E2E_PROD=1` — what changes, and why it exists.** `next dev` loads React's development
+Flight bundle, which installs an unguarded process-wide `async_hooks` hook and retains
+~2,749 objects per request with no runtime opt-out (`E2E-B42`, measured from a heap-snapshot
+pair). Next's watchdog then restarts the server mid-run and every request in flight dies with
+no response, no error and no audit line. Neither bundler nor heap cap reaches that — both
+runtime bundles carry the hook — but a production server does: it loads no development Flight
+bundle, and the watchdog itself is inside `if (isDev)` (`start-server.js:233`), so it does not
+exist there.
+
+| | dev (default) | `E2E_PROD=1` |
+|---|---|---|
+| server | `scripts/dev-e2e.sh` → `next dev` | `scripts/prod-e2e.sh` → `next start` |
+| build | compile on request | `scripts/e2e-prod-build.sh` first, into **`.next-e2e/`** |
+| budgets | 3072 MB heap, 8 G cgroup | 2048 MB heap, 4 G cgroup |
+| auth bypass | `E2E_AUTH_RATE_LIMIT_BYPASS=1` | **none** — inert under `NODE_ENV=production` by design, and `prod-e2e.sh` unsets it |
+| log | `/tmp/jobsync-e2e-dev.log` | `/tmp/jobsync-e2e-prod.log` |
+
+The build is the recurring cost. `e2e-prod-build.sh` builds only when `BUILD_ID` is missing or
+a source file is newer (`E2E_PROD_BUILD=always|never` overrides), and it builds through
+`build-safe.sh`, so the 7 G cgroup still applies. The output directory is **not** `.next`:
+Turbopack's dev cache and a production build write the same manifest filenames, so sharing one
+directory makes every mode switch silently invalidate the other's work.
+
+Both modes share one port and one lock, deliberately — one server per worktree whichever mode
+it is in, so a stale dev server can never answer a production run.
+
+**Auth under a production build fits without the bypass.** Signin is capped at 5 per 15 min per
+IP. `e2e/global-setup.ts` MINTS the NextAuth session cookie instead of signing in (JWT sessions:
+no `Session` model, `src/auth.config.ts:13` augments `@auth/core/jwt`), so a run spends **two**
+signins — the smoke tests that exercise the auth flow itself. It verifies the cookie by loading
+`/dashboard` and falls back to a real sign-in, loudly, if minting is not possible.
 
 **Dev server:** Subagents must not stop it; the orchestrator and the wrappers may (see § Dev server). `test-e2e.sh` restarts it itself on every run, on this worktree's own port. `reuseExistingServer: true` ensures Playwright reuses a running server.
 

@@ -451,3 +451,61 @@ the memory; it does not prove that nothing else contributes, and it does not
 quantify what share is React's versus everything else — shallow size by class is
 not retained-size attribution. What it does settle is the question §Verdict got
 wrong: the growth is not Turbopack's, and it is not the application's.
+
+---
+
+## Addendum 2026-09-06 (3) — remedy (iii), implemented and measured
+
+The decision this document kept deferring was taken: the suite can now run
+against `next build` + `next start`.
+
+    E2E_PROD=1 ./scripts/test-e2e.sh
+
+### Why this is the remedy and not another mitigation
+
+The watchdog does not merely fire less often under a production server — it is
+not compiled into one. `node_modules/next/dist/server/lib/start-server.js:233`
+opens `if (isDev)`, and the heap check with its `process.exit(RESTART_EXIT_CODE)`
+sits inside that block. The development Flight bundle whose `async_hooks` hook
+does the retaining (addendum 2) is likewise not loaded. Both halves of the
+failure are structurally absent rather than deferred, which is what neither
+bundler nor heap cap could buy.
+
+### Measured, same tree, same host, 2026-09-06
+
+| | dev server | production server |
+|---|---|---|
+| full suite | **111 passed / 1 failed** | **111 passed / 1 failed** |
+| wall clock | 20.2 min | **11.3 min** |
+| watchdog restarts | 1 | none exist |
+| the failing test | `job-detail-panels.spec.ts:389` — a delete the watchdog abandoned | `keyboard-ux.spec.ts:777` — see below |
+| smoke project | — | 8 passed in 6.7 s |
+| build | — | 1 min 54 s wall (49 s of it compilation), 1.3 GB in `.next-e2e/` |
+
+The pass COUNT is unchanged, and that is the load-bearing number: the move did
+not quietly change what the suite proves. The wall clock nearly halving is not a
+statement about the application — it is compile-on-request removed, plus a
+server that no longer spends its time in a leaking hook.
+
+### The auth blocker, sized rather than asserted
+
+Every previous version of this document called `E2E_AUTH_RATE_LIMIT_BYPASS` *the*
+blocker. Counted: the limit is 5 signins per 15 minutes per IP
+(`src/lib/auth/auth-rate-limit.ts:24-25`) and the suite spent three. It now
+spends **two** — `e2e/global-setup.ts` mints the NextAuth session cookie instead
+of signing in, which this project can do because it uses JWT sessions (no
+`Session` model; `src/auth.config.ts:13` augments `@auth/core/jwt`). The two
+remaining signins belong to the smoke tests that exercise the auth flow itself
+and must stay real.
+
+The limiter, its double gate and its contract test are untouched.
+`scripts/prod-e2e.sh` actively UNSETS the bypass rather than leaving it to the
+gate, so nothing downstream can read its presence as meaning anything.
+
+### What this does NOT establish
+
+That the production server holds no memory. Nobody measured it over a full run;
+the claim made here is narrower and structural — the watchdog and the dev Flight
+bundle are absent from the build. If a production run ever does grow, the tools
+in `tools/next-heap/` still apply, and `E2E_DEV_HEAP_SNAPSHOT` has no production
+twin yet.

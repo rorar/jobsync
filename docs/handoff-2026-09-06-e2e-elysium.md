@@ -285,3 +285,69 @@ reporter and the heap tooling lose their purpose. True of about 8 of the 11
 commits in that chain — but NOT of `1d819221` and `c742d811`, which bound the
 dev server's memory and CPU. A production server needs those bounds too; it is
 merely thriftier.
+
+---
+
+# Added 2026-09-06, late evening — the decision was taken
+
+## The production build is shipped, not proposed
+
+Everything above under § The production-build decision, sized describes a
+decision. It has been taken and implemented:
+
+    E2E_PROD=1 ./scripts/test-e2e.sh
+
+| | dev server | production server |
+|---|---|---|
+| full suite, same tree, same evening | 111 passed / 1 failed, 20.2 min | **111 passed / 1 failed, 11.3 min** |
+| watchdog restarts | 1 | the watchdog is inside `if (isDev)` (`start-server.js:233`) — it does not exist |
+| build | — | 1 min 54 s wall, 49 s of it compilation, 1.3 GB in `.next-e2e/` |
+| signins spent per run | 3, absorbed by the bypass | **2**, inside the real 5-per-15-minute limit |
+
+New: `scripts/prod-e2e.sh` (server, mirrors `dev-e2e.sh` — same port, same lock,
+same cwd-scoped stop, smaller budgets), `scripts/e2e-prod-build.sh` (builds only
+when `BUILD_ID` is missing or a source file is newer; `E2E_PROD_BUILD=always|never`),
+`next.config.mjs` `distDir` from `NEXT_DIST_DIR`, and `devserver_is_ours` extended
+to recognise `next start` — without that last one every stop said "NOT ours" and
+left the port held.
+
+The auth blocker is gone rather than worked around: `e2e/global-setup.ts` mints
+the NextAuth session cookie instead of signing in, verifies it by loading
+`/dashboard`, and falls back to a real sign-in loudly if it cannot. The limiter,
+its double gate and its contract test are untouched, and `prod-e2e.sh` actively
+UNSETS `E2E_AUTH_RATE_LIMIT_BYPASS` rather than relying on the gate alone.
+
+## What the move immediately bought, and it is not the speed
+
+`E2E-B43`. `keyboard-ux.spec.ts:755` passes against the dev server and fails
+against a production build — twice, including run alone, so not contention. At
+the moment of failure the Skills panel has no chips at all, including one whose
+assertion had already passed, and the popover is closed: the shape of a
+`TagInput` remount. **No cause is recorded**, because none is measured;
+`createTag` calls no `revalidatePath`, which rules out the obvious one.
+
+That is the first defect this suite has surfaced that the dev server was hiding,
+and it arrived on the first full production run. The dev server's failure that
+same day — `job-detail-panels.spec.ts:389` — was the watchdog abandoning a
+delete, and it cannot recur here.
+
+## Two incidental fixes, each its own commit
+
+- `scripts/build.sh` still stopped servers with `pkill -f "next dev"`, the
+  path- and port-blind pattern CLAUDE.md records as replaced. It was invisible
+  because `build-safe.sh` stops correctly first, so the blind kill only ever ran
+  with nothing left to hit — in the one path anybody uses.
+- `docs/BUGS.md`'s header line and its arithmetic sentence still carried the
+  recount's first numbers (655 / 637 / 16) while the block table underneath had
+  moved to 657 / 642 / 13. The table was right; the summaries had not been
+  carried forward with it.
+
+## What is NOT done
+
+- The dev path is unchanged and still the default. Nothing forces the new mode.
+- Nobody has measured whether the production server's memory grows over a full
+  run. The claim made is structural — no dev Flight bundle, no watchdog — not a
+  measurement of the production heap, and `E2E_DEV_HEAP_SNAPSHOT` has no
+  production twin.
+- CI does not run E2E in either mode. That is still ROADMAP §8.5 Phase 3's
+  remaining bullet, along with `retries: 1`.
