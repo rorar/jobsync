@@ -191,6 +191,27 @@ leaves `next-dev.js:272` declining to respawn, so the port stays dead and every 
 test fails against nothing (80 of them, on that run). The second attempt used
 `E2E_DEV_MEM_MAX=11G` with thresholds 700/1150 MB and peaked at 6.8 GB.
 
+**A heap snapshot carries `process.env` in cleartext.** Checked against the early
+file before deleting it: the 44-character `AUTH_SECRET` value from `.env` appears
+verbatim, and so does everything else the process was started with. V8 serialises
+every reachable object, the environment is an ordinary object of strings, and
+there is no classification step anywhere in the path — the tools in
+`tools/next-heap/` are analysers, not sanitisers. If a snapshot ever has to leave
+this machine, start the server with a throwaway `AUTH_SECRET` first; a 1.2 GB
+snapshot cannot be redacted afterwards, because the value sits in the string
+table, in `concatenated string` fragments and in slices of both.
+
+For that reason the two raw snapshots were **deleted on 2026-09-06** — not for
+disk, of which 462 GB were free. `heap-snapshots/` now holds only the three
+derived aggregates (`agg-early.json`, `agg1.json`, `agg2.json`, 8.7 MB), each
+verified free of the secret: `heap-classes.py` aggregates string-valued nodes by
+TYPE and never emits their contents. Everything that was read out of the raw
+files is in `docs/e2e-dev-server-restart-analysis.md`. The one question they
+could still have answered is retained-size attribution — named as unestablished
+in that document's § What this does NOT establish — and no decision in this repo
+turns on it. Retaking the pair costs one discarded run:
+`E2E_DEV_HEAP_SNAPSHOT=1` with `E2E_DEV_MEM_MAX=11G`.
+
 ## Also closed since the first version of this file
 
 - **`job-crud.spec.ts:290`** — the missing toast half of its `deleteJob`, now present.
