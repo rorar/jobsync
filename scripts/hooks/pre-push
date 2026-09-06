@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Pre-push gate: the two checks that are fast enough to run on every push.
+#
+# Install with `bash scripts/install-hooks.sh`; bypass a single push with
+# `git push --no-verify`.
+#
+# WHAT IS HERE, AND WHAT IS DELIBERATELY NOT
+# ------------------------------------------
+# Only checks that finish in seconds. Jest (~6 min), the typecheck and the E2E
+# suite are NOT here on purpose: a pre-push hook that takes minutes gets
+# bypassed with --no-verify as a habit, and a gate everyone routinely skips is
+# worse than no gate, because it still reads like coverage in a review.
+#
+#   check-spec-refs.sh          reference integrity across specs/*.allium.
+#                               `allium check` proves SYNTAX only, so nothing
+#                               else in this repo would catch a spec naming an
+#                               entity that does not exist. Sixteen such defects
+#                               were found across eight files on 2026-09-05.
+#   check-notification-writers  the SingleNotificationWriter invariant (ADR-030).
+#
+# WHY NOT IN GITHUB CI
+# --------------------
+# `check-notification-writers.sh` is portable (bash + grep) and IS wired into
+# .github/workflows/ci.yml. `check-spec-refs.sh` is not, and cannot be today:
+# it needs the `allium` binary, which on this machine is a hand-installed ELF at
+# ~/bin/allium with no entry in package.json and no published install step to
+# put in a workflow. Until there is one, this hook is the only place that gate
+# runs, which is the reason the hook exists at all.
+#
+# EXIT 2 FROM check-spec-refs BLOCKS THE PUSH
+# -------------------------------------------
+# Exit 2 means the checker could not run — allium or python3 missing — so
+# NOTHING was examined. Treating that as a pass is precisely how a gate stops
+# gating without anyone noticing, and the script separates 2 from 0 so that this
+# choice can be made here rather than assumed. It is a choice, not a law: if you
+# work on a machine without allium, either install it or flip the branch below
+# to warn-and-allow.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT" || exit 1
+
+fail=0
+
+echo "[pre-push] spec reference integrity ..."
+bash scripts/check-spec-refs.sh
+case $? in
+  0) ;;
+  2)
+    echo "[pre-push] BLOCKED: the spec-reference checker could not run, so no spec was checked." >&2
+    echo "[pre-push]          Install allium, or push with --no-verify if you accept the gap." >&2
+    fail=1
+    ;;
+  *)
+    echo "[pre-push] BLOCKED: unresolved spec references (listed above)." >&2
+    fail=1
+    ;;
+esac
+
+echo "[pre-push] notification writers ..."
+if ! bash scripts/check-notification-writers.sh; then
+  echo "[pre-push] BLOCKED: a notification is written outside the allowed files (ADR-030)." >&2
+  fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo "[pre-push] push refused. Fix the above, or bypass once with: git push --no-verify" >&2
+  exit 1
+fi
+
+echo "[pre-push] OK"
+exit 0

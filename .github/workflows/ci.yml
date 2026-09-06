@@ -20,6 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Before anything is installed: pure bash + grep, so a violation is
+      # reported in seconds rather than after a four-minute build.
+      #
+      # Its sibling `scripts/check-spec-refs.sh` is NOT here, and the reason is
+      # not that it matters less — it is the only gate in this repo that can
+      # catch a spec referring to something that does not exist, since
+      # `allium check` proves syntax only. It needs the `allium` binary, which
+      # has no published install step to put in a workflow. Until it has one,
+      # that gate runs from `scripts/hooks/pre-push` and nowhere else.
+      - name: Notification writer invariant (ADR-030)
+        run: bash scripts/check-notification-writers.sh
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3"
