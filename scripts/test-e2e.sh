@@ -730,5 +730,23 @@ if [ "$E2E_PROD" != "1" ] && [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f "$SERV
   fi
 fi
 
+# Keep this run's server log with this run's report.
+#
+# `$SERVER_LOG` is truncated by the NEXT run, so a restart recorded in run N
+# cannot be placed against run N's timeline once run N+1 has started — and the
+# banner above tells the operator to grep exactly that file. Measured 2026-09-07:
+# a dev run failed `job-detail-panels.spec.ts:440` with one watchdog restart in
+# the same run, and by the time the failure was read the log described the run
+# after it. The correlation the banner exists to enable was unavailable.
+#
+# Copied rather than moved: the live path is what the banner names and what an
+# operator watching a run already has open.
+if [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f "$SERVER_LOG" ]; then
+  SERVER_LOG_KEPT="$(dirname "$E2E_REPORT_JSON")/.e2e-server-${SERVER_KIND}.log"
+  if cp "$SERVER_LOG" "$SERVER_LOG_KEPT" 2>/dev/null; then
+    echo "[test-e2e] server log for THIS run kept at ${SERVER_LOG_KEPT} (${SERVER_LOG} is truncated by the next run)."
+  fi
+fi
+
 report_exit "test-e2e" "$RC"
 exit "$RC"
