@@ -478,7 +478,7 @@ bundler nor heap cap could buy.
 | full suite | **111 passed / 1 failed** | **111 passed / 1 failed** |
 | wall clock | 20.2 min | **11.3 min** |
 | watchdog restarts | 1 | none exist |
-| the failing test | `job-detail-panels.spec.ts:389` — a delete the watchdog abandoned | `keyboard-ux.spec.ts:777` — see below |
+| the failing test | `job-detail-panels.spec.ts:389` — a delete the watchdog abandoned | `keyboard-ux.spec.ts:777` — **a real product defect the dev server was hiding**, see below |
 | smoke project | — | 8 passed in 6.7 s |
 | build | — | 1 min 54 s wall (49 s of it compilation), 1.3 GB in `.next-e2e/` |
 
@@ -509,3 +509,17 @@ the claim made here is narrower and structural — the watchdog and the dev Flig
 bundle are absent from the build. If a production run ever does grow, the tools
 in `tools/next-heap/` still apply, and `E2E_DEV_HEAP_SNAPSHOT` has no production
 twin yet.
+
+### What the move found on its first run
+
+The production failure was not noise. `keyboard-ux.spec.ts:755` failed 6
+production runs out of 6 and passed 3 dev runs out of 3, and the cause was in
+the application: `TagInput` cleared its controlled search field from inside the
+`startTransition` around `createTag`, so the clear could commit after the next
+skill had been typed and React wrote the stale empty value back into the DOM.
+The following Enter then had nothing to act on and was swallowed silently.
+Tracked and fixed as `E2E-B43`; three production runs green afterwards.
+
+That is the argument for this move that the memory numbers cannot make. A suite
+that only ever runs against `next dev` measures an artefact nobody ships, and in
+the same motion hides defects that exist only in what IS shipped.

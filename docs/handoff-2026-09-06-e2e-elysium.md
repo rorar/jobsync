@@ -319,17 +319,45 @@ UNSETS `E2E_AUTH_RATE_LIMIT_BYPASS` rather than relying on the gate alone.
 
 ## What the move immediately bought, and it is not the speed
 
-`E2E-B43`. `keyboard-ux.spec.ts:755` passes against the dev server and fails
-against a production build — twice, including run alone, so not contention. At
-the moment of failure the Skills panel has no chips at all, including one whose
-assertion had already passed, and the popover is closed: the shape of a
-`TagInput` remount. **No cause is recorded**, because none is measured;
-`createTag` calls no `revalidatePath`, which rules out the obvious one.
+**`E2E-B43`, found and fixed.** `keyboard-ux.spec.ts:755` failed **6 production
+runs out of 6** and passed **3 dev runs out of 3**. It was a real product
+defect, and the dev server had been hiding it for as long as the test existed.
 
-That is the first defect this suite has surfaced that the dev server was hiding,
-and it arrived on the first full production run. The dev server's failure that
-same day — `job-detail-panels.spec.ts:389` — was the watchdog abandoning a
-delete, and it cannot recur here.
+`TagInput` cleared its search field from INSIDE the `startTransition` that wraps
+the `createTag` round trip — i.e. after the server answered. A transition write
+is low priority, so it could commit after the user had already typed the next
+skill, and because the field is a CONTROLLED input, React wrote that stale `""`
+back into the DOM as well. Both state and field then held nothing, the next
+Enter fell through `TagInput.tsx:137`, and the entry was lost with no request,
+no chip, no error and no toast. Fixed by clearing synchronously when Enter is
+accepted (restoring the text if the create fails). Three regression tests, all
+verified red against the unfixed component; 3 production runs of the file green
+afterwards, and the full suite green.
+
+**The method mattered more than the diagnosis, because the diagnosis was wrong
+twice.** Recorded so the next reader does not re-walk it:
+
+1. The first write-up said "the shape of a `TagInput` remount", read out of
+   `error-context.md`. That file is not a failure snapshot — `_takePageSnapshot`
+   runs only from `willCloseBrowserContext` and `didFinishTest`
+   (`node_modules/playwright/lib/index.js:575,615`), after this file's
+   `afterEach` has navigated to the admin page. The heading I took for the
+   dialog was `admin.skillsTags`. Now documented in `e2e/CONVENTIONS.md`.
+2. An experiment that queried the run database AFTER the run was inconclusive by
+   construction: `deleteAdminReferenceRow:135` treats a row that was never
+   written as already gone, so both hypotheses produce an empty table and no
+   warning. Replaced by a sampler reading the database every 500 ms DURING the
+   run, which showed `KBMulti1` and never `KBMulti2`/`KBMulti3` — the create
+   never reached the server.
+3. The first fix read `e.currentTarget.value` instead of state. It reproduced
+   1 for 1, and that failure is what identified the real mechanism: a controlled
+   input's DOM value follows the last commit, so reading the field harder buys
+   nothing when the field itself was overwritten.
+
+Two runs that did NOT reproduce (`-g` on the single test, and `--trace=on`) are
+explained by the same mechanism rather than contradicting it: both change
+timing. That is also why the rate was measured over repeated runs instead of
+being inferred from the first two observations.
 
 ## Two incidental fixes, each its own commit
 

@@ -268,6 +268,24 @@ comment with the reason.
 | Cleanup only at end of test body | `test.afterEach` for critical cleanup | If assert fails, inline cleanup never runs |
 | Tests that read other tests' data | Each test creates own data | Cross-test dependency = flaky in parallel |
 
+## Reading a failure's artefacts
+
+**`test-results/<test>/error-context.md` is NOT a snapshot of the moment the assertion
+failed.** It is taken during teardown: `_takePageSnapshot` (`node_modules/playwright/lib/index.js:577`)
+is called only from `willCloseBrowserContext` (`:575`) and `didFinishTest` (`:615`), never from the
+failing action. By then this file's `test.afterEach` has navigated the page to
+`/dashboard/admin?tab=…` to delete its reference rows, so the snapshot shows the ADMIN page and
+says nothing about the state the assertion saw.
+
+This has already produced one wrong diagnosis: E2E-B43 was first written up as "the shape of a
+`TagInput` remount — no chips, popover closed", read out of a snapshot whose `heading "Skills Tags"`
+is `admin.skillsTags` (`src/components/admin/TagsContainer.tsx`), i.e. a different page entirely.
+
+What to use instead: **a trace**. `--trace=on` (or `retain-on-failure`) records a DOM snapshot per
+action with timings, so the state BEFORE and AFTER the failing step is inspectable. Note that
+tracing changes timing and can mask a race — if a flake stops reproducing under `--trace=on`, that
+is itself information, not a fix.
+
 ## Environment Constraints
 
 - **8 GB RAM, no swap** (until infra-issue #11 is resolved): Long serial runs (>10 min) can crash the dev server. Run tests in batches if needed.
