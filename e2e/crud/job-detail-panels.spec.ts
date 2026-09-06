@@ -38,14 +38,24 @@ import {
 let createdJobTitles: string[] = [];
 let createdCompanies: string[] = [];
 let createdLocations: string[] = [];
+// The Resume each body builds as a precondition. It is registered here rather
+// than deleted at the end of the body because the body's LAST statements are
+// cleanup, and a cleanup step that throws abandons every step after it. That is
+// not hypothetical: in the 2026-09-06 11:40 run `deleteJob` threw on this file's
+// third test and `deleteResume` — the next line — never ran, so
+// `E2E Resume mtpm2megw0` survived into the run database and the residue gate
+// reported it under `Resume +6 (E2E-B25)`, a finding it has nothing to do with.
+// e2e/CONVENTIONS.md names the shape in its anti-pattern table: "Cleanup only at
+// the end of the test body" → "test.afterEach for critical cleanup".
+let createdResumes: string[] = [];
 
 test.afterEach(async ({ page }, testInfo) => {
   // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
-  // can visit three admin tables on top of bodies that already build a resume
-  // and a job. Buy the extra time explicitly rather than let a green test start
-  // failing on its teardown; keep it small enough that a body which has itself
-  // become slow still surfaces.
-  test.setTimeout(testInfo.timeout + 45_000);
+  // can visit the profile page and three admin tables on top of bodies that
+  // already build a resume and a job. Buy the extra time explicitly rather than
+  // let a green test start failing on its teardown; keep it small enough that a
+  // body which has itself become slow still surfaces.
+  test.setTimeout(testInfo.timeout + 60_000);
 
   // Swap the registries out BEFORE the first await: clearing afterwards would
   // keep entries alive into the next test if a delete throws, and clearing in a
@@ -55,9 +65,20 @@ test.afterEach(async ({ page }, testInfo) => {
     { tab: ADMIN_TAB.company, names: createdCompanies },
     { tab: ADMIN_TAB.location, names: createdLocations },
   ];
+  const resumes = createdResumes;
   createdJobTitles = [];
   createdCompanies = [];
   createdLocations = [];
+  createdResumes = [];
+
+  // Resume first, and for the same dependency reason as the sweep below: the
+  // Job carries `resumeId`, so a resume cannot go while its job is still there.
+  // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts), so
+  // on a red run this costs one navigation and reports nothing — it cannot turn
+  // a failing test into a differently-failing one.
+  for (const title of resumes) {
+    await deleteResume(page, title);
+  }
 
   // The Job is deleted by the body, and that ORDER is required rather than
   // tidy: `deleteJobTitleById` (jobtitle.actions.ts:110-145) and
@@ -216,9 +237,32 @@ async function deleteJob(page: Page, jobTitle: string) {
     .getByRole("button", { name: "Delete" })
     .click();
 
-  // A click is not an outcome — this copy had no proof at all, so a refused
-  // delete returned as success and left the row behind. DOM locator, because
-  // the read happens as the AlertDialog closes (E2E-B40).
+  // A click is not an outcome, and proving a deletion takes TWO assertions —
+  // the server's answer, then the view's (e2e/CONVENTIONS.md, "Proving deletion
+  // takes two assertions, one wrong locator"; `deleteResume` in
+  // helpers/resume-fixture.ts is the worked example). This copy carried only the
+  // second half, and that gap is not cosmetic: the two failures look identical
+  // from the row's side and have opposite causes.
+  //
+  //   no toast at all   → the round trip never happened; nothing was decided.
+  //   destructive toast → the server decided, and refused.
+  //
+  // Measured on the 2026-09-06 11:40 run. Next's dev server hit its memory
+  // threshold and restarted itself ("⚠ Server is approaching the used memory
+  // threshold, restarting...", once in 20 minutes) in the window between this
+  // dialog's Delete click and the server action landing. `deleteJobById` was
+  // never entered — no `job.delete` data-audit line in the dev log, no
+  // AdminAuditLog row, no `errors.deleteJob` from `handleError` — yet all this
+  // function could report was "the row is still here", which reads as a REFUSED
+  // delete and sent the investigation into the reference-cleanup code that had
+  // done nothing wrong. The toast is what tells those two apart.
+  //
+  // 15 s, not the helper's default 10 s: the same restart leaves the route cold,
+  // and `/dashboard/myjobs` took 3.1 s to compile plus 3.7 s to serve
+  // immediately afterwards. A legitimate delete must not be called a failure for
+  // being slow behind a recompile.
+  await expectToast(page, /Job has been deleted successfully/, 15000);
+  // DOM locator, because the read happens as the AlertDialog closes (E2E-B40).
   await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 15000 });
 }
 
@@ -299,7 +343,11 @@ test.describe("Job Detail Panels", () => {
     const location = `E2E Loc ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
-    // Ensure a resume exists (required to avoid FK violation on submit)
+    // Ensure a resume exists (required to avoid FK violation on submit).
+    // Registered BEFORE the call that can write it, for the reason the combobox
+    // registrations in `createJob` spell out: a helper that creates the row and
+    // then fails its follow-up assertion has still left one behind.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     // Create a job
@@ -335,9 +383,10 @@ test.describe("Job Detail Panels", () => {
       emptyState.or(triggerButton.first()).or(resultsList.first()),
     ).toBeVisible({ timeout: 15000 });
 
-    // Cleanup
+    // Cleanup. The resume is removed by the afterEach, not from here: it used to
+    // be the line after this one, which meant a throwing `deleteJob` abandoned
+    // it (see `createdResumes`).
     await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
   });
 
   test("status history timeline renders on job detail page", async ({
@@ -351,7 +400,8 @@ test.describe("Job Detail Panels", () => {
     const location = `E2E TimelineLoc ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
-    // Ensure a resume exists
+    // Ensure a resume exists (registered before the call — see the first test)
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     // Create a job
@@ -381,9 +431,10 @@ test.describe("Job Detail Panels", () => {
       expect(itemCount).toBeGreaterThanOrEqual(1);
     }
 
-    // Cleanup
+    // Cleanup. The resume is removed by the afterEach, not from here: it used to
+    // be the line after this one, which meant a throwing `deleteJob` abandoned
+    // it (see `createdResumes`).
     await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
   });
 
   test("status history timeline shows status change after update", async ({
@@ -397,7 +448,8 @@ test.describe("Job Detail Panels", () => {
     const location = `E2E StatusLoc ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
-    // Ensure a resume exists
+    // Ensure a resume exists (registered before the call — see the first test)
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     // Create a job (default status is "Draft")
@@ -424,8 +476,9 @@ test.describe("Job Detail Panels", () => {
       timeline.getByText("Applied").first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Cleanup
+    // Cleanup. The resume is removed by the afterEach, not from here: it used to
+    // be the line after this one, which meant a throwing `deleteJob` abandoned
+    // it (see `createdResumes`).
     await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
   });
 });
