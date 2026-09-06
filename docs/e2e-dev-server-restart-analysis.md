@@ -44,8 +44,12 @@ first request to complete after the line was crossed.
 | (b) normal dev growth against a cap set too low | **No.** "Normal growth" would plateau or show flat post-GC floors; observed floors climb monotonically and a 79-minute idle gap frees nothing. The cap only decides *where in the run* the restart lands. | §3, §4 |
 | (c) something the E2E configuration provokes | **No, beyond volume.** The suite supplies ≈5 requests/s (≈6,000 per 20-minute run) — that is the only E2E-specific ingredient. No E2E env flag, seed or helper touches the retained memory. | §5 |
 
-**Where the retention lives.** Static evidence points at the **Next 15.5.10 + Turbopack dev
-request path**, not at application code:
+**Where the retention lives.** **SUPERSEDED — see the second addendum of 2026-09-06.** A
+heap-snapshot pair names the holder, and it is React's Flight server DEVELOPMENT build, whose
+unguarded `async_hooks` owner-stack tracking accumulates ~2,749 `{promise, awaited, previous}`
+nodes per request. Turbopack is exonerated; the paragraph below was a hypothesis from static
+reading and its conclusion about the bundler is wrong. It is kept because its *evidence* still
+holds and still rules out application code:
 
 - The application's per-request state was audited store by store (§5); every one is bounded or
   request-scoped. No `new PrismaClient` outside the `globalThis` singleton.
@@ -318,3 +322,132 @@ a heap snapshot pair from a running suite, not another cap.
 Until then, `E2E_DEV_NODE_HEAP=5120` is defensible ONLY on a host with more headroom
 than this one — and the restart reporter added in `fc331d62` means a run that pays the
 other price now says so.
+
+---
+
+## Addendum 2026-09-06 (2) — the leak, measured and named
+
+The §Verdict above says the retention lives in the "Next 15.5.10 + Turbopack dev
+request path". That was a hypothesis from static reading and **it is wrong about
+Turbopack**. A heap-snapshot pair taken from one server lifetime names the
+holder, and it is neither Turbopack nor application code.
+
+### What was taken
+
+`E2E_DEV_HEAP_SNAPSHOT=1` (`scripts/dev-e2e.sh`) arms SIGUSR2;
+`tools/next-heap/snapshot-pair.py` fired it at two `heapUsed` thresholds read
+from `.next/trace`, both inside server lifetime pid 1629375:
+
+| | heapUsed | file | write |
+|---|---|---|---|
+| early | 701 MB | 375 MB | 15 s |
+| late | 1170 MB | 1155 MB | 37 s |
+
+**401 requests separate them** (counted as `memory-usage` events in the trace
+between the two samples). The heap did NOT collapse at either snapshot
+(701 → 699, 1170 → 1164), so these are ordinary in-flight readings; no claim is
+made here that a full collection ran first.
+
+### What grew
+
+`tools/next-heap/heap-classes.py --diff`, shallow size:
+
+| class | growth | count |
+|---|---|---|
+| `array: (object elements)` | +128.4 MB | 502,295 → 2,080,154 |
+| `string: <content>` | +110.1 MB | 546,995 → 1,312,580 |
+| `object: Object` | +107.4 MB | 432,668 → 1,741,401 |
+| `object: Array` | +48.5 MB | 524,275 → 2,114,460 |
+| `number: heap number` | +37.3 MB | 619,771 → 3,066,949 |
+| **`object: WeakRef`** | **+33.6 MB** | **269,245 → 1,371,593** |
+
+538.7 MB of shallow growth over 401 requests — about 1.3 MB per request in this
+window, against the ~0.63 MB pooled figure in §5. The window is heavier (admin
+and contacts pages), and the two numbers are measured differently; they are
+consistent in magnitude, not identical.
+
+The first five rows are generic and name nothing. `WeakRef` is the diagnostic
+one: **+1,102,348 of them, ~2,749 per request.** A WeakRef does not keep its
+target alive — but the WeakRef object itself is kept alive by whoever collects
+it, and something was collecting them by the million.
+
+### Who holds them
+
+`tools/next-heap/heap-retainers.py`, incoming edges:
+
+```
+1,371,593 target node(s); 1,428,450 incoming edge(s)
+   1,427,396   1,427,396  object: Object  --promise->
+```
+
+One distinct plain `Object` per WeakRef, referencing it through a property named
+`promise`. One hop further up:
+
+```
+1,427,400 target node(s); 2,599,467 incoming edge(s)
+   1,337,594   1,337,594  object: Object  --awaited->
+     950,488     950,488  object: Object  --previous->
+```
+
+A linked structure of `{promise, awaited, previous}` nodes. Those property names
+are distinctive enough to grep for, and they resolve immediately.
+
+### The holder, by name
+
+`node_modules/next/dist/compiled/react-server-dom-webpack/cjs/react-server-dom-webpack-server.node.development.js`
+— React's **Flight server development build** — installs a process-wide async
+hook at module load, with no guard around it:
+
+```js
+var pendingOperations = new Map(),
+    lastRanAwait = null;
+...
+async_hooks.createHook({
+  init: function (asyncId, type, triggerAsyncId, resource) {
+    var trigger = pendingOperations.get(triggerAsyncId);
+    ... { tag, owner, stack, start, end, promise: null, awaited: null, previous: trigger }
+    pendingOperations.set(asyncId, trigger);
+  },
+  before: ..., promiseResolve: ...,
+  destroy: function (asyncId) { pendingOperations.delete(asyncId); }
+}).enable();
+```
+
+This is React's async debug-info / owner-stack tracking. Every node matches the
+heap exactly: a `promise` (the WeakRef), an `awaited`, a `previous`, plus
+`owner` and a parsed `stack` — which is where the +110 MB of strings and the
++128 MB of element arrays go.
+
+**Why `destroy` does not keep up.** It removes the MAP entry for one `asyncId`.
+The nodes are also chained to each other through `previous` and `awaited`, and a
+node that another node still points at stays reachable whether or not the Map
+still holds it. `promiseResolve` makes this concrete: it constructs a fresh node
+and assigns it as `node.previous`, so that node is **never in the Map at all**
+and `destroy` can never reach it.
+
+### Three consequences
+
+1. **The webpack result in the previous addendum is explained rather than
+   anomalous.** Both `app-page.runtime.dev.js` and `app-page-turbo.runtime.dev.js`
+   contain this hook. Switching bundler was never going to help, because the
+   bundler was never the cause. The +672 MB measured there was this.
+
+2. **No runtime opt-out exists in the shipped bundle.** The `createHook(...)
+   .enable()` is unguarded, and there is no `process.env` test within 200 lines
+   of it in either the stable or the `-experimental` build. React gates the
+   feature at ITS build time, so the dev bundle simply has it.
+
+3. **Remedy (iii) — run against `next build` + `next start` — is now the only
+   one that addresses the cause**, since a production build does not load a
+   development Flight bundle. Its blocker is unchanged and unrelated:
+   `E2E_AUTH_RATE_LIMIT_BYPASS` is deliberately inert under
+   `NODE_ENV=production`. That is a decision to take, not a defect to fix.
+
+### What this does NOT establish
+
+The 401-request window is one sample from one lifetime, on pages the crud
+project happened to be exercising. It shows this structure growing and holding
+the memory; it does not prove that nothing else contributes, and it does not
+quantify what share is React's versus everything else — shallow size by class is
+not retained-size attribution. What it does settle is the question §Verdict got
+wrong: the growth is not Turbopack's, and it is not the application's.
