@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { TagInput } from "@/components/myjobs/TagInput";
 import { Tag } from "@/models/job.model";
 import "@testing-library/jest-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTag } from "@/actions/tag.actions";
 
@@ -260,6 +260,103 @@ describe("TagInput Component", () => {
           description: "Server error",
         }),
       );
+    });
+  });
+
+
+  // E2E-B43 -----------------------------------------------------------------
+  it("creates what the FIELD holds, not what state remembers (E2E-B43)", async () => {
+    (createTag as jest.Mock)
+      .mockResolvedValueOnce({
+        success: true,
+        data: { id: "tag-go", label: "Go", value: "go", createdBy: "user-1" },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { id: "tag-rust", label: "Rust", value: "rust", createdBy: "user-1" },
+      });
+
+    render(<ControlledTagInput availableTags={MOCK_TAGS} />);
+    await user.click(screen.getByRole("combobox"));
+    const input = screen.getByPlaceholderText("Type a skill...");
+
+    // First skill the ordinary way. Its `handleCreate` clears `inputValue`
+    // from inside a `startTransition`.
+    await user.type(input, "Go");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(createTag).toHaveBeenCalledWith("Go"));
+    await waitFor(() => expect(input).toHaveValue(""));
+
+    // Now reproduce the divergence that a late transition produces: the DOM
+    // input holds the next skill while React state is still the cleared "".
+    // Assigning `.value` without dispatching an input event is exactly that
+    // shape — the field shows text the component's state does not know about.
+    (input as HTMLInputElement).value = "Rust";
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Before the fix this asserted nothing happening: the handler read
+    // `inputValue` (""), its `if` was false, and the keystroke was swallowed
+    // with no request, no chip, no error and no toast.
+    await waitFor(() => expect(createTag).toHaveBeenCalledWith("Rust"));
+    expect(createTag).toHaveBeenCalledTimes(2);
+  });
+
+  it("selects the tag the FIELD names, not the one cmdk has highlighted (E2E-B43)", async () => {
+    render(<ControlledTagInput availableTags={MOCK_TAGS} />);
+    await user.click(screen.getByRole("combobox"));
+    const input = screen.getByPlaceholderText("Type a skill...");
+
+    // Same divergence, existing-tag branch. "Node.js" is deliberately NOT the
+    // option cmdk has active — with an empty search that is the first one,
+    // "React". So an implementation that reads `inputValue` ("") falls through
+    // to cmdk's own Enter handling and selects the WRONG tag, while one that
+    // reads the field selects the named one. A version of this test that used
+    // "React" passed against the unfixed component for exactly that reason and
+    // proved nothing.
+    (input as HTMLInputElement).value = "Node.js";
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /remove node\.js/i }),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: /remove react/i }),
+    ).not.toBeInTheDocument();
+    expect(createTag).not.toHaveBeenCalled();
+  });
+
+  it("clears the field when Enter is accepted, not when the server answers (E2E-B43)", async () => {
+    let resolveCreate!: (value: unknown) => void;
+    (createTag as jest.Mock).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+
+    render(<ControlledTagInput availableTags={MOCK_TAGS} />);
+    await user.click(screen.getByRole("combobox"));
+    const input = screen.getByPlaceholderText("Type a skill...");
+
+    await user.type(input, "Go");
+    expect(input).toHaveValue("Go");
+    await user.keyboard("{Enter}");
+
+    // The request is STILL IN FLIGHT here — nothing has resolved. The field
+    // must already be empty, because the user's next keystrokes land in it and
+    // a clear that arrives later would wipe them; this input is controlled, so
+    // that late write reaches the DOM value too. That is the defect behind
+    // E2E-B43, and clearing after the round trip is what produced it.
+    expect(createTag).toHaveBeenCalledWith("Go");
+    await waitFor(() => expect(input).toHaveValue(""));
+
+    await act(async () => {
+      resolveCreate({
+        success: true,
+        data: { id: "tag-go", label: "Go", value: "go", createdBy: "user-1" },
+      });
     });
   });
 
