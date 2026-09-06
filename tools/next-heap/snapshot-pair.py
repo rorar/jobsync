@@ -46,19 +46,53 @@ def log(msg):
     print(f"[snapshot-pair] {time.strftime('%T')} {msg}", flush=True)
 
 
-def listener_pid(port):
-    """PID of the process listening on `port`, or None.
+def listener_pids(port):
+    """Every pid holding the listening socket on `port`.
 
-    The listener is the SERVER; `next dev` also runs a supervisor process that
-    holds no request state and would produce a snapshot of nothing.
+    A SET, not one pid, and that is not fussiness. A socket's holders are
+    whoever has the descriptor, and a fork inherits it: on 2026-09-06 a
+    short-lived child of the dev server appeared in `ss` alongside its parent
+    for a few seconds. Reading "the first pid" then reported a server RESTART
+    that never happened — the dev log carried no watchdog line and exactly one
+    "Ready in" — and the measurement aborted 18 seconds after its first
+    snapshot. Restart detection has to mean "the pid I have is GONE", not "the
+    first pid I see changed".
     """
     try:
         out = subprocess.run(["ss", "-lptnH", f"sport = :{port}"],
                              capture_output=True, text=True, timeout=10).stdout
     except (subprocess.SubprocessError, OSError):
-        return None
-    m = re.search(r"pid=(\d+)", out)
-    return int(m.group(1)) if m else None
+        return set()
+    return {int(m) for m in re.findall(r"pid=(\d+)", out)}
+
+
+def pick_server(pids):
+    """The dev SERVER among the socket's holders, or None.
+
+    `next dev` runs a supervisor that holds no request state and would produce a
+    snapshot of nothing, and forks can appear transiently. Prefer the process
+    whose command line says `next-server`; fall back to the largest resident
+    set, since the server is the one holding the gigabytes.
+    """
+    best, best_rss = None, -1
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                cmd = fh.read().decode("utf-8", "replace")
+            with open(f"/proc/{pid}/statm") as fh:
+                rss = int(fh.read().split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        if "next-server" in cmd:
+            return pid
+        if rss > best_rss:
+            best, best_rss = pid, rss
+    return best
+
+
+def listener_pid(port):
+    """Backwards-compatible single-pid view, used at startup."""
+    return pick_server(listener_pids(port))
 
 
 def is_armed(pid):
@@ -196,11 +230,18 @@ def run(port, thresholds, trace, out_dir, cwd, timeout, poll=2.0):
     last_report = 0.0
 
     while thresholds and time.time() < deadline:
-        cur_pid = listener_pid(port)
-        if cur_pid != pid:
-            if cur_pid is None:
+        # A restart is "my pid no longer holds the socket". Anything else — an
+        # extra holder appearing, the order changing — is a fork, and treating
+        # one as a restart threw away a measurement once already.
+        holders = listener_pids(port)
+        if pid not in holders:
+            if not holders:
                 log("server is gone — the run ended or the process died. Stopping.")
                 break
+            cur_pid = pick_server(holders)
+            if cur_pid is None or cur_pid == pid:
+                time.sleep(poll)
+                continue
             log(f"server RESTARTED (pid {pid} -> {cur_pid}); the heap reset, "
                 f"remaining thresholds now measure the NEW lifetime.")
             pid = cur_pid

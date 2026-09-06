@@ -118,7 +118,23 @@ export NODE_OPTIONS="--max-old-space-size=${DEV_NODE_HEAP} ${NODE_OPTIONS:-}"
 #  - Writing the snapshot is stop-the-world for as long as it takes to serialise
 #    the heap (tens of seconds at multi-GB). Every request in flight waits, and
 #    Playwright's timeouts do not. A run taken with this on WILL report failures
-#    that are the measurement, not the tree -- discard its results.
+#    that are the measurement, not the tree -- discard its results. Measured:
+#    a snapshot at 1.0 GB heap took 36 s and surfaced in the dev log as
+#    `GET /favicon.ico 200 in 31473ms`.
+#
+# RAISE E2E_DEV_MEM_MAX FOR A SNAPSHOT RUN. This is not a suggestion, it is
+# what the first attempt got wrong. Taking a snapshot raises the process's RSS
+# floor PERMANENTLY: V8 allocates to serialise, and the allocator does not
+# return that to the OS. Measured 2026-09-06 -- one snapshot at 1.0 GB heap, and
+# 4 minutes later the server was OOM-killed by this cgroup at 1.9 GB heap with
+# anon-rss 7.81 GiB against MemoryMax=8G. No watchdog line (the heap was
+# nowhere near the 2.62 GB threshold), so the dev log said nothing at all.
+#
+# An OOM kill is worse than a watchdog restart, and the difference is the
+# reason to size for it: the watchdog calls process.exit(77) and the supervisor
+# forks a replacement, whereas SIGKILL leaves `next-dev.js:272`
+# (`if (sessionStopHandled || signal) return;`) declining to respawn. The port
+# then stays dead and every remaining test fails against nothing.
 if [ "${E2E_DEV_HEAP_SNAPSHOT:-0}" = "1" ]; then
   export NODE_OPTIONS="--heapsnapshot-signal=SIGUSR2 ${NODE_OPTIONS}"
   echo "[dev-e2e] HEAP SNAPSHOT ARMED — SIGUSR2 writes a snapshot to the cwd."

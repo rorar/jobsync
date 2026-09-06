@@ -142,6 +142,7 @@ def aggregate(path):
             raise SystemExit(f"heap-classes: no 'nodes' member in {path} — not a heap snapshot?")
         # The `snapshot` member is small; parse it on its own.
         obj = json.loads(head[: head.rindex(",", 0, meta_end)] + "}")
+        declared_nodes = obj["snapshot"].get("node_count")
         meta = obj["snapshot"]["meta"]
         fields = meta["node_fields"]
         types = meta["node_types"][fields.index("type")]
@@ -175,6 +176,21 @@ def aggregate(path):
             c = by_class.setdefault(key, [0, 0])
             c[0] += 1
             c[1] += sz
+
+        # A TRUNCATED snapshot must fail loudly, not quietly under-report.
+        #
+        # The header declares `node_count`; the array is read until its closing
+        # bracket. If the process producing the file was killed mid-write — and
+        # on 2026-09-06 the dev server WAS OOM-killed while heavy with snapshot
+        # allocations — the stream simply ends, every count comes out low, and a
+        # diff against it would attribute the missing tail to "growth" in the
+        # other snapshot. There is no shape to that error that looks wrong.
+        if declared_nodes is not None and node_count != declared_nodes:
+            raise SystemExit(
+                f"heap-classes: {path} is TRUNCATED or unreadable — the header "
+                f"declares {declared_nodes:,} nodes, the array yielded "
+                f"{node_count:,}. Refusing to report on a partial heap."
+            )
 
         # Resolve only the names that will be printed or diffed.
         wanted = {nm for (_, nm) in by_class if nm >= 0}
