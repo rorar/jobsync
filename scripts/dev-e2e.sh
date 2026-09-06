@@ -81,6 +81,19 @@ export NEXTAUTH_URL="$E2E_BASE_URL"
 #   E2E_DEV_MEM_MAX     cgroup memory backstop         (default 8G)
 #   E2E_DEV_CPU_QUOTA   cgroup CPUQuota                (default 300%, "" = none)
 DEV_NODE_HEAP="${E2E_DEV_NODE_HEAP:-3072}"
+#   E2E_DEV_BUNDLER     turbopack | webpack             (default turbopack)
+#
+# The bundler is a knob for ONE measurement, described in
+# docs/e2e-dev-server-restart-analysis.md. Next's dev watchdog restarts the
+# server mid-run once the heap passes 80% of the cap, abandoning every request in
+# flight with no response and no error; upstream reports say the webpack dev
+# server does not grow per request the way Turbopack does. Whether that holds for
+# THIS tree is the open question, and one measured run answers it.
+#
+# Two caveats it does not handle itself: the `.next` cache is bundler-specific
+# and must not be shared (run `scripts/clean.sh` before switching), and the cold
+# compile is slower, so raise `E2E_SERVER_WAIT` for that run.
+DEV_BUNDLER="${E2E_DEV_BUNDLER:-turbopack}"
 DEV_MEM_MAX="${E2E_DEV_MEM_MAX:-8G}"
 E2E_DEV_CPU_QUOTA="${E2E_DEV_CPU_QUOTA-300%}"
 export NODE_OPTIONS="--max-old-space-size=${DEV_NODE_HEAP} ${NODE_OPTIONS:-}"
@@ -94,6 +107,15 @@ devserver_stop "$PORT"
 
 echo "[dev-e2e] port=${PORT} heap=${DEV_NODE_HEAP}MB mem-backstop=${DEV_MEM_MAX} cpu=${E2E_DEV_CPU_QUOTA:-uncapped}"
 
+# `bun run dev` hardcodes `--turbopack` (package.json), so the webpack path calls
+# next directly and keeps the port handling identical.
+if [ "$DEV_BUNDLER" = "webpack" ]; then
+  DEV_CMD=(bunx next dev -p "$PORT")
+  echo "[dev-e2e] bundler=webpack — MEASUREMENT MODE, see docs/e2e-dev-server-restart-analysis.md"
+else
+  DEV_CMD=(bun run dev)
+fi
+
 # Unlike typecheck-safe.sh, a missing systemd scope must NOT abort: without a
 # dev server there is no E2E run at all. Fall back to the heap cap alone.
 # Probe with the SAME properties the real call uses ("${SCOPE_ARGS[@]}"). A
@@ -103,11 +125,11 @@ echo "[dev-e2e] port=${PORT} heap=${DEV_NODE_HEAP}MB mem-backstop=${DEV_MEM_MAX}
 # test-e2e.sh and missed this file.
 if systemd-run --user --scope "${SCOPE_ARGS[@]}" true 2>/dev/null; then
   echo "[dev-e2e] confined via systemd --user scope"
-  exec systemd-run --user --scope "${SCOPE_ARGS[@]}" bun run dev
+  exec systemd-run --user --scope "${SCOPE_ARGS[@]}" "${DEV_CMD[@]}"
 elif systemd-run --scope "${SCOPE_ARGS[@]}" true 2>/dev/null; then
   echo "[dev-e2e] confined via systemd system scope"
-  exec systemd-run --scope "${SCOPE_ARGS[@]}" bun run dev
+  exec systemd-run --scope "${SCOPE_ARGS[@]}" "${DEV_CMD[@]}"
 else
   echo "[dev-e2e] WARNING: no systemd transient scope — heap-capped but UNCONFINED."
-  exec bun run dev
+  exec "${DEV_CMD[@]}"
 fi

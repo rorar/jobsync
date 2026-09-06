@@ -271,7 +271,17 @@ else
   # timeline without summing test durations. The restart described below leaves
   # no trace on the runner's side, so the log is the only place the two can be
   # correlated at all.
-  nohup bash -c "bash '$DIR/dev-e2e.sh' 2>&1 | while IFS= read -r l; do printf '%s %s\n' \"\$(date +%T)\" \"\$l\"; done" \
+  # `set -o pipefail` is repeated INSIDE: a new `bash -c` does not inherit the
+  # one at the top of this file, and without it the pipeline reports the
+  # while-loop's status instead of the starter's -- which silently killed the
+  # rc=75 diagnostic below (measured: 75 became 0).
+  #
+  # `printf '%(%T)T'` is a bash builtin; `$(date +%T)` forked once per output
+  # line, about ten thousand times on a full run.
+  #
+  # `|| [ -n "$l" ]` keeps the LAST line when the server dies without a trailing
+  # newline -- which is exactly the line a crashing server writes.
+  nohup bash -c "set -o pipefail; bash '$DIR/dev-e2e.sh' 2>&1 | while IFS= read -r l || [ -n \"\$l\" ]; do printf '%(%T)T %s\n' -1 \"\$l\"; done" \
     >/tmp/jobsync-e2e-dev.log 2>&1 &
   STARTER_PID=$!
   # Recorded HERE, on the only branch that starts a server, because the teardown
@@ -620,8 +630,15 @@ fi
 # a console-oracle defect and once as a reference-cleanup defect — each costing
 # hours and reaching the wrong file. It reports, it does not decide: RC stays
 # Playwright's.
-if [ -f /tmp/jobsync-e2e-dev.log ]; then
-  RESTARTS="$(grep -c "approaching the used memory threshold" /tmp/jobsync-e2e-dev.log 2>/dev/null || echo 0)"
+# Only for a run that started its OWN server: the E2E_REUSE_SERVER branch never
+# truncates this log, so the grep would count a PREVIOUS run's restarts and
+# report them as this one's.
+if [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f /tmp/jobsync-e2e-dev.log ]; then
+  # `|| true`, not `|| echo 0`: `grep -c` PRINTS 0 and EXITS 1 when nothing
+  # matches, so the fallback appended a second zero and the test below failed
+  # with "integer expected" -- on stderr, immediately above the EXIT= line.
+  RESTARTS="$(grep -c "approaching the used memory threshold" /tmp/jobsync-e2e-dev.log 2>/dev/null || true)"
+  case "${RESTARTS:-}" in ''|*[!0-9]*) RESTARTS=0 ;; esac
   if [ "${RESTARTS:-0}" -gt 0 ]; then
     echo
     echo "[test-e2e] ${RESTARTS} dev-server restart(s) during this run — Next's own memory watchdog."
