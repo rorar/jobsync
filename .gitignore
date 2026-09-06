@@ -99,3 +99,11 @@ logs/sessions/
 # nohup.out in the tree is an accident.
 nohup.out
 __pycache__/
+
+# V8 heap snapshots. Node writes them to the SERVER's cwd, which is this
+# worktree, and one from a loaded dev server is multiple gigabytes.
+# tools/next-heap/snapshot-pair.py moves them into heap-snapshots/; the bare
+# pattern catches the window before it does, and any taken by hand.
+Heap.*.heapsnapshot
+*.heapsnapshot
+/heap-snapshots/

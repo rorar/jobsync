@@ -98,6 +98,33 @@ DEV_MEM_MAX="${E2E_DEV_MEM_MAX:-8G}"
 E2E_DEV_CPU_QUOTA="${E2E_DEV_CPU_QUOTA-300%}"
 export NODE_OPTIONS="--max-old-space-size=${DEV_NODE_HEAP} ${NODE_OPTIONS:-}"
 
+#   E2E_DEV_HEAP_SNAPSHOT=1  arm SIGUSR2 to write a V8 heap snapshot
+#
+# The second measurement knob, and the one that can actually name the leak.
+# Both bundlers grow the same way and both caps only choose which symptom to
+# pay (see the addendum in docs/e2e-dev-server-restart-analysis.md), so the
+# remaining question is WHICH structure retains ~34 KB per request. A snapshot
+# pair taken at two heap sizes during one run answers it;
+# tools/next-heap/snapshot-pair.py drives the signal and
+# tools/next-heap/heap-classes.py diffs the two.
+#
+# Off by default and inert until signalled: arming it only installs V8's signal
+# handler. Two things it is NOT free of, which is why it is not always on:
+#
+#  - Node's DEFAULT disposition for SIGUSR2 is to terminate the process. Arming
+#    the flag replaces that, so a stray SIGUSR2 writes a file instead of killing
+#    the server -- but it also means the ONLY safe way to send one is to a
+#    process you have confirmed is armed.
+#  - Writing the snapshot is stop-the-world for as long as it takes to serialise
+#    the heap (tens of seconds at multi-GB). Every request in flight waits, and
+#    Playwright's timeouts do not. A run taken with this on WILL report failures
+#    that are the measurement, not the tree -- discard its results.
+if [ "${E2E_DEV_HEAP_SNAPSHOT:-0}" = "1" ]; then
+  export NODE_OPTIONS="--heapsnapshot-signal=SIGUSR2 ${NODE_OPTIONS}"
+  echo "[dev-e2e] HEAP SNAPSHOT ARMED — SIGUSR2 writes a snapshot to the cwd."
+  echo "[dev-e2e] MEASUREMENT MODE: the write is stop-the-world; discard this run's results."
+fi
+
 SCOPE_ARGS=(-p Description=jobsync-dev-e2e -p MemoryMax="$DEV_MEM_MAX" -p MemorySwapMax=0)
 [ -n "${E2E_DEV_CPU_QUOTA:-}" ] && SCOPE_ARGS+=(-p CPUQuota="$E2E_DEV_CPU_QUOTA")
 
