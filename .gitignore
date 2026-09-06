@@ -98,3 +98,4 @@ logs/sessions/
 # one next to the script; test-e2e.sh redirects to /tmp deliberately, so any
 # nohup.out in the tree is an accident.
 nohup.out
+__pycache__/

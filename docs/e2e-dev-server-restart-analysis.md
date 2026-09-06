@@ -266,3 +266,55 @@ same way, the retention is in the application or in shared Next server code, the
 was wrong for this tree, and the honest answer becomes (i) — raise both caps, accept one
 lifetime per run, and file the §2–§4 numbers upstream against #81161. Either way the answer is
 known after one run, which is cheaper than the third misdiagnosis.
+
+---
+
+## Addendum 2026-09-06 — the two remedies measured, and neither is free
+
+Written after running both options this analysis proposed. The numbers replace the
+estimates above where they disagree.
+
+### (ii) webpack — RULED OUT
+
+`E2E_DEV_BUNDLER=webpack` (the knob added to `scripts/dev-e2e.sh` for this): floors
+1404 → 1643 → 2075 MB, **+672 MB over three collections. RISING.** The upstream
+reports that the webpack dev server does not grow per request do not hold for this
+tree. That run was cut short at 36 minutes — I edited `scripts/test-e2e.sh` while it
+was executing and bash, which reads a script lazily by byte offset, resumed
+mid-token — so it contributed only 198 samples. The direction was already
+unambiguous.
+
+### (i) raise the caps — WORKS, and buys a bigger bucket rather than a fix
+
+`E2E_DEV_NODE_HEAP=5120 E2E_DEV_MEM_MAX=11G`, Turbopack, 3,196 samples over 93 tests
+before the session ended:
+
+- **Zero watchdog restarts**, against one per run at 3072 MB. The threshold moved
+  from 2.62 GB to 4.0 GB and the run stayed under it.
+- **Floors 580 → 3783 MB, +3203 MB across 81 collections.** Monotonic, roughly 40 MB
+  per collection, no plateau. This is retention, not collectable garbage, and it is
+  the same shape webpack showed.
+- **Peak 3909 MB against a 4096 MB threshold.** The run was about to restart anyway.
+  93 tests consumed 95% of the headroom that 5120 MB buys, so a full 112-test suite
+  does not fit and neither would a slightly longer one.
+
+### The cost that was not in the estimate
+
+Thirteen tests failed on that run with durations up to **6.6 minutes** for a single
+test. That is the contention signature, not defects: the server at ~3.9 GB heap plus
+the Playwright scope plus Chromium exceeded what this host can schedule. The estimate
+above accounted for RSS against `MemoryMax` and did not account for the host having
+only ~11 GB free — so on THIS machine raising the cap trades restarts for contention,
+and a contended run is the failure mode the wrapper's own banner exists to warn about.
+
+### Where that leaves it
+
+The leak is the thing to fix; both bundlers exhibit it and both remedies only choose
+which symptom to pay. Roughly 40 MB per collection over a run that issues ~6,000
+requests is ~34 KB retained per request, which is a size worth attributing rather than
+absorbing. The suspects named in §5 were audited and cleared; the next honest step is
+a heap snapshot pair from a running suite, not another cap.
+
+Until then, `E2E_DEV_NODE_HEAP=5120` is defensible ONLY on a host with more headroom
+than this one — and the restart reporter added in `fc331d62` means a run that pays the
+other price now says so.
