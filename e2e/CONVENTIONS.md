@@ -305,15 +305,22 @@ database 0.9 s before the watchdog line, and the next navigation got `ERR_CONNEC
 - **NixOS**: Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium`
 - **Port**: one per worktree. The main checkout keeps 3737; a linked worktree derives its own (`scripts/lib-devserver.sh`), so two checkouts can run suites at the same time. Never hardcode 3737 in a spec or a helper — read `baseURL` from the Playwright config, which follows `E2E_BASE_URL`.
 - **Dev server**: **Subagents** may start it (`bun run dev`) and must **never stop it** — parallel subagents once killed each other's server mid-run, and a worker cannot tell whether the process on :3737 belongs to a sibling three minutes into a suite. The orchestrator and the wrappers may stop it deliberately; they are the only parties that know nothing else is running. Read as a blanket ban the rule protects orphaned processes nobody owns. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
-- **Production mode**: `E2E_PROD=1 ./scripts/test-e2e.sh` runs the suite against `next build` +
-  `next start` (`scripts/prod-e2e.sh`, build via `scripts/e2e-prod-build.sh` into `.next-e2e/`).
-  It exists because the dev server retains ~2,749 objects per request in React's development
-  Flight bundle and Next's watchdog then restarts it mid-run, abandoning requests silently
-  (`E2E-B42`). Neither the watchdog nor that bundle exists in a production server. What a spec
-  author needs to know: **there is no auth bypass in this mode** — it is inert under
-  `NODE_ENV=production` by design — so a run's signin budget is real. `global-setup.ts` mints
-  the session cookie instead of signing in, leaving the two smoke tests as the only signins. If
-  you add a spec that signs in, count it against 5 per 15 minutes per IP.
+- **Production build is the DEFAULT (since 2026-09-08)**: `./scripts/test-e2e.sh` runs the suite
+  against `next build` + `next start` (`scripts/prod-e2e.sh`, build via `scripts/e2e-prod-build.sh`
+  into `.next-e2e/`; the build is skipped when nothing changed). `E2E_PROD=0` opts into the dev
+  server, which is worth it only while you edit app code and iterate one spec. The default moved
+  because the dev server retains ~2,749 objects per request in React's development Flight bundle
+  and Next's watchdog then restarts it mid-run, abandoning requests silently (`E2E-B42`) — on the
+  fixed single-worker order that restart lands inside `job-detail-panels.spec.ts:440` every run
+  (`E2E-B35`) — and because `E2E-B43` was a real defect that only the production build exposed.
+  What a spec author needs to know: **there is no auth bypass under production** — it is inert
+  under `NODE_ENV=production` by design — so a run's signin budget is real. `global-setup.ts`
+  mints the session cookie instead of signing in, leaving the two smoke tests as the only signins.
+  If you add a spec that signs in, count it against 5 per 15 minutes per IP.
+- **The wrapper aborts a run that is measuring the machine** (exit 124, reports still written):
+  wall clock past `E2E_MAX_MINUTES` (90), or `E2E_ABORT_CONSECUTIVE_TIMEOUTS` (3) failed results
+  in a row that each ran into a test timeout. The second shape is ALSO what a broken shared helper
+  looks like; the banner says so, and a single-spec run tells them apart.
 - **SQLite**: every run gets its **own** database, copied from a seeded template (`scripts/e2e-db.sh`); `prisma/dev.db` is never opened by the suite. Within a run the workers still share that copy, so unique test-data names remain your protection against collision — but nothing survives into the next run.
 - **There is no stale-data purge any more, and none is needed.** It used to run in `globalSetup`
   only, which meant UI mode, watch mode and the test-runner MCP silently skipped it. The database

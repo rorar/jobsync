@@ -27,14 +27,25 @@
 #   ./scripts/test-e2e.sh --project=smoke
 #
 # Tunables (env):
-#   E2E_PROD               1 = run against `next build` +   (default 0: dev
-#                          `next start` instead of the dev   server)
-#                          server. Removes the cause of the mid-run restarts
-#                          (E2E-B42: the dev Flight bundle's async_hooks
-#                          retention, and a watchdog that only exists under
-#                          `isDev`), at the price of a build per code change.
-#                          scripts/e2e-prod-build.sh decides whether that build
-#                          is needed; E2E_PROD_BUILD=always|never overrides it.
+#   E2E_PROD               1 = run against `next build` +   (default 1 since
+#                          `next start`; 0 = the dev server  2026-09-08)
+#                          Production is the default because it removes the
+#                          cause of the mid-run restarts (E2E-B42: the dev
+#                          Flight bundle's async_hooks retention, and a
+#                          watchdog that only exists under `isDev`), runs in
+#                          13 min against dev's 19-27, and found a real defect
+#                          dev hid (E2E-B43). The price is a build per code
+#                          change; scripts/e2e-prod-build.sh decides whether
+#                          one is needed (E2E_PROD_BUILD=always|never
+#                          overrides). Use E2E_PROD=0 when iterating a spec
+#                          against app code you are editing, where HMR beats
+#                          a rebuild — and expect the watchdog to land inside
+#                          job-detail-panels.spec.ts:440 there (E2E-B35).
+#   E2E_MAX_MINUTES        abort the run past this wall    (default 90)
+#                          clock; see the block above the runner invocation.
+#   E2E_ABORT_CONSECUTIVE_TIMEOUTS  abort after this many  (default 3; 0 = off)
+#                          consecutive failed results that each ran into a
+#                          test timeout.
 #   E2E_WORKERS            playwright workers              (default 1)
 #   E2E_LOGIN_TIMEOUT_MS   global-setup login wait, ms     (default 90000)
 #   E2E_SERVER_WAIT        seconds to await cold server    (default 150)
@@ -155,7 +166,13 @@ SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
 # block is a FALLBACK for a bare `playwright test`, and a fallback that starts a
 # dev server for a production run would answer the readiness check with the
 # wrong server entirely.
-export E2E_PROD="${E2E_PROD:-0}"
+#
+# Default 1 since 2026-09-08 (decision recorded in CLAUDE.md § E2E Test
+# Infrastructure): seven full dev runs that day paid one watchdog restart each
+# and a deterministic casualty in job-detail-panels.spec.ts:440, while the
+# production suite ran 112/112 in 12.6 min. The dev path stays one variable
+# away for spec iteration against edited app code.
+export E2E_PROD="${E2E_PROD:-1}"
 if [ "$E2E_PROD" = "1" ]; then
   SERVER_KIND="production"
   SERVER_STARTER="$DIR/prod-e2e.sh"
@@ -250,9 +267,37 @@ e2e_teardown() {
 # untrapped fatal signal: an operator who ^Cs a run that is measuring the machine
 # is exactly the case that most needs the server reclaimed. They re-exit with the
 # conventional 128+signal so callers still see why the run ended.
+# Stop the Playwright runner this script started, if it is still alive.
+#
+# INT first, because Playwright's runner handles it: stops the workers, marks
+# the rest interrupted, and still runs every reporter's onEnd — so the JSON
+# report exists and the verdict below can say what the run saw. TERM kills it
+# with no report. The whole tree is signalled, not just the top pid: under
+# `systemd-run --scope` the pid this script holds is the scope's, and the node
+# process that owns the INT handler is a child of it. After 30 s a runner that
+# has not gone is TERMed so it cannot keep the port and the scope.
+#
+# Called from the INT/TERM traps too, because the runner is now a `&` child of
+# a non-interactive shell, which starts it with SIGINT IGNORED: without this
+# forward, the operator's ^C would stop this script and leave the suite running.
+_e2e_signal_tree() {
+  local sig="$1" pid="$2" c
+  for c in $(pgrep -P "$pid" 2>/dev/null); do _e2e_signal_tree "$sig" "$c"; done
+  kill "-$sig" "$pid" 2>/dev/null
+}
+e2e_abort_runner() {
+  [ -n "${RUNNER_PID:-}" ] || return 0
+  kill -0 "$RUNNER_PID" 2>/dev/null || return 0
+  _e2e_signal_tree INT "$RUNNER_PID"
+  for _ in $(seq 1 30); do
+    kill -0 "$RUNNER_PID" 2>/dev/null || return 0
+    sleep 1
+  done
+  _e2e_signal_tree TERM "$RUNNER_PID"
+}
 trap 'e2e_teardown' EXIT
-trap 'e2e_teardown; exit 130' INT
-trap 'e2e_teardown; exit 143' TERM
+trap 'e2e_abort_runner; e2e_teardown; exit 130' INT
+trap 'e2e_abort_runner; e2e_teardown; exit 143' TERM
 
 # 1. Start a FRESH env-correct dev server for every run.
 #
@@ -479,17 +524,109 @@ esac
 RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" \
      "${REPORTER_ARGS[@]}" "$@")
 
-echo "[test-e2e] limits: mem=${MEM_MAX} cpu=${CPU_QUOTA}"
+# Mid-run contention abort.
+#
+# The pre-run guard samples the machine BEFORE the run; nothing inside the run
+# said "stop paying" until 2026-09-07, when a full dev run took 608.7 min
+# (09:47-19:56): the host went to loadavg 46, the dev server's event loop was
+# blocked for 76 minutes, 41 of 112 results timed out, and all ten hours went
+# into a run the contention verdict below then refused to judge. Two rules,
+# both read from the run's OWN output rather than from host metrics — the cgroup
+# showed zero throttling across five later runs and was not being watched
+# during the one that mattered, so host metrics are not a signal this wrapper
+# can vouch for:
+#
+#   E2E_MAX_MINUTES                  wall-clock cap (default 90). Genuine
+#                                    uncontended full runs here sit at 13-27
+#                                    min, one slow one at 40.2; 90 is clear of
+#                                    all of them and would have cut the
+#                                    ten-hour run at 1 h 30.
+#   E2E_ABORT_CONSECUTIVE_TIMEOUTS   consecutive FAILED results that each ran
+#                                    >= 55 s, i.e. into a test timeout
+#                                    (default 3; 0 disables). A real failure
+#                                    usually fails fast on an expect budget;
+#                                    three in a row that ran the whole timeout
+#                                    is the shape of a starved host — OR of a
+#                                    broken shared helper, which the banner
+#                                    says, because from here the two are
+#                                    indistinguishable and only a single-spec
+#                                    run tells them apart.
+#
+# The runner is backgrounded so this script can watch it; `tee` keeps the list
+# output on the terminal, where it always was. What backgrounding costs — the
+# terminal's ^C — is paid back by the INT trap above (e2e_abort_runner).
+E2E_MAX_MINUTES="${E2E_MAX_MINUTES:-90}"
+E2E_ABORT_CONSECUTIVE_TIMEOUTS="${E2E_ABORT_CONSECUTIVE_TIMEOUTS:-3}"
+case "$E2E_ABORT_CONSECUTIVE_TIMEOUTS" in ''|*[!0-9]*) E2E_ABORT_CONSECUTIVE_TIMEOUTS=3 ;; esac
+RUN_OUT="$(mktemp /tmp/jobsync-e2e-run-out.XXXXXX)"
+E2E_ABORT_REASON=""
+
+echo "[test-e2e] limits: mem=${MEM_MAX} cpu=${CPU_QUOTA} wall=${E2E_MAX_MINUTES}min consecutive-timeouts=${E2E_ABORT_CONSECUTIVE_TIMEOUTS}"
 if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 \
      -p CPUQuota="$CPU_QUOTA" true 2>/dev/null; then
   systemd-run --user --scope -p Description=jobsync-e2e-run \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUQuota="$CPU_QUOTA" \
-    "${RUN[@]}"
+    "${RUN[@]}" > >(tee "$RUN_OUT") 2>&1 &
 else
   echo "[test-e2e] WARNING: no systemd transient scope — nice/ionice only."
-  "${RUN[@]}"
+  "${RUN[@]}" > >(tee "$RUN_OUT") 2>&1 &
 fi
-RC=$?
+RUNNER_PID=$!
+RUN_T0=$(date +%s)
+while kill -0 "$RUNNER_PID" 2>/dev/null; do
+  sleep 5
+  elapsed=$(( $(date +%s) - RUN_T0 ))
+  if awk -v e="$elapsed" -v m="$E2E_MAX_MINUTES" 'BEGIN { exit !(e >= m * 60) }'; then
+    E2E_ABORT_REASON="wall clock ${elapsed}s passed E2E_MAX_MINUTES=${E2E_MAX_MINUTES}"
+  elif [ "$E2E_ABORT_CONSECUTIVE_TIMEOUTS" -gt 0 ]; then
+    # Trailing streak of ✘ results whose duration reached a test timeout. On a
+    # non-TTY the list reporter prints one line per FINISHED result, ending in
+    # `(12.3s)` or `(1.4m)`; a ✓ breaks the streak. RSTART/RLENGTH rather than
+    # gawk's three-argument match(): the system awk here is mawk.
+    streak="$(awk '
+      /^ *✓/ { n = 0; next }
+      /^ *✘/ {
+        if (match($0, /\([0-9.]+[sm]\)$/)) {
+          d = substr($0, RSTART + 1, RLENGTH - 2)
+          unit = substr(d, length(d)); val = substr(d, 1, length(d) - 1) + 0
+          secs = (unit == "m") ? val * 60 : val
+          if (secs >= 55) n++; else n = 0
+        } else n = 0
+      }
+      END { print n + 0 }' "$RUN_OUT" 2>/dev/null)"
+    case "${streak:-}" in ''|*[!0-9]*) streak=0 ;; esac
+    if [ "$streak" -ge "$E2E_ABORT_CONSECUTIVE_TIMEOUTS" ]; then
+      E2E_ABORT_REASON="${streak} consecutive failed results each ran into a test timeout"
+    fi
+  fi
+  if [ -n "$E2E_ABORT_REASON" ]; then
+    echo
+    echo "[test-e2e] ABORTING the run: ${E2E_ABORT_REASON}."
+    e2e_abort_runner
+    break
+  fi
+done
+wait "$RUNNER_PID"; RC=$?
+rm -f "$RUN_OUT"
+
+# Exit 124 for an abort — the code report_exit already explains as "killed
+# before it could finish, nothing proven either way" — so the residue gate below
+# refuses to judge it and the operator reads the right sentence.
+if [ -n "$E2E_ABORT_REASON" ]; then
+  RC=124
+  echo
+  echo "[test-e2e] ================ RUN ABORTED BY THE WRAPPER ================"
+  echo "[test-e2e] ${E2E_ABORT_REASON}."
+  echo "[test-e2e] Playwright was stopped with SIGINT, so the reports above cover only what"
+  echo "           had finished. Nothing in them is a verdict on the tree."
+  echo "[test-e2e] Two shapes produce this and the wrapper cannot tell them apart:"
+  echo "           - a starved host (other containers, a stale server, a build) — check"
+  echo "             uptime and the top consumers, then re-run on an idle host;"
+  echo "           - a broken SHARED helper that every test walks through — run one spec:"
+  echo "             ./scripts/test-e2e.sh e2e/crud/<one>.spec.ts"
+  echo "[test-e2e] Tunables: E2E_MAX_MINUTES (${E2E_MAX_MINUTES}), E2E_ABORT_CONSECUTIVE_TIMEOUTS (${E2E_ABORT_CONSECUTIVE_TIMEOUTS}; 0 disables)."
+  echo "[test-e2e] ============================================================="
+fi
 
 # Residue gate: did the run leave state behind that no test owns?
 #

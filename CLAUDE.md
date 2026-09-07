@@ -56,7 +56,7 @@ convenience aliases; each exists because the bare command has taken this host do
 |---|---|---|
 | `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. It prints its banner, the scope line and a final `EXIT=0`; anything else is a real error. |
 | `npx jest` / `bun test` | `bash scripts/test.sh` | Defaults to `--maxWorkers=1`; `jest.config.ts` enforces it again for callers that bypass the script. Also translates the common `--workers=N` typo, which Jest silently ignores. Coverage is opt-in via `--coverage`. |
-| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it **replaces** any server on :3737 with a fresh, correctly configured one (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
+| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it **replaces** any server on :3737 with a fresh, correctly configured one (a production server from `.next-e2e/` by default; `E2E_PROD=0` gives the dev server with `env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). It also aborts a run that is measuring the machine (exit 124, see § E2E Test Infrastructure). |
 | `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
 
 **For the full Jest suite** (~6 min, 300+ suites) just run the wrapper — it now applies its own
@@ -1016,12 +1016,19 @@ the decision it implemented; that decision is superseded, not wrong.
 # Local development — parallel workers:
 E2E_WORKERS=4 ./scripts/test-e2e.sh
 
-# Against a PRODUCTION build (`next build` + `next start`) instead of the dev server:
-E2E_PROD=1 ./scripts/test-e2e.sh
+# The DEFAULT is a PRODUCTION build (`next build` + `next start`). Against the dev server instead:
+E2E_PROD=0 ./scripts/test-e2e.sh e2e/crud/<one>.spec.ts   # spec iteration while editing app code (HMR beats a rebuild)
 ```
 On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
 
-**`E2E_PROD=1` — what changes, and why it exists.** `next dev` loads React's development
+**Production is the default since 2026-09-08; `E2E_PROD=0` opts into the dev server.** The
+decision rests on measurements in `docs/BUGS.md` (E2E-B35, E2E-B42, E2E-B43): seven full dev runs
+on 2026-09-07 each paid one watchdog restart, which landed inside `job-detail-panels.spec.ts:440`
+every time and failed it in four; the production suite ran 112/112 in 12.6 min against dev's
+19-27; and E2E-B43 was a real product defect that dev hid (0 of 3) and production exposed (6 of 6).
+What dev still buys is HMR while you edit app code and iterate one spec, and dev-only warnings
+(hydration, E2E-B11) — neither is what the suite exists for. **What changes under each mode, and
+why the difference exists.** `next dev` loads React's development
 Flight bundle, which installs an unguarded process-wide `async_hooks` hook and retains
 ~2,749 objects per request with no runtime opt-out (`E2E-B42`, measured from a heap-snapshot
 pair). Next's watchdog then restarts the server mid-run and every request in flight dies with
@@ -1030,7 +1037,7 @@ runtime bundles carry the hook — but a production server does: it loads no dev
 bundle, and the watchdog itself is inside `if (isDev)` (`start-server.js:233`), so it does not
 exist there.
 
-| | dev (default) | `E2E_PROD=1` |
+| | `E2E_PROD=0` (dev) | production (default) |
 |---|---|---|
 | server | `scripts/dev-e2e.sh` → `next dev` | `scripts/prod-e2e.sh` → `next start` |
 | build | compile on request | `scripts/e2e-prod-build.sh` first, into **`.next-e2e/`** |
@@ -1046,6 +1053,15 @@ directory makes every mode switch silently invalidate the other's work.
 
 Both modes share one port and one lock, deliberately — one server per worktree whichever mode
 it is in, so a stale dev server can never answer a production run.
+
+**The wrapper aborts a run that is measuring the machine.** Since 2026-09-08 it watches its own
+runner and stops it with SIGINT (reports still written, exit **124**) when the wall clock passes
+`E2E_MAX_MINUTES` (90) or `E2E_ABORT_CONSECUTIVE_TIMEOUTS` (3) failed results in a row each ran
+into a test timeout. It exists because a full dev run on 2026-09-07 ran for 608 minutes on a
+starved host before anyone could refuse it. The banner says the one thing the wrapper cannot
+decide: three timeouts in a row is also what a broken shared helper looks like, and only a
+single-spec run tells the two apart. Host metrics are deliberately not the signal — cgroup
+throttling read zero through five clean runs and was not being watched during the bad one.
 
 **Auth under a production build fits without the bypass.** Signin is capped at 5 per 15 min per
 IP. `e2e/global-setup.ts` MINTS the NextAuth session cookie instead of signing in (JWT sessions:
