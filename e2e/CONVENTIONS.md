@@ -286,6 +286,19 @@ action with timings, so the state BEFORE and AFTER the failing step is inspectab
 tracing changes timing and can mask a race — if a flake stops reproducing under `--trace=on`, that
 is itself information, not a fix.
 
+**To learn whether the server was ever asked, sample the run database DURING the run.**
+`E2E_DB_WATCH=1 ./scripts/test-e2e.sh` starts `scripts/e2e-db-watch.sh` once the run database is
+provisioned and keeps its log beside the JSON report; it records every row that appears or
+disappears, with a timestamp on the same clock as the server log. Querying AFTER the run cannot
+answer the question: every spec deletes what it created, and
+`e2e/helpers/admin-reference-cleanup.ts` treats a row that was never written as already gone, so
+"the browser never sent the request" and "the server refused it" both leave the same empty table.
+Read the three artefacts together — the test's `window=` from the report, the `+`/`-` lines in the
+watch log, and `approaching the used memory threshold` in the kept server log — and the failure
+usually attributes itself. That is how E2E-B43 was separated from E2E-B42, and how
+`job-detail-panels.spec.ts:440` was attributed under E2E-B35: the status change was in the
+database 0.9 s before the watchdog line, and the next navigation got `ERR_CONNECTION_REFUSED`.
+
 ## Environment Constraints
 
 - **8 GB RAM, no swap** (until infra-issue #11 is resolved): Long serial runs (>10 min) can crash the dev server. Run tests in batches if needed.

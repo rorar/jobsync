@@ -46,6 +46,12 @@
 #   E2E_REPORT_JSON        path of the JSON report this    (default
 #                          wrapper produces for the gate    test-results/.e2e-run-report.json)
 #   E2E_KEEP_RUN_DB        0 = discard the run database    (default 1: kept)
+#   E2E_DB_WATCH           1 = sample the run database     (default 0) every
+#                          0.5 s and log every row that appears or disappears
+#                          (scripts/e2e-db-watch.sh); the log is kept beside
+#                          the JSON report. Answers "was the server ever
+#                          asked?" for a failure — a question the database
+#                          cannot answer after the run.
 #   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH  chromium binary   (auto: NixOS path if
 #                                        present, else Playwright's own download)
 set -uo pipefail
@@ -219,6 +225,13 @@ fi
 e2e_teardown() {
   [ "${E2E_TEARDOWN_DONE:-0}" = "1" ] && return 0
   E2E_TEARDOWN_DONE=1
+  # The row sampler (E2E_DB_WATCH=1) is ours on every path that started it.
+  # Left alone it outlives the run and keeps appending, by path, to a log the
+  # next run truncates — which is how a re-created log once carried a stale
+  # baseline from an aborted attempt.
+  if [ -n "${DB_WATCH_PID:-}" ] && kill -0 "$DB_WATCH_PID" 2>/dev/null; then
+    kill "$DB_WATCH_PID" 2>/dev/null; wait "$DB_WATCH_PID" 2>/dev/null
+  fi
   [ "${E2E_SERVER_STARTED:-0}" = "1" ] || return 0
 
   if [ "${E2E_KEEP_SERVER:-0}" = "1" ]; then
@@ -302,6 +315,18 @@ else
   # app on one database and its checks on another, a failure that names neither.
   e2e_db_provision_run || exit 1
   E2E_DB_PROVISIONED=1
+
+  # Optional row-level sampler over the run database (E2E_DB_WATCH=1).
+  # Started HERE, after provisioning and before the server, so its baseline is
+  # THIS run's file: started earlier it baselines the previous run's database
+  # and logs the whole provisioning as deletions. What it answers, and why the
+  # question cannot be answered after the run, is in scripts/e2e-db-watch.sh.
+  # Opt-in because each sample holds a shared lock for a few milliseconds.
+  if [ "${E2E_DB_WATCH:-0}" = "1" ]; then
+    DB_WATCH_LOG=/tmp/jobsync-e2e-db-watch.log
+    bash "$DIR/e2e-db-watch.sh" "$E2E_RUN_DB" "$DB_WATCH_LOG" 0.5 &
+    DB_WATCH_PID=$!
+  fi
 
   # Stop the incumbent HERE, not inside the starter.
   #
@@ -727,6 +752,15 @@ if [ "$E2E_PROD" != "1" ] && [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f "$SERV
     echo "[test-e2e] Cause and remedies: docs/e2e-dev-server-restart-analysis.md"
     echo "[test-e2e] The remedy that reaches the cause is E2E_PROD=1: a production server"
     echo "           loads no development Flight bundle and has no watchdog at all."
+    # Place each restart against the test that was running, because the runner
+    # side records nothing about it and this signature has been misdiagnosed
+    # twice. Measured 2026-09-07 over five valid full dev runs: every restart
+    # fell inside job-detail-panels.spec.ts:440 (it fires after ~1,620-1,650
+    # logged requests, and the suite order is fixed), which failed in four of
+    # them. Needs the JSON report, which a custom --reporter removes.
+    if [ -f "${E2E_REPORT_JSON:-}" ]; then
+      bash "$DIR/e2e-attribute-restarts.sh" "$E2E_REPORT_JSON" "$SERVER_LOG"
+    fi
   fi
 fi
 
@@ -745,6 +779,14 @@ if [ "${E2E_SERVER_STARTED:-0}" = "1" ] && [ -f "$SERVER_LOG" ]; then
   SERVER_LOG_KEPT="$(dirname "$E2E_REPORT_JSON")/.e2e-server-${SERVER_KIND}.log"
   if cp "$SERVER_LOG" "$SERVER_LOG_KEPT" 2>/dev/null; then
     echo "[test-e2e] server log for THIS run kept at ${SERVER_LOG_KEPT} (${SERVER_LOG} is truncated by the next run)."
+  fi
+fi
+# Same for the row sampler's log, for the same reason. The sampler was stopped
+# by e2e_teardown above, so the copy is complete.
+if [ -n "${DB_WATCH_LOG:-}" ] && [ -f "$DB_WATCH_LOG" ]; then
+  DB_WATCH_KEPT="$(dirname "$E2E_REPORT_JSON")/.e2e-db-watch.log"
+  if cp "$DB_WATCH_LOG" "$DB_WATCH_KEPT" 2>/dev/null; then
+    echo "[test-e2e] row sampler log for THIS run kept at ${DB_WATCH_KEPT}."
   fi
 fi
 
