@@ -2,8 +2,9 @@
 -- shared-entities.allium
 
 -- Scope: Shared entities used across aggregates — value-like lookup entities
--- Includes: Company, Location, JobTitle, JobSource, JobStatus, Tag, Interview,
---   combobox "create or select" pattern, user-scoped uniqueness, global seeding
+-- Includes: Company, Location, JobTitle, JobSource, JobStatus, Tag, ActivityType,
+--   Interview, combobox "create or select" pattern, user-scoped uniqueness,
+--   global seeding
 -- Excludes:
 --   - Job Aggregate CRUD (see job-aggregate.allium)
 --   - Profile Aggregate (see profile-resume.allium)
@@ -11,7 +12,8 @@
 --   - Company Blacklist (see job-aggregate.allium)
 
 -- Owner: Shared across aggregates (src/actions/company.actions.ts,
---   src/actions/job.actions.ts, src/app/api/v1/jobs/route.ts)
+--   src/actions/job.actions.ts, src/actions/activity.actions.ts,
+--   src/app/api/v1/jobs/route.ts)
 
 ------------------------------------------------------------
 -- Design: Shared Lookup Entities
@@ -26,7 +28,7 @@
 -- an UPSERT on the (value, created_by) composite key — idempotent.
 --
 -- Two scoping models:
---   User-scoped: Company, Location, JobTitle, JobSource, Tag
+--   User-scoped: Company, Location, JobTitle, JobSource, Tag, ActivityType
 --     — Each user has their own set. (value, created_by) is unique.
 --   Global: JobStatus
 --     — Shared across all users. value is globally unique.
@@ -55,6 +57,18 @@ external entity WorkExperience {
 external entity Education {
     -- Education entry on a resume. References Location.
     location: Location?
+}
+
+external entity Activity {
+    -- A tracked activity entry. Its ActivityType is MANDATORY: an Activity
+    -- cannot exist without one, so it blocks the type's deletion.
+    activity_type: ActivityType
+}
+
+external entity Task {
+    -- A to-do item. Its ActivityType is OPTIONAL: a Task with no type is a
+    -- valid Task, so deleting the type clears the reference and keeps the Task.
+    activity_type: ActivityType?
 }
 
 ------------------------------------------------------------
@@ -155,6 +169,23 @@ entity Tag {
     @invariant ReferentialIntegrity
         -- A Tag CANNOT be deleted if linked to any Job or Question.
         -- This referential integrity is checked before deletion.
+}
+
+entity ActivityType {
+    label: String               -- display name (e.g. "Interview", "Networking")
+    value: String               -- label.trim().toLowerCase()
+    created_by: User
+    activities: Set<Activity>   -- mandatory reference — blocks deletion
+    tasks: Set<Task>            -- optional reference — cleared on deletion
+
+    @invariant UserScopedUniqueness
+        -- (value, created_by) is unique.
+        -- Referenced by Activity (mandatory) and Task (optional).
+
+    @invariant ReferentialIntegrity
+        -- An ActivityType CANNOT be deleted while any Activity references it.
+        -- A referencing Task does NOT block the deletion; the Task survives and
+        -- its type reference is cleared. See OptionalReferenceClearedOnDeletion.
 }
 
 entity Interview {
@@ -316,6 +347,68 @@ rule GetTagList {
         -- Ordered by label ascending.
 }
 
+-- === ActivityType ===
+
+rule CreateActivityType {
+    when: CreateActivityType(user, label)
+
+    requires: label != null
+    requires: label != ""
+
+    ensures:
+        SharedEntityResolved(user: user, entity_type: "activity_type", label: label)
+
+    @guidance
+        -- Upsert on (value, created_by), where value = label.trim().toLowerCase().
+        -- If no match exists: creates ActivityType(label, normalize(label), user).
+        -- If a match exists: the stored label is REPLACED by the submitted label
+        -- and the existing row is returned. This diverges from CreateTag, which
+        -- returns the existing row unchanged — see the open question on label
+        -- refresh at the end of this file.
+}
+
+rule DeleteActivityType {
+    when: DeleteActivityType(user, activity_type)
+
+    requires: activity_type.created_by = user
+    requires: activity_type.activities.count = 0
+
+    ensures:
+        for t in activity_type.tasks:
+            t.activity_type = null
+        not exists activity_type
+
+    @guidance
+        -- Only Activity blocks. The absence of a Task guard is deliberate, not
+        -- an oversight: a Task with no activity type is a first-class valid
+        -- state, so blocking on Tasks would make a type permanently undeletable
+        -- for a state the domain explicitly supports. The confirmation dialog
+        -- states how many Tasks will lose their type before the user proceeds.
+        --
+        -- The Activity count is scoped to the requesting user, while the
+        -- constraint that ultimately refuses the deletion is not. An Activity
+        -- owned by another user therefore passes the guard, and the deletion
+        -- then fails on the constraint instead, surfacing as a generic
+        -- reference error rather than the specific "still in use" message.
+        -- That residual is deliberate and is shared by every deletion rule in
+        -- this file: counting other users' rows would let their existence be
+        -- inferred by whether this deletion is refused.
+}
+
+rule GetActivityTypeList {
+    when: GetActivityTypeList(user)
+
+    ensures:
+        ActivityTypeListReturned(user: user)
+
+    @guidance
+        -- Returns activity types where created_by = user.
+        -- Paginated with total count.
+        -- Ordered by referencing Activity count descending.
+        -- Each entry carries its referencing Activity and Task counts, so the
+        -- UI can refuse or warn before a deletion is attempted.
+}
+
 -- === JobStatus Resolution ===
 
 rule ResolveJobStatus {
@@ -356,7 +449,7 @@ rule SeedOnSignup {
 -- (value, created_by) composite key. Two users can have a Company with
 -- the same label ("Google") independently. But the same user cannot have
 -- two Companies with the same normalized value.
--- Applies to: Company, Location, JobTitle, JobSource, Tag.
+-- Applies to: Company, Location, JobTitle, JobSource, Tag, ActivityType.
 
 -- GlobalStatusUniqueness: JobStatus enforces global uniqueness on the
 -- value field. There is exactly one "applied" status shared by all users.
@@ -364,7 +457,7 @@ rule SeedOnSignup {
 -- NormalizedValues: The value field is always label.trim().toLowerCase().
 -- This ensures case-insensitive matching in combobox lookups.
 -- The label preserves the user's original casing for display.
--- Applies to: Company, Location, JobTitle, JobSource, Tag.
+-- Applies to: Company, Location, JobTitle, JobSource, Tag, ActivityType.
 
 -- ReferentialIntegrityBeforeDeletion: Shared entities cannot be deleted
 -- while referenced by other entities.
@@ -372,6 +465,18 @@ rule SeedOnSignup {
 -- Tag: check tag.jobs.count + tag.questions.count
 -- Location: implicitly protected by foreign key constraints
 -- JobTitle: implicitly protected by foreign key constraints
+-- ActivityType: check activity_type.activities.count only — a referencing
+--   Task is cleared rather than counted, see OptionalReferenceClearedOnDeletion
+
+-- OptionalReferenceClearedOnDeletion: A child that references a shared entity
+-- OPTIONALLY does not block that entity's deletion. The child is retained and
+-- its reference is cleared. Only a child whose reference is MANDATORY blocks,
+-- because clearing it would leave the child in a state it cannot occupy.
+-- ActivityType is the only entity in this file that has children of both kinds
+-- and lets the difference decide the outcome: an Activity has no meaning
+-- without a type and blocks the deletion, a Task without a type is an ordinary
+-- Task and is merely detached. A detached Task is not a repair case — it needs
+-- no follow-up, and it stays visible to its owner in the unfiltered task list.
 
 -- IdempotentCreation: The combobox "create or select" pattern is
 -- idempotent. If the entity already exists (by value + created_by),
@@ -393,3 +498,5 @@ open question "Should Location have richer structure (city, state, country as se
 open question "Should Tag support hierarchical organization (parent-child)? Currently tags are flat. Hierarchies could help organization but add UI complexity."
 
 open question "Should Interview and Contact be promoted to their own aggregate? Currently lightweight entities with minimal business logic. CRM features (Roadmap Section 5) may require this."
+
+open question "Should the 'create or select' upsert refresh the stored label when the normalized value already matches? The two behaviours are both live today: creating an ActivityType or a JobTitle overwrites the stored label with whatever the user just typed, while creating a Tag returns the existing row untouched. UpsertSharedEntity documents only the second. The choice decides whether re-entering an existing value silently re-cases a shared lookup entry that other records already display."
