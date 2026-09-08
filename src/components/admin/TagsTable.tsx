@@ -10,7 +10,7 @@ import {
 } from "../ui/table";
 import { Tag } from "@/models/job.model";
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { deleteTagById } from "@/actions/tag.actions";
 import { toast } from "../ui/use-toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
@@ -24,6 +24,12 @@ type TagsTableProps = {
 
 function TagsTable({ tags, reloadTags }: TagsTableProps) {
   const { t } = useTranslations();
+  // A successful delete unmounts the row that holds the button the user pressed,
+  // so there is nothing left for Radix to restore focus to and a keyboard user
+  // is dropped on document.body. The table survives the delete, so it is the
+  // stable landing place; `tabIndex={-1}` lets it take focus programmatically
+  // without joining the tab order.
+  const tableRef = useRef<HTMLTableElement>(null);
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -69,7 +75,7 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
 
   return (
     <>
-      <Table>
+      <Table ref={tableRef} tabIndex={-1}>
         <TableHeader>
           <TableRow>
             <TableHead>{t("admin.skillLabel")}</TableHead>
@@ -97,11 +103,14 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
                   variant="ghost"
                   size="icon-lg"
                   className="text-destructive"
-                  aria-label={t("common.delete")}
+                  data-testid="delete-row"
+                  aria-label={t("common.deleteNamed").replace(
+                    "{name}",
+                    tag.label,
+                  )}
                   onClick={() => onDeleteTag(tag)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  <span className="sr-only">{t("common.delete")}</span>
                 </Button>
               </TableCell>
             </TableRow>
@@ -109,13 +118,14 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
         </TableBody>
       </Table>
       <DeleteAlertDialog
-        pageTitle="skill"
+        pageTitle={t("admin.deleteTargetSkill")}
         open={alert.openState}
         onOpenChange={() => setAlert({ openState: false, deleteAction: false })}
         onDelete={() => deleteTag(alert.itemId)}
         alertTitle={alert.title}
         alertDescription={alert.description}
         deleteAction={alert.deleteAction}
+        returnFocusTo={tableRef}
       />
     </>
   );

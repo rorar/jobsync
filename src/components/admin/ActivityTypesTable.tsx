@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "../ui/button";
 import {
   Table,
@@ -27,6 +27,12 @@ function ActivityTypesTable({
   reloadActivityTypes,
 }: ActivityTypesTableProps) {
   const { t } = useTranslations();
+  // A successful delete unmounts the row that holds the button the user pressed,
+  // so there is nothing left for Radix to restore focus to and a keyboard user
+  // is dropped on document.body. The table survives the delete, so it is the
+  // stable landing place; `tabIndex={-1}` lets it take focus programmatically
+  // without joining the tab order.
+  const tableRef = useRef<HTMLTableElement>(null);
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -84,7 +90,7 @@ function ActivityTypesTable({
 
   return (
     <>
-      <Table>
+      <Table ref={tableRef} tabIndex={-1}>
         <TableHeader>
           <TableRow>
             <TableHead>{t("admin.activityType")}</TableHead>
@@ -116,11 +122,14 @@ function ActivityTypesTable({
                   variant="ghost"
                   size="icon-lg"
                   className="text-destructive"
-                  aria-label={t("common.delete")}
+                  data-testid="delete-row"
+                  aria-label={t("common.deleteNamed").replace(
+                    "{name}",
+                    activityType.label,
+                  )}
                   onClick={() => onDeleteActivityType(activityType)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  <span className="sr-only">{t("common.delete")}</span>
                 </Button>
               </TableCell>
             </TableRow>
@@ -129,17 +138,18 @@ function ActivityTypesTable({
       </Table>
       {/*
         Both branches set alertTitle explicitly, so pageTitle is never read
-        here. It stays only because the prop is required; the default it feeds
-        interpolates an untranslated English noun into the accessible name.
+        here. It stays only because the prop is required; it is translated so
+        the fallback reads correctly if a future branch ever omits alertTitle.
       */}
       <DeleteAlertDialog
-        pageTitle="activity type"
+        pageTitle={t("admin.deleteTargetActivityType")}
         open={alert.openState}
         onOpenChange={() => setAlert({ openState: false, deleteAction: false })}
         onDelete={() => deleteActivityType(alert.itemId)}
         alertTitle={alert.title}
         alertDescription={alert.description}
         deleteAction={alert.deleteAction}
+        returnFocusTo={tableRef}
       />
     </>
   );

@@ -247,7 +247,7 @@ function MyJobsTable({
         </TableBody>
       </Table>
       <DeleteAlertDialog
-        pageTitle="job"
+        pageTitle={t("jobs.deleteTargetJob")}
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={() => deleteJob(jobIdToDelete)}

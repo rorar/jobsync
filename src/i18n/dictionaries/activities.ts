@@ -38,6 +38,7 @@ export const activities = {
     "activities.startedSuccess": "Activity started successfully",
     "activities.stoppedSuccess": "Activity stopped successfully",
     "activities.autoStopped": "Activity auto-stopped after reaching maximum duration of {hours} hours",
+    "activities.deleteTargetActivity": "this activity",
   },
   de: {
     "activities.title": "Aktivitäten",
@@ -78,6 +79,7 @@ export const activities = {
     "activities.startedSuccess": "Aktivität erfolgreich gestartet",
     "activities.stoppedSuccess": "Aktivität erfolgreich gestoppt",
     "activities.autoStopped": "Aktivität automatisch gestoppt nach Erreichen der maximalen Dauer von {hours} Stunden",
+    "activities.deleteTargetActivity": "diese Aktivität",
   },
   fr: {
     "activities.title": "Activités",
@@ -118,6 +120,7 @@ export const activities = {
     "activities.startedSuccess": "Activité démarrée avec succès",
     "activities.stoppedSuccess": "Activité arrêtée avec succès",
     "activities.autoStopped": "Activité arrêtée automatiquement après avoir atteint la durée maximale de {hours} heures",
+    "activities.deleteTargetActivity": "cette activité",
   },
   es: {
     "activities.title": "Actividades",
@@ -158,5 +161,6 @@ export const activities = {
     "activities.startedSuccess": "Actividad iniciada con éxito",
     "activities.stoppedSuccess": "Actividad detenida con éxito",
     "activities.autoStopped": "Actividad detenida automáticamente al alcanzar la duración máxima de {hours} horas",
+    "activities.deleteTargetActivity": "esta actividad",
   },
 } as const;

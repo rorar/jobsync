@@ -48,6 +48,7 @@ export const tasks = {
     "tasks.createdSuccess": "Task has been created successfully",
     "tasks.updatedSuccess": "Task has been updated successfully",
     "tasks.toggleMenu": "Toggle menu",
+    "tasks.deleteTargetTask": "this task",
 
     // Task statuses
     "tasks.statusInProgress": "In Progress",
@@ -104,6 +105,7 @@ export const tasks = {
     "tasks.createdSuccess": "Aufgabe wurde erfolgreich erstellt",
     "tasks.updatedSuccess": "Aufgabe wurde erfolgreich aktualisiert",
     "tasks.toggleMenu": "Menü umschalten",
+    "tasks.deleteTargetTask": "diese Aufgabe",
 
     // Aufgabenstatus
     "tasks.statusInProgress": "In Bearbeitung",
@@ -160,6 +162,7 @@ export const tasks = {
     "tasks.createdSuccess": "La tâche a été créée avec succès",
     "tasks.updatedSuccess": "La tâche a été mise à jour avec succès",
     "tasks.toggleMenu": "Basculer le menu",
+    "tasks.deleteTargetTask": "cette tâche",
 
     // Statuts de tâche
     "tasks.statusInProgress": "En cours",
@@ -216,6 +219,7 @@ export const tasks = {
     "tasks.createdSuccess": "La tarea se ha creado con éxito",
     "tasks.updatedSuccess": "La tarea se ha actualizado con éxito",
     "tasks.toggleMenu": "Alternar menú",
+    "tasks.deleteTargetTask": "esta tarea",
 
     // Estados de tarea
     "tasks.statusInProgress": "En progreso",

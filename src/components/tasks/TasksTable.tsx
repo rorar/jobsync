@@ -448,7 +448,7 @@ function TasksTable({
           );
         })}
         <DeleteAlertDialog
-          pageTitle="task"
+          pageTitle={t("tasks.deleteTargetTask")}
           open={alertOpen}
           onOpenChange={setAlertOpen}
           onDelete={() => deleteTask(taskIdToDelete)}
@@ -474,7 +474,7 @@ function TasksTable({
           </div>
         ))}
         <DeleteAlertDialog
-          pageTitle="task"
+          pageTitle={t("tasks.deleteTargetTask")}
           open={alertOpen}
           onOpenChange={setAlertOpen}
           onDelete={() => deleteTask(taskIdToDelete)}
@@ -509,7 +509,7 @@ function TasksTable({
           );
         })}
         <DeleteAlertDialog
-          pageTitle="task"
+          pageTitle={t("tasks.deleteTargetTask")}
           open={alertOpen}
           onOpenChange={setAlertOpen}
           onDelete={() => deleteTask(taskIdToDelete)}
@@ -544,7 +544,7 @@ function TasksTable({
           );
         })}
         <DeleteAlertDialog
-          pageTitle="task"
+          pageTitle={t("tasks.deleteTargetTask")}
           open={alertOpen}
           onOpenChange={setAlertOpen}
           onDelete={() => deleteTask(taskIdToDelete)}
@@ -560,7 +560,7 @@ function TasksTable({
         <TableBody>{tasks.map(renderTaskRow)}</TableBody>
       </Table>
       <DeleteAlertDialog
-        pageTitle="task"
+        pageTitle={t("tasks.deleteTargetTask")}
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={() => deleteTask(taskIdToDelete)}

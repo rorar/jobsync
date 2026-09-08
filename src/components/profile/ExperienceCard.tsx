@@ -125,7 +125,7 @@ function ExperienceCard({
         </button>
       </div>
       <DeleteAlertDialog
-        pageTitle={t("profile.deleteExperience")}
+        pageTitle={t("profile.deleteTargetExperience")}
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onDelete={handleDeleteConfirm}

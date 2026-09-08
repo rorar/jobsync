@@ -129,7 +129,7 @@ function EducationCard({
         </button>
       </div>
       <DeleteAlertDialog
-        pageTitle={t("profile.deleteEducation")}
+        pageTitle={t("profile.deleteTargetEducation")}
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onDelete={handleDeleteConfirm}
