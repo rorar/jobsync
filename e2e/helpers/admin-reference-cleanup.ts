@@ -59,6 +59,23 @@ export const ADMIN_TAB = {
   // (src/actions/jobSource.actions.ts:77-89) counts the referencing Jobs and
   // refuses while one remains, so the Job must go first.
   source: "sources",
+  // `ActivityType` became sweepable on 2026-09-08, when the sixth admin tab
+  // landed (E2E-B44). Until then this was the one reference type with no delete
+  // path anywhere in the application, which is why `scripts/check-e2e-residue.sh`
+  // carried it as structural debt rather than as a leak anyone could fix.
+  //
+  // Ordering caveat, and it is sharper here than for the other five: an Activity
+  // CANNOT exist without its type — `Activity.activityTypeId` is NOT NULL behind
+  // an `ON DELETE RESTRICT` foreign key (prisma/schema.prisma:509-510) — so the
+  // activities must be gone first or the delete is refused by the database
+  // itself, not merely by the application guard. A Task, by contrast, does not
+  // block: its foreign key is `ON DELETE SET NULL` over a nullable column
+  // (:531-532), so a task keeps its row and loses its type.
+  //
+  // `ActivityTypesTable.tsx` carries the same `aria-label={t("common.delete")}`
+  // delete button and `ActivityTypesContainer.tsx` the same Load More, so
+  // `deleteAdminReferenceRow` works against it unchanged.
+  activityType: "activity-types",
 } as const;
 
 export type AdminReferenceTab = (typeof ADMIN_TAB)[keyof typeof ADMIN_TAB];

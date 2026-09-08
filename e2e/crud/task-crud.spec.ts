@@ -20,11 +20,17 @@ async function navigateToTasks(page: Page) {
 /**
  * The same activity type activity-crud uses, and for the same reason.
  *
- * `ActivityType` has no delete path anywhere in the application (see the long
- * note on `E2E_ACTIVITY_TYPE` in `activity-crud.spec.ts`), so the only lever on
- * E2E-B24's `ActivityType +5` is to stop creating five distinct rows.
- * `createActivityType` (`src/actions/activity.actions.ts:41`) upserts on the
- * value, so both specs naming this string share one row. Nothing asserts on it.
+ * Corrected 2026-09-08: `ActivityType` DOES have a delete path now
+ * (`deleteActivityTypeById`, and the sixth admin tab — E2E-B44). This string is
+ * still shared for the reason that outlived that one: `createActivityType`
+ * (`src/actions/activity.actions.ts:41-45`) upserts on the value, so both specs
+ * naming it reuse a single row and both take `selectOrCreateComboboxOption`'s
+ * cheap exact-match path instead of the slow create path.
+ *
+ * Precisely because it is shared, NEITHER spec may sweep it — a cleanup here
+ * would delete a row activity-crud is still using, and the other way round.
+ * A test that needs a disposable type mints a `uniqueId()`-suffixed one and
+ * sweeps that; activity-crud does exactly this. Nothing asserts on this name.
  */
 const E2E_ACTIVITY_TYPE = "E2E Activity Type";
 

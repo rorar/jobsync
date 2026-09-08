@@ -131,9 +131,14 @@ KNOWN_DEBT=(
   # was proven broken statically and then repaired, so the run confirms a
   # prediction rather than establishing a pattern. If a later run reds on one of
   # these, believe the gate: re-add the entry with the count and the date.
-  "ActivityType:E2E-B24"  # +1 every run; no admin tab exists for it, so the
-                          #   afterEach sweep that fixed Activity cannot reach it.
-                          #   Structural — see E2E-B44 for the product gap.
+  #
+  # ActivityType left this list on 2026-09-08 as well, and by a different route:
+  # E2E-B44 gave it the delete path it never had, so the sweep can now reach a
+  # type a spec mints. What remained after that was one row — the string
+  # activity-crud and task-crud deliberately SHARE, which neither may delete
+  # because the other is still using it. That row is now seeded
+  # (prisma/seed-e2e.ts), which is what it always was in substance: a
+  # precondition two specs depend on and neither owns. A fixture is not residue.
   "Person:E2E-B22"     # +4 — structural: no deletePerson exists, by GDPR design
   "Referral:E2E-B23"   # +1 — structural, same shape as Person
   "Job:E2E-B38"        # KEPT while the six above go. Its mechanism is unchanged:

@@ -46,6 +46,34 @@ const TEST_USER_EMAIL = "admin@example.com";
  * `trashedAt: null`, which is exactly what the "new" tab selects
  * (stagedVacancy.actions.ts:96-99).
  */
+/**
+ * The activity type `activity-crud.spec.ts` and `task-crud.spec.ts` share.
+ *
+ * Seeded 2026-09-08, and the reason is a residue-gate argument rather than a
+ * convenience. Both specs feed this exact string to a combobox, so the FIRST one
+ * to run creates the row and the second reuses it — `createActivityType` upserts
+ * on `value_createdBy` (`src/actions/activity.actions.ts:41-45`). The row then
+ * survives the run, because neither spec may sweep a name the other is still
+ * using, and `scripts/check-e2e-residue.sh` counted it as `ActivityType +1`
+ * every run. Once E2E-B44 gave ActivityType a delete path, that +1 was the only
+ * thing left standing between the model and an ENFORCED gate entry.
+ *
+ * Seeding it makes the row part of the template rather than something the run
+ * creates, which is what it always was in substance: a precondition two specs
+ * depend on and neither owns. The gate then measures a genuine leak instead of a
+ * fixture, and the specs get the cheap exact-match path from the first call
+ * rather than paying the create path once per run (E2E-B32 measured ~11-25 s
+ * for it).
+ *
+ * `value` must be `label.trim().toLowerCase()` — that is what `createActivityType`
+ * computes and upserts on, so any other spelling would produce a SECOND row and
+ * quietly reintroduce the +1 this fixture removes.
+ */
+const SHARED_ACTIVITY_TYPE = {
+  label: "E2E Activity Type",
+  value: "e2e activity type",
+};
+
 const STAGED_VACANCIES = [
   {
     sourceBoard: "eures",
@@ -95,6 +123,23 @@ async function main() {
         `seed-e2e.ts is additive and does not create the user.`,
     );
   }
+
+  // Idempotent by the model's own unique key, so re-running the seed against an
+  // existing template is a no-op rather than a duplicate.
+  await prisma.activityType.upsert({
+    where: {
+      value_createdBy: {
+        value: SHARED_ACTIVITY_TYPE.value,
+        createdBy: user.id,
+      },
+    },
+    update: { label: SHARED_ACTIVITY_TYPE.label },
+    create: {
+      label: SHARED_ACTIVITY_TYPE.label,
+      value: SHARED_ACTIVITY_TYPE.value,
+      createdBy: user.id,
+    },
+  });
 
   for (const vacancy of STAGED_VACANCIES) {
     // No unique constraint covers (userId, sourceBoard, externalId) — it is an

@@ -6,6 +6,11 @@ import {
   expectToast,
   rowsByText,
 } from "../helpers";
+import {
+  ADMIN_TAB,
+  loadUntilAdminRowVisible,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
 
 // storageState handles authentication — no per-test login needed
 
@@ -32,22 +37,29 @@ async function stopRunningActivity(page: Page) {
 /**
  * ONE activity type for the whole file — and the same string task-crud uses.
  *
- * `ActivityType` has NO delete path anywhere in the application:
- * `src/actions/activity.actions.ts` exports `getAllActivityTypes` and
- * `createActivityType` (an upsert at :41) and nothing else, `grep -rn
- * "activityType\.delete" src/` is empty, and no screen offers the affordance.
- * A type a spec creates is therefore undeletable through the UI, which is the
- * whole of E2E-B24's `ActivityType +5`: four distinct names here plus
- * `E2E Testing` in task-crud.
+ * REWRITTEN 2026-09-08. What stood here asserted, as fact, that `ActivityType`
+ * had no delete path anywhere in the application and that a type a spec creates
+ * is therefore undeletable. That was true when it was written and is now false:
+ * `src/actions/activity.actions.ts` exports `deleteActivityTypeById`, and
+ * `/dashboard/admin?tab=activity-types` is the sixth reference tab (E2E-B44).
+ * The old text is not preserved, because a comment that explains today's
+ * behaviour by yesterday's constraint is the failure mode E2E-B36 was about.
  *
- * Since the rows cannot be removed, the only lever left is not to create five
- * of them. `createActivityType` upserts on the value, so every spec that names
- * the same type reuses one row: the count drops from +5 to +1 and the
- * remaining row is honest debt, not four copies of it. It is also faster —
- * `selectOrCreateComboboxOption` takes the cheap exact-match path once the
- * option exists (E2E-B32 measured ~11-25 s for the create path).
+ * The sharing itself still stands, for a reason that outlived its original one.
+ * `createActivityType` upserts on the value (`activity.actions.ts:41-45`), so
+ * every spec naming the same type reuses one row rather than minting another,
+ * and `selectOrCreateComboboxOption` then takes the cheap exact-match path
+ * instead of the create path (E2E-B32 measured ~11-25 s for the latter). It is
+ * one row and it is fast.
  *
- * No test asserts on the type name; it is only ever fed to the combobox.
+ * This shared constant is deliberately NOT swept by the afterEach below.
+ * `task-crud.spec.ts` feeds the same string to its own combobox, and a sweep
+ * here would delete a row that file is still using — `e2e/CONVENTIONS.md` rule 1
+ * asks for `uniqueId()` precisely so cleanup cannot reach across specs. The test
+ * that exercises the new delete path mints its own uid-suffixed type and sweeps
+ * that one.
+ *
+ * No test asserts on this type's name; it is only ever fed to the combobox.
  */
 const E2E_ACTIVITY_TYPE = "E2E Activity Type";
 
@@ -66,6 +78,14 @@ const E2E_ACTIVITY_TYPE = "E2E Activity Type";
  * nothing bleeds into the next test.
  */
 let createdActivityNames: string[] = [];
+
+/**
+ * Activity types this file minted itself, uid-suffixed, swept from the admin
+ * screen by the afterEach. NOT the shared `E2E_ACTIVITY_TYPE` — see the note on
+ * that constant for why sweeping a string another spec also uses would be a
+ * cross-spec delete.
+ */
+let createdActivityTypes: string[] = [];
 
 async function createActivity(
   page: Page,
@@ -216,8 +236,10 @@ test.describe("Activity CRUD", () => {
     // keep entries alive into the next test if a delete throws, and clearing in
     // a beforeEach would not run at all under test.skip.
     const leaked = createdActivityNames;
+    const leakedTypes = createdActivityTypes;
     createdActivityNames = [];
-    if (leaked.length === 0) return;
+    createdActivityTypes = [];
+    if (leaked.length === 0 && leakedTypes.length === 0) return;
 
     try {
       // purgeActivity assumes the activities table is on screen. A test that
@@ -246,6 +268,26 @@ test.describe("Activity CRUD", () => {
       // test failure with its own; the warning below names what may be left behind.
       console.warn(
         `[activity-crud] afterEach cleanup failed: ${String(error)}`,
+      );
+    }
+
+    // Types LAST, and the order is required rather than tidy: an Activity cannot
+    // exist without its type — `Activity.activityTypeId` is NOT NULL behind an
+    // `ON DELETE RESTRICT` foreign key (prisma/schema.prisma:509-510) — so a
+    // type whose activities are still present is refused by the database, not
+    // merely by the application guard. On a red run the activities survive and
+    // the sweep warns about the type instead of silently leaving it, which is
+    // the honest outcome rather than a second bug.
+    //
+    // Outside the try above on purpose: `sweepReferenceGroups` navigates itself,
+    // never throws, and re-checks what it deleted, so it must still run when the
+    // activity purge above failed — that is exactly the run where a type is most
+    // likely to be left behind.
+    if (leakedTypes.length > 0) {
+      await sweepReferenceGroups(
+        page,
+        [{ tab: ADMIN_TAB.activityType, names: leakedTypes }],
+        "activity-crud",
       );
     }
   });
@@ -386,5 +428,80 @@ test.describe("Activity CRUD", () => {
     // Clean up
     await deleteActivity(page, morningActivity);
     await expectToast(page, /Activity has been deleted/);
+  });
+
+  /**
+   * The delete path E2E-B44 added, and both of its branches.
+   *
+   * The refusal is the half worth having a test for. An Activity cannot exist
+   * without its type (`Activity.activityTypeId` NOT NULL, `ON DELETE RESTRICT`),
+   * so while the activity is present the admin screen must offer no way through
+   * — `DeleteAlertDialog` renders its destructive button only when
+   * `deleteAction` is true, so the assertion is that the open alertdialog has a
+   * Cancel and no Delete. Asserting only the successful delete would leave the
+   * guard untested, and the guard is the part a future refactor breaks silently.
+   *
+   * Registered with the type registry BEFORE the activity is created, because a
+   * create that fails after `selectOrCreateComboboxOption` has written the row
+   * has still leaked one.
+   */
+  test("an activity type can be deleted once nothing references it", async ({
+    page,
+  }) => {
+    const uid = uniqueId();
+    const typeName = `E2E Type ${uid}`;
+    const activityName = `E2E Typed Activity ${uid}`;
+
+    createdActivityTypes.push(typeName);
+    await createActivity(page, activityName, typeName, "10:00 AM", "10:30 AM");
+
+    // While the activity exists the type is undeletable, and the UI has to say
+    // so rather than offer a button the server would refuse.
+    await page.goto("/dashboard/admin?tab=activity-types");
+    await page.waitForLoadState("domcontentloaded");
+    expect(await loadUntilAdminRowVisible(page, typeName)).toBe(true);
+
+    // DOM locators, not getByRole: an open Radix AlertDialog sets aria-hidden on
+    // the table behind it and blanks the accessibility tree (E2E-B40), which is
+    // why e2e/helpers/admin-reference-cleanup.ts reads this screen the same way.
+    await rowsByText(page, typeName)
+      .first()
+      .locator('button[aria-label="Delete"]')
+      .click();
+    const blockedDialog = page.getByRole("alertdialog");
+    await expect(blockedDialog).toBeVisible();
+    await expect(
+      blockedDialog.getByRole("button", { name: "Delete", exact: true }),
+    ).toHaveCount(0);
+    await blockedDialog.getByRole("button", { name: /Cancel/i }).click();
+    await expect(blockedDialog).not.toBeVisible();
+
+    // Remove the only thing referencing it, and the same button now works.
+    await navigateToActivities(page);
+    await stopRunningActivity(page);
+    await deleteActivity(page, activityName);
+    await expectToast(page, /Activity has been deleted/);
+
+    await page.goto("/dashboard/admin?tab=activity-types");
+    await page.waitForLoadState("domcontentloaded");
+    expect(await loadUntilAdminRowVisible(page, typeName)).toBe(true);
+    await rowsByText(page, typeName)
+      .first()
+      .locator('button[aria-label="Delete"]')
+      .click();
+    const confirmDialog = page.getByRole("alertdialog");
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+
+    // The row detaching is the proof, not the toast: the container reloads only
+    // on success, so a refused delete would leave the row exactly where it is.
+    await expect(rowsByText(page, typeName)).toHaveCount(0, { timeout: 15000 });
+
+    // Deleted for real, so drop it from the registry and let the afterEach stay
+    // silent. Anything that threw above skips this line and stays registered,
+    // which is the case the sweep exists for.
+    createdActivityTypes = createdActivityTypes.filter((n) => n !== typeName);
   });
 });
