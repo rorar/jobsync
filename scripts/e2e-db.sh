@@ -116,6 +116,21 @@ e2e_db_provision_run() {
 
   # Provenance, written INTO the copy rather than left beside it.
   #
+  # MILLISECONDS, not seconds. This was `strftime('%s','now') * 1000` until
+  # 2026-09-08, which truncates to the whole second, and the residue gate then
+  # compares it against Prisma's millisecond `updatedAt`
+  # (scripts/check-e2e-residue.sh, the `updatedAt > PROVISIONED_AT` query). On a
+  # run that REBUILDS the template — the template is built, copied and stamped
+  # within the same second — the template's own seed writes land 80-170 ms after
+  # a timestamp rounded down to .000, so the gate reports every freshly seeded
+  # row as a seed row a test modified and did not restore. Measured on the
+  # 2026-09-08 run that seeded the shared ActivityType: Resume +80 ms,
+  # ActivityType +153 ms, StagedVacancy +158/164/169 ms, against a suite that had
+  # run for 8.6 minutes. Runs that reuse an existing template never saw it,
+  # because that template's rows are hours or days older — so the false failure
+  # appeared exactly when someone changed a seed or a migration, which is when
+  # the gate most needs to be believed.
+  #
   # A post-run check that reads the template's stamp file is comparing against
   # whatever the template is NOW, not against what this run started from: a
   # rebuild between the run and the check, or a check invoked hours later, both
@@ -124,7 +139,7 @@ e2e_db_provision_run() {
   if command -v sqlite3 >/dev/null 2>&1; then
     sqlite3 "$E2E_RUN_DB" \
       "CREATE TABLE IF NOT EXISTS _e2e_meta (key TEXT PRIMARY KEY, value TEXT);
-       INSERT OR REPLACE INTO _e2e_meta VALUES ('provisioned_at_ms', CAST(strftime('%s','now') AS INTEGER) * 1000);
+       INSERT OR REPLACE INTO _e2e_meta VALUES ('provisioned_at_ms', CAST((julianday('now') - 2440587.5) * 86400000.0 AS INTEGER));
        INSERT OR REPLACE INTO _e2e_meta VALUES ('template_stamp', '$(_e2e_db_stamp)');" >/dev/null
   fi
 
