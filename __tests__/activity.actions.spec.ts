@@ -1,6 +1,8 @@
 import {
   getAllActivityTypes,
+  getActivityTypeList,
   createActivityType,
+  deleteActivityTypeById,
   getActivitiesList,
   getActivityById,
   updateActivity,
@@ -21,7 +23,9 @@ jest.mock("@prisma/client", () => {
     },
     activityType: {
       findMany: jest.fn(),
+      count: jest.fn(),
       upsert: jest.fn(),
+      delete: jest.fn(),
     },
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
@@ -152,6 +156,194 @@ describe("activity.actions", () => {
       const result = await createActivityType("Learning");
 
       expect(result).toEqual({ success: false, message: "errors.createFailed" });
+    });
+  });
+
+  describe("getActivityTypeList", () => {
+    it("should return a paginated activity type list", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      const mockData = [
+        { id: "type-1", label: "Learning", value: "learning" },
+      ];
+      (prisma.activityType.findMany as jest.Mock).mockResolvedValue(mockData);
+      (prisma.activityType.count as jest.Mock).mockResolvedValue(1);
+
+      const result = await getActivityTypeList(1, 10);
+
+      expect(result).toEqual({ success: true, data: mockData, total: 1 });
+      expect(prisma.activityType.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        skip: 0,
+        take: 10,
+        orderBy: { Activities: { _count: "desc" } },
+      });
+      expect(prisma.activityType.count).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+      });
+    });
+
+    it("should select the capitalised relation counts when countBy is given", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      const mockData = [
+        {
+          id: "type-1",
+          label: "Learning",
+          value: "learning",
+          createdBy: mockUser.id,
+          _count: { Activities: 4, Tasks: 2 },
+        },
+      ];
+      (prisma.activityType.findMany as jest.Mock).mockResolvedValue(mockData);
+      (prisma.activityType.count as jest.Mock).mockResolvedValue(1);
+
+      const result = await getActivityTypeList(1, 10, "activities");
+
+      expect(result).toEqual({ success: true, data: mockData, total: 1 });
+      // The relation names come from prisma/schema.prisma:491-492 and are
+      // capitalised; a lower-case key here would be a runtime Prisma error that
+      // no type would catch, because the object is built by spread.
+      expect(prisma.activityType.findMany).toHaveBeenCalledWith({
+        where: { createdBy: mockUser.id },
+        skip: 0,
+        take: 10,
+        select: {
+          id: true,
+          label: true,
+          value: true,
+          createdBy: true,
+          _count: {
+            select: {
+              Activities: true,
+              Tasks: true,
+            },
+          },
+        },
+        orderBy: { Activities: { _count: "desc" } },
+      });
+    });
+
+    it("should calculate skip correctly for page 2", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activityType.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.activityType.count as jest.Mock).mockResolvedValue(0);
+
+      await getActivityTypeList(2, 10);
+
+      expect(prisma.activityType.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 })
+      );
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+
+      const result = await getActivityTypeList(1, 10);
+
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
+      expect(prisma.activityType.findMany).not.toHaveBeenCalled();
+    });
+
+    it("should handle unexpected errors", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activityType.findMany as jest.Mock).mockRejectedValue(
+        new Error("Database error")
+      );
+
+      const result = await getActivityTypeList(1, 10);
+
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
+    });
+  });
+
+  describe("deleteActivityTypeById", () => {
+    it("should delete an activity type successfully", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.count as jest.Mock).mockResolvedValue(0);
+      const mockDeleted = { id: "type-1", label: "Learning" };
+      (prisma.activityType.delete as jest.Mock).mockResolvedValue(mockDeleted);
+
+      const result = await deleteActivityTypeById("type-1");
+
+      expect(result).toEqual({ success: true, data: mockDeleted });
+      // ADR-015 regression guard: the delete must be scoped to the owner.
+      expect(prisma.activityType.delete).toHaveBeenCalledWith({
+        where: { id: "type-1", createdBy: mockUser.id },
+      });
+    });
+
+    it("should scope the activity guard to this user (ADR-015)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.count as jest.Mock).mockResolvedValue(0);
+      (prisma.activityType.delete as jest.Mock).mockResolvedValue({
+        id: "type-1",
+      });
+
+      await deleteActivityTypeById("type-1");
+
+      // Asserting the WHERE clause, not just the call count: an unscoped count
+      // would let another user's activity block this delete and leak that the
+      // row exists. That exact defect survived in two sibling action files
+      // because their tests only counted calls.
+      expect(prisma.activity.count).toHaveBeenCalledWith({
+        where: { activityTypeId: "type-1", userId: mockUser.id },
+      });
+    });
+
+    it("should return error for unauthenticated user", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+
+      const result = await deleteActivityTypeById("type-1");
+
+      expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
+      expect(prisma.activityType.delete).not.toHaveBeenCalled();
+    });
+
+    it("should prevent deletion when activities exist", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.count as jest.Mock).mockResolvedValue(3);
+
+      const result = await deleteActivityTypeById("type-1");
+
+      expect(result).toEqual({
+        success: false,
+        message: "errors.deleteFailed",
+      });
+      expect(prisma.activityType.delete).not.toHaveBeenCalled();
+    });
+
+    it("should delete when only tasks reference the activity type", async () => {
+      // The asymmetry this pins: Activity_activityTypeId_fkey is ON DELETE
+      // RESTRICT over a NOT NULL column, but Task_activityTypeId_fkey is
+      // ON DELETE SET NULL over a nullable one. A task with no activity type is
+      // a valid state, so tasks must NOT block the delete. Written backwards,
+      // this test would enshrine a type nobody can ever remove.
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.count as jest.Mock).mockResolvedValue(0);
+      const mockDeleted = {
+        id: "type-1",
+        label: "Learning",
+        _count: { Activities: 0, Tasks: 7 },
+      };
+      (prisma.activityType.delete as jest.Mock).mockResolvedValue(mockDeleted);
+
+      const result = await deleteActivityTypeById("type-1");
+
+      expect(result).toEqual({ success: true, data: mockDeleted });
+      expect(prisma.activityType.delete).toHaveBeenCalledWith({
+        where: { id: "type-1", createdBy: mockUser.id },
+      });
+    });
+
+    it("should handle unexpected errors", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.count as jest.Mock).mockResolvedValue(0);
+      (prisma.activityType.delete as jest.Mock).mockRejectedValue(
+        new Error("Delete failed")
+      );
+
+      const result = await deleteActivityTypeById("type-1");
+
+      expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
     });
   });
 

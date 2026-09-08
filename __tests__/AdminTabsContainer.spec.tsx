@@ -24,6 +24,18 @@ jest.mock("@/actions/jobLocation.actions", () => ({
   getJobLocationsList: jest.fn().mockResolvedValue({ data: [], total: 0 }),
 }));
 
+// Radix only mounts the ACTIVE TabsContent (Presence with
+// `present: forceMount || isSelected`, @radix-ui/react-tabs dist/index.mjs:157),
+// so the render-only tests never reach this module. The tab-switch test does:
+// clicking a trigger makes that tab active, which mounts its container and runs
+// its load effect. That is why jobtitle.actions and jobLocation.actions above
+// are mocked and jobSource.actions/tag.actions — whose tabs nobody clicks — are
+// not, and it is why activity-types needs a mock of its own.
+jest.mock("@/actions/activity.actions", () => ({
+  getActivityTypeList: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  deleteActivityTypeById: jest.fn(),
+}));
+
 describe("AdminTabsContainer", () => {
   const user = userEvent.setup({ skipHover: true });
 
@@ -31,7 +43,7 @@ describe("AdminTabsContainer", () => {
     jest.clearAllMocks();
   });
 
-  it("should render all three tabs", () => {
+  it("should render all six reference tabs", () => {
     render(<AdminTabsContainer />);
 
     expect(screen.getByRole("tab", { name: "Companies" })).toBeInTheDocument();
@@ -40,6 +52,11 @@ describe("AdminTabsContainer", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: "Locations" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Sources" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Skills" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Activity Types" })
     ).toBeInTheDocument();
   });
 
@@ -69,6 +86,19 @@ describe("AdminTabsContainer", () => {
 
     expect(mockPush).toHaveBeenCalledWith(
       "/dashboard/admin?tab=locations"
+    );
+  });
+
+  // The slug matters beyond the URL: the E2E cleanup helper navigates straight
+  // to /dashboard/admin?tab=activity-types and never clicks the tab list.
+  it("should switch to activity types tab and update URL", async () => {
+    render(<AdminTabsContainer />);
+
+    const activityTypesTab = screen.getByRole("tab", { name: "Activity Types" });
+    await user.click(activityTypesTab);
+
+    expect(mockPush).toHaveBeenCalledWith(
+      "/dashboard/admin?tab=activity-types"
     );
   });
 
