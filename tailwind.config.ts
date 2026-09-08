@@ -43,6 +43,10 @@ const config = {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+  			// NOTE: `text-destructive` does NOT resolve to the entry above. The
+  			// textColor override further down points it at --destructive-text,
+  			// because the fill and the text cannot share one value and still
+  			// both reach WCAG AA. See the block comment in src/app/globals.css.
   			muted: {
   				DEFAULT: 'hsl(var(--muted))',
   				foreground: 'hsl(var(--muted-foreground))'
@@ -58,6 +62,19 @@ const config = {
   			card: {
   				DEFAULT: 'hsl(var(--card))',
   				foreground: 'hsl(var(--card-foreground))'
+  			}
+  		},
+  		// Splits the TEXT role of `destructive` away from the surface role that
+  		// `colors.destructive` keeps. `text-destructive` and
+  		// `text-destructive-foreground` both keep working; `bg-destructive`,
+  		// `border-destructive` and `ring-destructive` are untouched and still read
+  		// --destructive. Written as an object, not a bare string: a string would
+  		// replace the whole palette entry and `text-destructive-foreground` would
+  		// stop resolving.
+  		textColor: {
+  			destructive: {
+  				DEFAULT: 'hsl(var(--destructive-text))',
+  				foreground: 'hsl(var(--destructive-foreground))'
   			}
   		},
   		borderRadius: {
