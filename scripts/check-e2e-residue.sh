@@ -101,26 +101,55 @@ ALLOWED_GROWTH=(
 # and the wrong owner was acted on. To find the real one, read the row names
 # out of `prisma/.e2e-run.db` and match their prefixes against the specs.
 KNOWN_DEBT=(
-  "Resume:E2E-B25"     # 5 survived 2026-09-05, all automation-crud's; keyboard-ux left none
-  "JobTitle:E2E-B25"   # 15 survived 2026-09-05: job-crud, job-detail-panels, job-status-crud
-  "Company:E2E-B25"    # 15 survived 2026-09-05, incl. contact-company-link's "E2E Firma"
-  "Location:E2E-B25"   # KBTest Loc, "location test", "Boston", "Cambridge"
-  "Tag:E2E-B24"        # KBSkill / KBMulti / KBDupe / KBAria — no cleanup exists at all
-  "Person:E2E-B22"     # four specs archive but never delete
-  "Referral:E2E-B23"   # no cleanup anywhere, spec or backstop
-  "Task:E2E-B24"       # task-crud deletes inline, so a failing assertion skips it
-  "Activity:E2E-B24"   # same, and activity-crud deletes the Activity but not its type
-  "ActivityType:E2E-B24"  # never deleted inline at all; the purge used to catch it
-  "ResumeSection:E2E-B24" # resume children hang off optional FKs; deleting the
-  "ContactInfo:E2E-B24"   #   section orphans them rather than removing them, and
-  "Summary:E2E-B24"       #   the purge had no step for any of them
-  "WorkExperience:E2E-B24"
-  "Education:E2E-B24"
-  "Automation:E2E-B38"    # automation-crud deletes inline, skipped on a throw
-  "JobSource:E2E-B38"     # createJob's fallback creates "Indeed" and nothing removes it
-  "JobStatus:E2E-B38"     # job-status-crud's cleanup is a best-effort try/catch
-  "Job:E2E-B38"           # inline delete, so a failing assertion leaves the row
+  # Still leaking, measured over four consecutive full runs on 2026-09-07/08
+  # (two production, two dev). The counts move by one or two between runs; the
+  # presence does not.
+  # Re-pointed 2026-09-08 from E2E-B25 to E2E-B38, by reading the row NAMES out
+  # of the kept run database instead of inferring the owner from the model. The
+  # rows are `E2E Resume <uid>` / `E2E Job <uid>` / `E2E Company <uid>` /
+  # `E2E Location <uid>` plus the unprefixed `Software Developer` and
+  # `Senior Engineer`; NOT one `KBTest`/`KBRapid`/`KBMobile`, which is what
+  # E2E-B25 is about. The five Resumes carry the same five uids as the five
+  # leaked Automations, because an automation that survives keeps its resume
+  # undeletable — automation-crud says so in its own warning.
+  "Resume:E2E-B38"     # +5, automation-crud, one per surviving automation
+  "JobTitle:E2E-B38"   # +3: job-crud's `E2E Job <uid>`, profile-crud's two unprefixed
+  "Company:E2E-B38"    # +1, job-crud, same uid as its JobTitle
+  "Location:E2E-B38"   # +1, job-crud, same uid
+  "ActivityType:E2E-B24"  # +1 every run; no admin tab exists for it, so the
+                          #   afterEach sweep that fixed Activity cannot reach it
+  "Person:E2E-B22"     # +4 — structural: no deletePerson exists, by GDPR design
+  "Referral:E2E-B23"   # +1 — structural, same shape as Person
+  "Automation:E2E-B38" # +5
+  "JobSource:E2E-B38"  # +1 — the row is `Manual`, the tenth against nine seeded
+                       #   (prisma/seed.ts), not the "Indeed" this comment used to name
+  "Job:E2E-B38"        # inline delete, so it leaks only when a test FAILS first:
+                       #   +1 in the one run of the four that had a failure, 0 in
+                       #   the other three. Kept for that reason.
 )
+
+# REMOVED 2026-09-08, and the removal is the point of the entry rather than
+# tidying: while a model sits in this array the gate PRINTS it and carries on, so
+# a regression in a model that has actually been fixed would be classified as
+# known debt instead of failing the run. E2E-B24 said exactly that and nobody had
+# acted on it.
+#
+# Each of these measured ZERO across the same four consecutive full runs, and
+# each has a cleanup path that runs on the failing path too (an `afterEach` net,
+# not an inline delete), which is why the zero is expected to hold:
+#
+#   Tag            keyboard-ux sweeps it via ADMIN_TAB.tag
+#   Task           task-crud's afterEach purge
+#   Activity       activity-crud's afterEach purge
+#   ResumeSection  profile-crud deletes the resume; the cascade in
+#   ContactInfo      deleteResumeById's transaction takes its children
+#   Summary
+#   WorkExperience
+#   Education
+#   JobStatus      job-status-crud's cleanup, zero in four runs incl. the failing one
+#
+# If one of them comes back, the gate now fails and names it — which is the whole
+# difference between a measured fix and an enforced one.
 
 # WHERE THESE ENTRIES CAME FROM — the split is itself a finding.
 #
