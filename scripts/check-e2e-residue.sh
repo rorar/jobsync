@@ -77,7 +77,7 @@ ALLOWED_GROWTH=(
 # Debt, not permission.
 #
 # These models leak TODAY, from specs the 2026-09-02 audit already recorded
-# (E2E-B24, E2E-B25). A gate that is red from its first day gets switched off, so
+# (E2E-B22, E2E-B23, E2E-B24) plus E2E-B38's one conditional survivor. A gate that is red from its first day gets switched off, so
 # they do not fail the run — but they are NOT in ALLOWED_GROWTH either, because
 # nothing about them is by design. Every run prints them as outstanding debt with
 # the finding that owns them, and the entry is deleted when the finding is.
@@ -101,31 +101,49 @@ ALLOWED_GROWTH=(
 # and the wrong owner was acted on. To find the real one, read the row names
 # out of `prisma/.e2e-run.db` and match their prefixes against the specs.
 KNOWN_DEBT=(
-  # Still leaking, measured over four consecutive full runs on 2026-09-07/08
-  # (two production, two dev). The counts move by one or two between runs; the
-  # presence does not.
-  # Re-pointed 2026-09-08 from E2E-B25 to E2E-B38, by reading the row NAMES out
-  # of the kept run database instead of inferring the owner from the model. The
-  # rows are `E2E Resume <uid>` / `E2E Job <uid>` / `E2E Company <uid>` /
-  # `E2E Location <uid>` plus the unprefixed `Software Developer` and
-  # `Senior Engineer`; NOT one `KBTest`/`KBRapid`/`KBMobile`, which is what
-  # E2E-B25 is about. The five Resumes carry the same five uids as the five
-  # leaked Automations, because an automation that survives keeps its resume
-  # undeletable — automation-crud says so in its own warning.
-  "Resume:E2E-B38"     # +5, automation-crud, one per surviving automation
-  "JobTitle:E2E-B38"   # +3: job-crud's `E2E Job <uid>`, profile-crud's two unprefixed
-  "Company:E2E-B38"    # +1, job-crud, same uid as its JobTitle
-  "Location:E2E-B38"   # +1, job-crud, same uid
+  # PRUNED 2026-09-08, and the pruning is the point: while a model sits here the
+  # gate PRINTS it and carries on, so a regression in a model that is actually
+  # fixed would be classified as known debt instead of failing the run.
+  #
+  # Removed: Resume, JobTitle, Company, Location, Automation, JobSource — the
+  # whole of E2E-B38's measured leak. It had ONE cause and two halves:
+  #   * `deleteAutomation` filtered menu items on `.lucide-trash-2`, a class
+  #     lucide-react never renders (it builds `lucide-${toKebabCase("Trash2")}`
+  #     = `lucide-trash2`, no hyphen before the digit — createLucideIcon.js:17
+  #     and shared/src/utils.js:8). The click expired against actionTimeout and
+  #     the cleanup net's catch swallowed it, so every test leaked its
+  #     automation on the GREEN path, and each surviving automation held its
+  #     resume undeletable (profile.actions.ts:389-398, Restrict at
+  #     schema.prisma:556). That is Automation +5 and Resume +5 with the same
+  #     five uids.
+  #   * `enrichment.spec.ts` had no teardown at all — the one spec under
+  #     e2e/crud that writes reference rows and owned none. It creates the
+  #     JobSource row `Manual` (not among the nine seeded in prisma/seed.ts;
+  #     AddJob.tsx declares the control creatable), plus a JobTitle, Company and
+  #     Location per run.
+  # A third contributor was profile-crud's JobTitle sweep, commented out since
+  # 2026-09-04 pending E2E-B39. E2E-B39 turned out to be a ComboBox defect and
+  # was fixed in the component (3fe7412a), so the sweep is back on.
+  #
+  # Evidence for the removal is ONE full production run, 112/112 in 8.3 min,
+  # with all six at zero — not the four consecutive runs the previous prune
+  # used. That is deliberate: unlike those nine, these six have a MECHANISM that
+  # was proven broken statically and then repaired, so the run confirms a
+  # prediction rather than establishing a pattern. If a later run reds on one of
+  # these, believe the gate: re-add the entry with the count and the date.
   "ActivityType:E2E-B24"  # +1 every run; no admin tab exists for it, so the
-                          #   afterEach sweep that fixed Activity cannot reach it
+                          #   afterEach sweep that fixed Activity cannot reach it.
+                          #   Structural — see E2E-B44 for the product gap.
   "Person:E2E-B22"     # +4 — structural: no deletePerson exists, by GDPR design
   "Referral:E2E-B23"   # +1 — structural, same shape as Person
-  "Automation:E2E-B38" # +5
-  "JobSource:E2E-B38"  # +1 — the row is `Manual`, the tenth against nine seeded
-                       #   (prisma/seed.ts), not the "Indeed" this comment used to name
-  "Job:E2E-B38"        # inline delete, so it leaks only when a test FAILS first:
-                       #   +1 in the one run of the four that had a failure, 0 in
-                       #   the other three. Kept for that reason.
+  "Job:E2E-B38"        # KEPT while the six above go. Its mechanism is unchanged:
+                       #   the Job is deleted INLINE in test bodies, so it leaks
+                       #   only when a body throws first — +1 in the one run of
+                       #   four that had a failure, 0 in the others, and 0 in the
+                       #   green run that cleared the six. A green run cannot
+                       #   distinguish "fixed" from "not exercised" here, so
+                       #   enforcing it would add a second red line to every
+                       #   genuine failure.
 )
 
 # REMOVED 2026-09-08, and the removal is the point of the entry rather than

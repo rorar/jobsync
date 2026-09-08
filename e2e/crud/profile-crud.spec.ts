@@ -195,7 +195,26 @@ test.afterEach(async ({ page }, testInfo) => {
     // baseline. The row is written either way. So whatever empties the trigger
     // depends on what ran before, which is a stronger reason to leave the sweep
     // off until E2E-B39 is understood rather than a weaker one.
-    // { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    //
+    // RE-ENABLED 2026-09-08. The condition that paragraph set has been met:
+    // E2E-B39 is understood and fixed. It was never a test-isolation problem —
+    // `ComboBox` called `options.unshift(result)` on an array its PARENT owns
+    // (`ComboBox.tsx:63`) while deriving the trigger's text from that same
+    // array, so a parent that refetched dropped the created row and the trigger
+    // rendered `""`. Fixed in the component by `3fe7412a`, with a regression
+    // test in `__tests__/ComboBox.spec.tsx` verified red against the unfixed
+    // version. The 2026-09-04 measurement above therefore predates the fix by
+    // two days, and the suite has since run 112/112 green with "add work
+    // experience" passing.
+    //
+    // What this buys: `Software Developer` and `Senior Engineer` stop leaking,
+    // which is part of E2E-B38's measured `JobTitle +3`. If "add work
+    // experience" or "edit experience dialog opens and cancels" goes red in a
+    // FULL run (not a single-spec run — the failure was order-dependent),
+    // comment this line out again and say so here rather than removing this
+    // note; that would be evidence E2E-B39's fix is incomplete, which is worth
+    // more than the sweep.
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
     { tab: ADMIN_TAB.company, names: createdCompanies },
     { tab: ADMIN_TAB.location, names: createdLocations },
   ];
@@ -375,8 +394,10 @@ test("add summary section", async ({ page }) => {
 test("add work experience", async ({ page }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume Experience ${uid}`;
-  // uid-suffixed so teardown can delete it — see the note on `locationText`
-  // in "add education and edit school name".
+  // A FIXED name, not uid-suffixed — teardown finds it through the registry
+  // below, not through its name. See the corrected note on `locationText` in
+  // "add education and edit school name" for what that costs under parallel
+  // workers.
   const jobText = "Software Developer";
 
   await navigateToProfile(page);
@@ -450,8 +471,10 @@ test("add work experience", async ({ page }) => {
 test("edit experience dialog opens and cancels", async ({ page }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume EditExp ${uid}`;
-  // uid-suffixed so teardown can delete it — see the note on `locationText`
-  // in "add education and edit school name".
+  // A FIXED name, not uid-suffixed — teardown finds it through the registry
+  // below, not through its name. See the corrected note on `locationText` in
+  // "add education and edit school name" for what that costs under parallel
+  // workers.
   const jobText = "Software Developer";
 
   await navigateToProfile(page);
@@ -548,8 +571,10 @@ test("multi-section integration: summary + experience + education", async ({
   const schoolName = "MIT";
   const degreeName = "Master of Science";
   const fieldOfStudy = "Computer Science";
-  // uid-suffixed so teardown can delete them — see the note on `locationText`
-  // in "add education and edit school name".
+  // FIXED names, not uid-suffixed — teardown finds them through the registries
+  // below. See the corrected note on `locationText` in "add education and edit
+  // school name"; `"MIT"` is the shortest of them and the most exposed to the
+  // substring match described there.
   const jobTitle = "Senior Engineer";
   const companyName = "E2E Corp";
   const locationText = "Boston";
@@ -743,10 +768,22 @@ test("add education and edit school name", async ({ page }) => {
 
   await page.getByPlaceholder("Ex: Stanford").fill(originalSchool);
 
-  // uid-suffixed so teardown can delete it: a FIXED name is shared with every
-  // other worker running this file, and deleting one out from under a
-  // concurrent test would break that test's form (e2e/CONVENTIONS.md —
-  // "Use uniqueId() for test data names").
+  // CORRECTED 2026-09-08. This note used to read "uid-suffixed so teardown can
+  // delete it", and the line under it is `"Cambridge"` — a fixed literal. Three
+  // other sites in this file repeat the claim about `"Software Developer"`,
+  // `"Senior Engineer"` and `"MIT"`, which are fixed too. Nothing here is
+  // uid-suffixed, and teardown never depended on it: cleanup in this file is
+  // REGISTRY-driven (`createdLocations.push` below, swept by the afterEach), so
+  // it deletes what a test recorded rather than what a name pattern matches.
+  //
+  // The concurrency hazard the old note described is real and UNADDRESSED: a
+  // fixed name is shared with every other worker running this file, and
+  // `deleteAdminReferenceRow` matches a case-insensitive SUBSTRING, so under
+  // `E2E_WORKERS>1` one worker's teardown can delete a row another worker's form
+  // is still using. The suite runs single-worker by default
+  // (`scripts/test-e2e.sh`), which is why this has never been seen. Giving these
+  // names a `uniqueId()` suffix is the fix; it was not done here because it
+  // changes what several assertions match and wants its own run.
   const locationText = "Cambridge";
   // Registered before the write. `selectOrCreateComboboxOption` CREATES the row
   // when it is absent, and that row outlives the resume: deleting the resume

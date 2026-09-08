@@ -1,6 +1,105 @@
 import { test, expect, type Page } from "@playwright/test";
 import { uniqueId, selectOrCreateComboboxOption, rowsByText } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
+
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B38)
+// ---------------------------------------------------------------------------
+//
+// This file had NO teardown of any kind — the only spec under e2e/crud that
+// writes reference rows and owns none of them. `createJob` below writes four:
+// a `JobTitle`, a `Company` and a `Location` through
+// `selectOrCreateComboboxOption`, plus a `JobSource` — the row `Manual`, which
+// is CREATED rather than selected, because `prisma/seed.ts:20-30` seeds nine
+// sources and none of them is called that, and `AddJob.tsx:578-595` declares
+// the control `creatable` with an `onCreateOption` that calls
+// `createJobSource(label)`. `deleteJob` removes the Job and nothing else, so
+// all four survive every run — the GREEN path included, which is what
+// distinguishes this file from the specs that leak only when a body throws.
+//
+// The pattern is the shared one (`../helpers/admin-reference-cleanup`), as used
+// by job-crud, job-detail-panels, job-status-crud and contact-company-link:
+//   1. ARRAYS, not scalars — one `createJob` writes four rows.
+//   2. Registration sits where the row is WRITTEN and BEFORE the call that
+//      writes it: a `selectOrCreateComboboxOption` that creates the row and then
+//      fails its follow-up assertion has still leaked one.
+//   3. De-registration only on a PROVEN delete — there is none here, because
+//      nothing in a test body deletes a reference row.
+//   4. The afterEach swaps the registries out before its first await.
+//   5. It navigates itself, inside the sweep.
+//   6. Two tiers — the deleters swallow, the sweep re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+//
+// `"Manual"` is the one name here without a `uniqueId()` suffix, and
+// `deleteAdminReferenceRow` matches a case-insensitive SUBSTRING of the row's
+// text, so it is worth stating why that is safe rather than leaving it to be
+// discovered: the sources table renders label + value + count, and no seeded
+// source (Indeed, LinkedIn, Company Career Page, Glassdoor, Google,
+// ZipRecruiter, EURES, Arbeitsagentur, JSearch — prisma/seed.ts:20-30) contains
+// "manual" in either field. A tenth seeded source that did would make this
+// delete the wrong row.
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+let createdJobSources: string[] = [];
+
+// The Resume the first body builds as a precondition. Registered here rather
+// than deleted at the end of the body for the reason job-detail-panels.spec.ts
+// records: the body's LAST statements are cleanup, and a cleanup step that
+// throws abandons every step after it — `deleteJob` throwing would take
+// `deleteResume` with it. e2e/CONVENTIONS.md names the shape in its
+// anti-pattern table: "Cleanup only at the end of the test body" ->
+// "test.afterEach for critical cleanup".
+let createdResumes: string[] = [];
+
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:34) and this one
+  // can visit the profile page and four admin tables on top of a body that
+  // already builds a resume and a job. Buy the extra time explicitly rather
+  // than let a green test start failing on its teardown; keep it small enough
+  // that a body which has itself become slow still surfaces.
+  test.setTimeout(testInfo.timeout + 60_000);
+
+  // Swap the registries out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const groups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+    { tab: ADMIN_TAB.source, names: createdJobSources },
+  ];
+  const resumes = createdResumes;
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+  createdJobSources = [];
+  createdResumes = [];
+
+  // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts),
+  // so on a red run this costs one navigation and reports nothing — it cannot
+  // turn a failing test into a differently-failing one. It CAN still be refused
+  // for a reason of its own: `deleteResumeById` (profile.actions.ts:389-398)
+  // returns `profile.resumeHasAutomations` while an Automation points at the
+  // resume. Nothing in this file creates one, so that path is not expected
+  // here; it is named because the same helper is shared with specs where it is.
+  for (const title of resumes) {
+    await deleteResume(page, title);
+  }
+
+  // The Job is deleted by the body, and that ORDER is required rather than
+  // tidy: `deleteJobTitleById` (jobtitle.actions.ts:110-145),
+  // `deleteCompanyById` (company.actions.ts:337-375) and `deleteJobSourceById`
+  // (jobSource.actions.ts:77-89) each count the referencing Jobs first and
+  // refuse while one remains. On a red run the job survives and the sweep warns
+  // about four rows instead of silently leaving them — the honest outcome, not
+  // a second bug.
+  await sweepReferenceGroups(page, groups, "enrichment");
+});
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific)
@@ -40,6 +139,12 @@ async function createJob(
     .getByPlaceholder("Copy and paste job link here")
     .fill(opts.url ?? "https://example.com/careers/e2e-test");
 
+  // Each name is registered immediately BEFORE the call that can write it. The
+  // helper's create path calls the server action and only then closes the
+  // popover, so a run that dies between the two — or that fails the
+  // `toContainText` below — has already left the row behind. Registering after
+  // a successful assertion would clean up exactly the cases that do not need it.
+  createdJobTitles.push(opts.title);
   await selectOrCreateComboboxOption(
     page,
     "Title",
@@ -48,6 +153,7 @@ async function createJob(
   );
   await expect(page.getByLabel("Title")).toContainText(opts.title);
 
+  createdCompanies.push(opts.company);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -56,6 +162,7 @@ async function createJob(
   );
   await expect(page.getByLabel("Company")).toContainText(opts.company);
 
+  createdLocations.push(opts.location);
   await selectOrCreateComboboxOption(
     page,
     "Location",
@@ -64,12 +171,15 @@ async function createJob(
   );
   await expect(page.getByLabel("Location")).toContainText(opts.location);
 
-  // Fill Job Source (required by Zod schema, .min(2))
+  // Fill Job Source (required by Zod schema, .min(2)). This one is CREATED, not
+  // selected — see the header: "Manual" is not among the nine seeded sources.
+  const source = opts.source ?? "Manual";
+  createdJobSources.push(source);
   await selectOrCreateComboboxOption(
     page,
     "Job Source",
     "Search source",
-    opts.source ?? "Manual",
+    source,
   );
 
   await page.locator(".tiptap").click();
@@ -167,7 +277,10 @@ test.describe("Enrichment", () => {
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
-    // Ensure a resume exists (required to avoid FK violation on submit)
+    // Ensure a resume exists (required to avoid FK violation on submit).
+    // Registered BEFORE the create: a create that fails after the row was
+    // written has still leaked one.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     // Create a job
@@ -198,9 +311,12 @@ test.describe("Enrichment", () => {
     // "E2E Company" -> "EC"
     await expect(companyLogo.locator("span")).toContainText("EC");
 
-    // Cleanup
+    // Cleanup. The Job is deleted here rather than in the afterEach because the
+    // reference sweep needs it gone FIRST (see the hook), and because
+    // `deleteJob` asserts removal — it is a proof, not a best-effort. The
+    // resume is removed by the afterEach: it used to be this line, and a
+    // `deleteJob` that threw took it with it.
     await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
   });
 
   test("enrichment module settings are visible with activation toggles", async ({

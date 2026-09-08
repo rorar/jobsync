@@ -71,8 +71,14 @@ test.afterEach(async ({ page }, testInfo) => {
   createdLocations = [];
   createdResumes = [];
 
-  // Resume first, and for the same dependency reason as the sweep below: the
-  // Job carries `resumeId`, so a resume cannot go while its job is still there.
+  // Resume first. NOT for a dependency reason — that claim was here until
+  // 2026-09-08 and was wrong. `Job.resumeId` is an OPTIONAL relation with no
+  // `onDelete` (`prisma/schema.prisma:436-437`), and `deleteResumeById` guards
+  // only against Automations, never against Jobs
+  // (`src/actions/profile.actions.ts:389-398`), so a resume CAN go while its
+  // job is still there. The order is kept because it is harmless and because
+  // the sweep below genuinely does depend on the Job being gone; only the
+  // stated reason changes.
   // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts), so
   // on a red run this costs one navigation and reports nothing — it cannot turn
   // a failing test into a differently-failing one.

@@ -46,6 +46,19 @@ export const ADMIN_TAB = {
   company: "companies",
   location: "locations",
   tag: "skills",
+  // `JobSource` is a reference row like the other four, and it is created the
+  // same way: `selectOrCreateComboboxOption(page, "Job Source", …)` writes one
+  // whenever the typed label is not already seeded
+  // (e2e/crud/enrichment.spec.ts:68-73 types "Manual", which
+  // prisma/seed.ts:20-30 does not seed). It was missing here only because no
+  // caller had needed it. `JobSourcesTable.tsx:98` carries the same
+  // `aria-label={t("common.delete")}` and `JobSourcesContainer.tsx:83-93` the
+  // same Load More, so `deleteAdminReferenceRow` works against it unchanged.
+  //
+  // Ordering caveat, identical to JobTitle and Company: `deleteJobSourceById`
+  // (src/actions/jobSource.actions.ts:77-89) counts the referencing Jobs and
+  // refuses while one remains, so the Job must go first.
+  source: "sources",
 } as const;
 
 export type AdminReferenceTab = (typeof ADMIN_TAB)[keyof typeof ADMIN_TAB];

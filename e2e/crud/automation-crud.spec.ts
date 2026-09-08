@@ -30,6 +30,18 @@ async function navigateToAutomations(page: Page) {
  * but this net (E2E-B37: "ends at zero" was a property of the run being green,
  * not of the spec owning its rows).
  *
+ * CORRECTION, 2026-09-08. "The helper itself is sound" was WRONG, and the
+ * paragraph above is kept only so the correction has something to point at.
+ * `deleteAutomation`'s Trash2 selector was `.lucide-trash-2`, which cannot
+ * match the class lucide-react renders (`lucide-trash2` — see the derivation at
+ * the selector). The click could therefore only ever expire, and the catch
+ * swallowed it, so EVERY test in this file leaked its automation on the GREEN
+ * path — which is the `Automation +5` measured on a 112/112 production run and
+ * the `Resume +5` carrying the same five uids behind it. The 5/5-green /
+ * zero-rows observation of 2026-09-03 was not reproduced by the four runs of
+ * 2026-09-07/08 and should not be relied on. This net is still required for the
+ * failing path; it was never the whole of what was missing.
+ *
  * `createAutomation` registers here itself so no caller can forget, and
  * `deleteAutomation` de-registers only on a proven-successful delete, so the
  * afterEach below only ever deletes what genuinely leaked. An ARRAY, not a
@@ -126,29 +138,96 @@ async function openAutomationDropdown(page: Page, name: string) {
   await expect(page.getByRole("menuitem").first()).toBeVisible({ timeout: 5000 });
 }
 
+/**
+ * Delete the automation named `name`, and name the step that lost it.
+ *
+ * It still never throws: this is a cleanup net, and a throwing teardown
+ * replaces the real test failure with its own. What changed is that a
+ * swallowed failure is no longer SILENT. Every await below is preceded by an
+ * assignment to `step`, so the catch can say which one threw — the question
+ * E2E-B38 was left holding ("WHICH of its four steps fails is unmeasured").
+ *
+ * COMPLEMENTARY TO, NOT A COPY OF, THE afterEach WARNING BELOW. That one fires
+ * once per name at the end of the test, after the net has had its own go, and
+ * reports the OUTCOME: the row is still in the run database. This one fires per
+ * failed ATTEMPT and reports the CAUSE: the await that lost it. On a leak you
+ * get both, and the pair is what turns "something leaked" into "this step
+ * broke". Grep the run for `deleteAutomation failed:`.
+ *
+ * The two probes in the catch are there because the error alone cannot separate
+ * the two most plausible losers:
+ *   matches    — `getByText(name)` is unscoped and NOT `.first()`, so two
+ *                matching elements make the disappearance assertion a
+ *                strict-mode violation rather than a surviving row. A `2` here
+ *                and a `0` from the count in the afterEach mean opposite things.
+ *   dialogOpen — a confirm click the server refused leaves the AlertDialog on
+ *                screen, and Radix then blanks the accessibility tree behind it,
+ *                so every later read reports "not there" about a row that is
+ *                (E2E-B40). That failure surfaces at a LATER step than the one
+ *                that caused it, which is exactly what a step name alone would
+ *                mislead about.
+ *
+ * `navigateToAutomations` moved INSIDE the try. It was the one statement of
+ * this helper that could throw out of it, which contradicted the contract the
+ * catch below claims and — since five of the callers are the second-to-last
+ * statement of a test body — could fail a test from its own cleanup.
+ */
 async function deleteAutomation(page: Page, name: string) {
-  await navigateToAutomations(page);
+  // Read by the catch. Keep the assignments immediately above the await they
+  // describe; a name that has drifted from its await is worse than none.
+  let step = "navigate";
   try {
+    await navigateToAutomations(page);
+
+    step = "open-dropdown";
     await openAutomationDropdown(page, name);
 
-    // Click "Delete" menu item — identified by Trash2 icon (locale-independent)
+    step = "click-delete-menuitem";
+    // Click "Delete" menu item — identified by Trash2 icon (locale-independent).
+    //
+    // `lucide-trash2`, with NO hyphen before the digit. lucide-react builds the
+    // class as `lucide-${toKebabCase(iconName)}`
+    // (node_modules/lucide-react/dist/esm/createLucideIcon.js:17) and its
+    // toKebabCase only hyphenates a lowercase/digit followed by an UPPERCASE
+    // letter (`/([a-z0-9])([A-Z])/`, dist/esm/shared/src/utils.js:8). The icon
+    // name is the literal "Trash2" (dist/esm/icons/trash-2.js:10), which
+    // contains no such pair, so it lowercases to "trash2" — while "Pencil",
+    // "Pause" and "Play", the three sibling selectors in this file, are
+    // single-word and come out right by accident of having no digit.
+    // `.lucide-trash-2` therefore matched NOTHING, `.click()` expired against
+    // `actionTimeout: 10_000` (playwright.config.ts:41), and the catch below
+    // swallowed it — five green tests, five leaked automations, five resumes
+    // held undeletable behind them (profile.actions.ts:389-398).
+    // Both spellings are matched so a future lucide that hyphenates digits
+    // cannot silently reintroduce the same bug.
     await page
       .getByRole("menuitem")
-      .filter({ has: page.locator(".lucide-trash-2") })
+      .filter({ has: page.locator(".lucide-trash2, .lucide-trash-2") })
       .click();
 
+    step = "confirm-dialog-appears";
     await expect(page.getByRole("alertdialog")).toBeVisible();
-    // Click the destructive action button (last button in the alert dialog footer)
+
+    step = "click-confirm";
+    // Click the destructive action button (last button in the alert dialog
+    // footer). AlertDialogContent renders Cancel then Action and no close "X"
+    // (src/components/ui/alert-dialog.tsx:101-127, AutomationList.tsx:322-331),
+    // so `.last()` is the destructive one.
     await page
       .getByRole("alertdialog")
       .getByRole("button")
       .last()
       .click();
+
+    step = "confirm-dialog-closes";
     // Wait for the alert dialog to close (Radix closes it immediately)
     await expect(page.getByRole("alertdialog")).not.toBeVisible({ timeout: 10000 });
 
+    step = "card-disappears";
     // The server action runs async after Radix closes the dialog.
     // Wait for the automation to disappear from the list (onRefresh reloads it).
+    // `onRefresh` runs only on success (AutomationList.tsx:129-131), so a
+    // refused delete surfaces here rather than at the click above.
     await expect(page.getByText(name)).not.toBeVisible({ timeout: 15000 });
 
     // Gone for real (card no longer in the list) — drop it from the tracking so
@@ -156,9 +235,29 @@ async function deleteAutomation(page: Page, name: string) {
     // that threw above skips this line and stays tracked, which is exactly the
     // case the net exists for.
     createdAutomationNames = createdAutomationNames.filter((n) => n !== name);
-  } catch {
+  } catch (error) {
     // swallow-ok: cleanup net — the automation may already be gone, and a
-    // throwing teardown would replace the real test failure with its own.
+    // throwing teardown would replace the real test failure with its own. The
+    // warning below is what stops that being silent; it does not rethrow.
+    //
+    // One line, collapsed whitespace: Playwright errors are multi-line with a
+    // call log, and the next reader greps a JSON report for this prefix.
+    const detail = String(error).replace(/\s+/g, " ").slice(0, 400);
+    // Neither probe may throw — this is the catch of a net. `count()` is a
+    // snapshot (no auto-wait), `isVisible()` is strict and can throw on a
+    // multi-match, hence the guards.
+    const matches = await page
+      .getByText(name)
+      .count()
+      .catch(() => -1);
+    const dialogOpen = await page
+      .getByRole("alertdialog")
+      .isVisible()
+      .catch(() => false);
+    console.warn(
+      `[automation-crud] deleteAutomation failed: step=${step} name=${name} ` +
+        `matches=${matches} dialogOpen=${dialogOpen} error=${detail}`,
+    );
   }
 }
 
