@@ -62,7 +62,21 @@ function JobSourcesContainer() {
             </div>
           </CardHeader>
           <CardContent>
-            {loading && <Loading />}
+            {/*
+              A live region that enters the DOM together with its content is
+              announced inconsistently; one that is already mounted when its
+              content changes is not. So the announcement lives here, always
+              rendered, and the spinner below is aria-hidden so that the two
+              never announce the same thing twice.
+            */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {loading ? t("common.loading") : ""}
+            </div>
+            {loading && (
+              <div aria-hidden="true">
+                <Loading />
+              </div>
+            )}
             {sources.length > 0 && (
               <>
                 <JobSourcesTable
@@ -84,16 +98,35 @@ function JobSourcesContainer() {
                 </div>
               </>
             )}
+            {/*
+              Without this, an empty list renders a blank card: no table, no
+              message, no explanation. Same shape as ActivityTypesContainer.
+            */}
+            {!loading && sources.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                {t("admin.noJobSources")}
+              </div>
+            )}
             {sources.length < totalJobSources && (
               <div className="flex justify-center p-4">
+                {/*
+                  The label stays put: with aria-disabled the button no longer
+                  vanishes from the focus model when it goes inert, and the
+                  live region above already announces the load.
+                */}
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => loadJobSources(page + 1)}
-                  disabled={loading}
-                  className="btn btn-primary"
+                  onClick={() => {
+                    // aria-disabled keeps the button focusable and in the tab
+                    // order, so refusing the activation is the handler's job.
+                    if (loading) return;
+                    loadJobSources(page + 1);
+                  }}
+                  aria-disabled={loading}
+                  className="btn btn-primary aria-disabled:opacity-50"
                 >
-                  {loading ? t("common.loading") : t("common.loadMore")}
+                  {t("common.loadMore")}
                 </Button>
               </div>
             )}
