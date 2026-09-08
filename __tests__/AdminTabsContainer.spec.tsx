@@ -4,9 +4,10 @@ import userEvent from "@testing-library/user-event";
 import AdminTabsContainer from "@/components/admin/AdminTabsContainer";
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/dashboard/admin",
   useSearchParams: () => new URLSearchParams(""),
 }));
@@ -73,7 +74,7 @@ describe("AdminTabsContainer", () => {
     const jobTitlesTab = screen.getByRole("tab", { name: "Job Titles" });
     await user.click(jobTitlesTab);
 
-    expect(mockPush).toHaveBeenCalledWith(
+    expect(mockReplace).toHaveBeenCalledWith(
       "/dashboard/admin?tab=job-titles"
     );
   });
@@ -84,7 +85,7 @@ describe("AdminTabsContainer", () => {
     const locationsTab = screen.getByRole("tab", { name: "Locations" });
     await user.click(locationsTab);
 
-    expect(mockPush).toHaveBeenCalledWith(
+    expect(mockReplace).toHaveBeenCalledWith(
       "/dashboard/admin?tab=locations"
     );
   });
@@ -97,9 +98,43 @@ describe("AdminTabsContainer", () => {
     const activityTypesTab = screen.getByRole("tab", { name: "Activity Types" });
     await user.click(activityTypesTab);
 
-    expect(mockPush).toHaveBeenCalledWith(
+    expect(mockReplace).toHaveBeenCalledWith(
       "/dashboard/admin?tab=activity-types"
     );
+  });
+
+  // UI-B6: `replace` rather than `push`. The tab is view state; pushing made
+  // Back walk the user through every tab they had opened instead of leaving the
+  // page.
+  it("should not push a history entry when switching tabs", async () => {
+    render(<AdminTabsContainer />);
+
+    await user.click(screen.getByRole("tab", { name: "Locations" }));
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  // UI-B7: manual activation. Radix's default would select each tab an arrow
+  // key lands on, and selecting one mounts its container and fires its load.
+  it("should move focus without activating when arrowing through the tab list", async () => {
+    render(<AdminTabsContainer />);
+
+    const companiesTab = screen.getByRole("tab", { name: "Companies" });
+    companiesTab.focus();
+    await user.keyboard("{ArrowRight}");
+
+    expect(screen.getByRole("tab", { name: "Job Titles" })).toHaveFocus();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(companiesTab).toHaveAttribute("data-state", "active");
+  });
+
+  it("should activate the focused tab on Enter", async () => {
+    render(<AdminTabsContainer />);
+
+    screen.getByRole("tab", { name: "Companies" }).focus();
+    await user.keyboard("{ArrowRight}{Enter}");
+
+    expect(mockReplace).toHaveBeenCalledWith("/dashboard/admin?tab=job-titles");
   });
 
   it("should render companies tab panel content by default", async () => {
