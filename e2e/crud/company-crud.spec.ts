@@ -84,8 +84,11 @@ async function deleteCompany(page: Page, name: string) {
   const row = page.getByRole("row", { name: new RegExp(name, "i") }).first();
   await expect(row).toBeVisible({ timeout: 10000 });
 
-  // Click the delete button
-  await row.getByRole("button", { name: "Delete" }).click();
+  // Click the delete button, by TEST ID rather than by name. The button is now
+  // named after its row ("Delete E2E Company 1234", `common.deleteNamed`), and
+  // `getByRole`'s `name` matches the WHOLE accessible name rather than a
+  // substring, so `{ name: "Delete" }` would match nothing here.
+  await row.getByTestId("delete-row").click();
 
   // Confirm in the DeleteAlertDialog — click the last button (destructive action)
   await expect(page.getByRole("alertdialog")).toBeVisible();
@@ -190,8 +193,8 @@ test.describe("Company CRUD", () => {
       .getByRole("row", { name: new RegExp(companyName, "i") })
       .first();
 
-    // Click the delete button
-    await row.getByRole("button", { name: "Delete" }).click();
+    // Click the delete button (test id — see `deleteCompany` above for why).
+    await row.getByTestId("delete-row").click();
 
     // Confirm in the DeleteAlertDialog — last button is the destructive action
     await expect(page.getByRole("alertdialog")).toBeVisible();

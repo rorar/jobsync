@@ -32,8 +32,11 @@ import { rowsByText } from "./index";
  * whoever owns them; until then there are three implementations rather than
  * six, and only one of them is added to.
  *
- * ENGLISH ONLY. The Delete control is selected by `aria-label="Delete"`
- * (`common.delete`, en). Every caller must have set `NEXT_LOCALE=en`.
+ * ENGLISH ONLY, but no longer because of the ROW's delete button: that one is
+ * selected by `data-testid="delete-row"` and does not move when its label is
+ * translated or reworded. What is still English is the CONFIRM button inside
+ * the AlertDialog, matched by its accessible name "Delete" (`common.delete`,
+ * en), and the "Load More" button. Every caller must have set `NEXT_LOCALE=en`.
  */
 
 /**
@@ -51,9 +54,9 @@ export const ADMIN_TAB = {
   // whenever the typed label is not already seeded
   // (e2e/crud/enrichment.spec.ts:68-73 types "Manual", which
   // prisma/seed.ts:20-30 does not seed). It was missing here only because no
-  // caller had needed it. `JobSourcesTable.tsx:98` carries the same
-  // `aria-label={t("common.delete")}` and `JobSourcesContainer.tsx:83-93` the
-  // same Load More, so `deleteAdminReferenceRow` works against it unchanged.
+  // caller had needed it. `JobSourcesTable.tsx` carries the same
+  // `data-testid="delete-row"` delete button and `JobSourcesContainer.tsx:83-93`
+  // the same Load More, so `deleteAdminReferenceRow` works against it unchanged.
   //
   // Ordering caveat, identical to JobTitle and Company: `deleteJobSourceById`
   // (src/actions/jobSource.actions.ts:77-89) counts the referencing Jobs and
@@ -72,7 +75,7 @@ export const ADMIN_TAB = {
   // block: its foreign key is `ON DELETE SET NULL` over a nullable column
   // (:531-532), so a task keeps its row and loses its type.
   //
-  // `ActivityTypesTable.tsx` carries the same `aria-label={t("common.delete")}`
+  // `ActivityTypesTable.tsx` carries the same `data-testid="delete-row"`
   // delete button and `ActivityTypesContainer.tsx` the same Load More, so
   // `deleteAdminReferenceRow` works against it unchanged.
   activityType: "activity-types",
@@ -164,11 +167,21 @@ export async function deleteAdminReferenceRow(
   try {
     if (!(await loadUntilAdminRowVisible(page, name))) return true;
     // DOM locator again, and for the same reason as `loadUntilAdminRowVisible`:
-    // this read happens against the TABLE, which is what Radix blanks. The
-    // button carries `aria-label={t("common.delete")}` (JobTitlesTable.tsx:94,
-    // CompaniesTable.tsx:122, JobLocationsTable.tsx:95, TagsTable.tsx:100), so
-    // this selects exactly what `getByRole` did.
-    await row.locator('button[aria-label="Delete"]').first().click();
+    // this read happens against the TABLE, which is what Radix blanks. A raw
+    // attribute selector rather than `getByTestId` only so that the sentence
+    // above stays literally true without the reader having to know how
+    // `getByTestId` resolves; the two are the same locator here, because
+    // `playwright.config.ts` sets no `testIdAttribute` and the default is
+    // `data-testid`.
+    //
+    // A TEST ID rather than a label: every admin table now names its delete
+    // button after the row it deletes (`common.deleteNamed` — "Delete Acme
+    // Corp"), so `[aria-label="Delete"]` matches nothing and a widened name
+    // match would break again at the next rewording or locale change. The
+    // attribute is on the delete button of all six tables — CompaniesTable,
+    // JobTitlesTable, JobLocationsTable, JobSourcesTable, TagsTable,
+    // ActivityTypesTable.
+    await row.locator('[data-testid="delete-row"]').first().click();
     const dialog = page.getByRole("alertdialog");
     await dialog.waitFor({ state: "visible", timeout: 5000 });
     // `DeleteAlertDialog` renders Cancel + Delete; the destructive one is
@@ -193,7 +206,7 @@ export async function deleteAdminReferenceRow(
     // Dismiss whatever is still on screen before that re-check and before the
     // next name in the loop. Two of the three ways this catch is reached leave
     // an AlertDialog OPEN: the row is still referenced, so `DeleteAlertDialog`
-    // renders no destructive action at all (`DeleteAlertDialog.tsx:47` —
+    // renders no destructive action at all (`DeleteAlertDialog.tsx:89` —
     // `{deleteAction && <AlertDialogAction/>}`) and the click above times out;
     // or the delete was refused server-side and the row never detached. An open
     // dialog is not inert — Radix blanks the accessibility tree behind it and

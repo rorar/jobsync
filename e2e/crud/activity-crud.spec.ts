@@ -464,16 +464,24 @@ test.describe("Activity CRUD", () => {
     // DOM locators, not getByRole: an open Radix AlertDialog sets aria-hidden on
     // the table behind it and blanks the accessibility tree (E2E-B40), which is
     // why e2e/helpers/admin-reference-cleanup.ts reads this screen the same way.
+    //
+    // The row's delete button is matched by its TEST ID, not its label: the
+    // admin tables name it after the row it deletes (`common.deleteNamed` —
+    // "Delete E2E Type 1234"), so a name match would break at the next
+    // rewording or locale change. The dialog's confirm button below is a
+    // different control and keeps its plain "Delete" label.
     await rowsByText(page, typeName)
       .first()
-      .locator('button[aria-label="Delete"]')
+      .locator('[data-testid="delete-row"]')
       .click();
     const blockedDialog = page.getByRole("alertdialog");
     await expect(blockedDialog).toBeVisible();
     await expect(
       blockedDialog.getByRole("button", { name: "Delete", exact: true }),
     ).toHaveCount(0);
-    await blockedDialog.getByRole("button", { name: /Cancel/i }).click();
+    // "Close", not "Cancel": with no destructive action rendered, this dialog
+    // is a message and its only button says so (DeleteAlertDialog.tsx).
+    await blockedDialog.getByRole("button", { name: /Close/i }).click();
     await expect(blockedDialog).not.toBeVisible();
 
     // Remove the only thing referencing it, and the same button now works.
@@ -487,7 +495,7 @@ test.describe("Activity CRUD", () => {
     expect(await loadUntilAdminRowVisible(page, typeName)).toBe(true);
     await rowsByText(page, typeName)
       .first()
-      .locator('button[aria-label="Delete"]')
+      .locator('[data-testid="delete-row"]')
       .click();
     const confirmDialog = page.getByRole("alertdialog");
     await expect(confirmDialog).toBeVisible();

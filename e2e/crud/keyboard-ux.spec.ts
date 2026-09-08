@@ -123,11 +123,15 @@ async function deleteAdminReferenceRow(
   try {
     if (!(await loadUntilAdminRowVisible(page, name))) return true;
     // DOM locator again, and for the same reason as `loadUntilAdminRowVisible`:
-    // this read happens against the TABLE, which is what Radix blanks. The
-    // button carries `aria-label={t("common.delete")}` (JobTitlesTable.tsx:94,
-    // CompaniesTable.tsx:122, JobLocationsTable.tsx:95, TagsTable.tsx:100), so
-    // this selects exactly what `getByRole` did.
-    await row.locator('button[aria-label="Delete"]').first().click();
+    // this read happens against the TABLE, which is what Radix blanks.
+    //
+    // A TEST ID rather than a label: every admin table now names its delete
+    // button after the row it deletes (`common.deleteNamed` — "Delete Acme
+    // Corp"), so `[aria-label="Delete"]` matches nothing and a widened name
+    // match would break again at the next rewording or locale change. The
+    // attribute is on the delete button of all six admin tables. The confirm
+    // button below is a different control and keeps its plain "Delete" label.
+    await row.locator('[data-testid="delete-row"]').first().click();
     const dialog = page.getByRole("alertdialog");
     await dialog.waitFor({ state: "visible", timeout: 5000 });
     // `DeleteAlertDialog` renders Cancel + Delete; the destructive one is
@@ -146,7 +150,7 @@ async function deleteAdminReferenceRow(
     // Dismiss whatever is still on screen before that re-check and before the
     // next name in the loop. Two of the three ways this catch is reached leave
     // an AlertDialog OPEN: the row is still referenced, so `DeleteAlertDialog`
-    // renders no destructive action at all (`DeleteAlertDialog.tsx:47` —
+    // renders no destructive action at all (`DeleteAlertDialog.tsx:89` —
     // `{deleteAction && <AlertDialogAction/>}`) and the click above times out;
     // or the delete was refused server-side and the row never detached. An
     // open dialog is not inert — Radix blanks the accessibility tree behind it
