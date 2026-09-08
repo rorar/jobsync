@@ -2616,7 +2616,10 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 **68/68 E2E-Tests bestehen** (1 Worker, 17 min). Playwright Workers: 3 (CI: 1).
 
 **Phase 1 — DONE:**
-- ✅ Stale Data Cleanup: `e2e/cleanup-stale-data.ts` in globalSetup
+- ✅ Stale Data Cleanup: `e2e/cleanup-stale-data.ts` in globalSetup — **superseded 2026-09-02
+  (ADR-045).** The file is deleted; each run now gets a disposable copy of a seeded template
+  (`scripts/e2e-db.sh`), so there is no previous run's residue to purge. Kept here as the
+  history of Phase 1, not as a description of the suite (E2E-B36).
 - ✅ `networkidle` → `domcontentloaded` (SSE blockierte networkidle)
 - ✅ Server Warm-up in globalSetup (Turbopack Cold-Start)
 
