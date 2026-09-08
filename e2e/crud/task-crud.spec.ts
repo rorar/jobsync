@@ -395,6 +395,8 @@ test.describe("Task CRUD", () => {
         }
       }
     } catch (error) {
+      // swallow-ok: afterEach cleanup net — a throwing hook would replace the real
+      // test failure with its own; the warning below names what may be left behind.
       console.warn(`[task-crud] afterEach cleanup failed: ${String(error)}`);
     }
   });

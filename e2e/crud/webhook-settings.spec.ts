@@ -190,6 +190,9 @@ async function deleteWebhookEndpoint(page: Page, webhookUrl: string) {
     // case the net exists for.
     createdEndpointUrls = createdEndpointUrls.filter((u) => u !== webhookUrl);
   } catch {
+    // swallow-ok: teardown helper, called for an endpoint the test may never have
+    // created. It asserts through `expectToast`, and a throw here would fail the
+    // test on its cleanup rather than on its subject.
     // Endpoint may not exist — skip cleanup
   }
 }
@@ -239,6 +242,8 @@ test.describe("Webhook Settings", () => {
         }
       }
     } catch (error) {
+      // swallow-ok: afterEach cleanup net — a throwing hook would replace the real
+      // test failure with its own; the warning below names what may be left behind.
       console.warn(
         `[webhook-settings] afterEach cleanup failed: ${String(error)}`,
       );

@@ -70,6 +70,46 @@ interface Offender {
   line: number;
 }
 
+/**
+ * Names of functions declared in `e2e/` whose body contains an `expect(`.
+ *
+ * Built once from the whole directory, so a helper in `e2e/helpers/` counts for
+ * a `try` in any spec. Same lexical spirit as the rest of this file: a function
+ * declaration, then the next 4 kB, which comfortably covers every helper here
+ * and cannot run away on a large file.
+ */
+let assertingHelpersCache: Set<string> | null = null;
+function assertingHelpers(): Set<string> {
+  if (assertingHelpersCache) return assertingHelpersCache;
+  const names = new Set<string>();
+  for (const file of specFiles(E2E_DIR)) {
+    const src = readFileSync(file, "utf8");
+    for (const m of src.matchAll(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/g)) {
+      if (src.slice(m.index! + m[0].length, m.index! + m[0].length + 4000).includes("expect(")) {
+        names.add(m[1]);
+      }
+    }
+  }
+  assertingHelpersCache = names;
+  return names;
+}
+
+/** Does this try body delegate its assertions to a helper that asserts? */
+function callsAssertingHelper(tryBody: string, src: string): boolean {
+  // `src` is passed so a unit probe can supply its own declarations rather than
+  // depending on whatever happens to live in e2e/ that day.
+  const local = new Set<string>();
+  for (const m of src.matchAll(/(?:export\s+)?(?:async\s+)?function\s+(\w+)/g)) {
+    if (src.slice(m.index! + m[0].length, m.index! + m[0].length + 4000).includes("expect(")) {
+      local.add(m[1]);
+    }
+  }
+  for (const name of [...local, ...assertingHelpers()]) {
+    if (new RegExp(`\\b${name}\\s*\\(`).test(tryBody)) return true;
+  }
+  return false;
+}
+
 function findSwallowedAssertions(src: string, relPath: string): Offender[] {
   const offenders: Offender[] = [];
   const tryRe = /\btry\s*\{/g;
@@ -80,9 +120,19 @@ function findSwallowedAssertions(src: string, relPath: string): Offender[] {
     if (closeBrace === -1) continue;
 
     const tryBody = src.slice(openBrace + 1, closeBrace);
-    // Only try blocks that ASSERT are interesting. A try around a best-effort
-    // click that asserts nothing has nothing to swallow.
-    if (!tryBody.includes("expect(")) continue;
+    // Only try blocks that ASSERT are interesting — but "asserts" includes
+    // calling something that asserts for you.
+    //
+    // The first version tested `tryBody.includes("expect(")` alone, and that is
+    // a rule about SPELLING, not about behaviour: `try { await deleteJob(page,
+    // t) } catch {}` swallows every assertion inside `deleteJob` and contains
+    // no `expect(` of its own. Measured 2026-09-08 when this was tightened:
+    // eight such catches existed in `e2e/`, all of them cleanup helpers that
+    // would have been marked `swallow-ok` had anyone been asked. None was a
+    // test body — so the invariant held, by the accident of how the code was
+    // written rather than because it was checked.
+    if (!tryBody.includes("expect(") && !callsAssertingHelper(tryBody, src))
+      continue;
 
     // The catch clause follows, optionally binding an error.
     const after = src.slice(closeBrace + 1);
@@ -174,5 +224,37 @@ describe("E2E specs never swallow their own assertions", () => {
       'test.skip(true, "external service unavailable");',
     );
     expect(findSwallowedAssertions(skipped, "probe.ts")).toHaveLength(0);
+  });
+
+  it("detects an assertion delegated to a helper, not just a literal expect()", () => {
+    // The shape the first version could not see: the try body contains no
+    // `expect(` at all, and swallows every assertion inside the helper it calls.
+    // Eight of these existed in e2e/ when this case was added — all cleanup
+    // nets, so the invariant had held by spelling rather than by check.
+    const viaHelper = `
+      async function deleteThing(page) {
+        await expect(page.getByRole("row")).toHaveCount(0);
+      }
+      test("x", async ({ page }) => {
+        try {
+          await deleteThing(page);
+        } catch {
+          console.warn("cleanup failed");
+        }
+      });`;
+    expect(findSwallowedAssertions(viaHelper, "probe.ts")).toHaveLength(1);
+
+    const marked = viaHelper.replace(
+      'console.warn("cleanup failed");',
+      "// swallow-ok: cleanup net",
+    );
+    expect(findSwallowedAssertions(marked, "probe.ts")).toHaveLength(0);
+
+    // And the negative: a helper that asserts nothing is still not interesting.
+    const inertHelper = viaHelper.replace(
+      'await expect(page.getByRole("row")).toHaveCount(0);',
+      "await page.getByRole(\"row\").click();",
+    );
+    expect(findSwallowedAssertions(inertHelper, "probe.ts")).toHaveLength(0);
   });
 });

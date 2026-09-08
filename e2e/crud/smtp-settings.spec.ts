@@ -155,6 +155,9 @@ async function deleteSmtpConfig(page: Page) {
     // Dismiss the delete toast
     await dismissToasts(page);
   } catch {
+    // swallow-ok: teardown helper, called from tests that may not have created a
+    // config at all. It asserts through `dismissToasts`/locator waits, and a throw
+    // here would fail the test on its cleanup rather than on its subject.
     // Config may not exist — skip cleanup
   }
 }
