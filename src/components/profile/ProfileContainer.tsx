@@ -130,14 +130,24 @@ const ProfileContainer = () => {
         )}
         {resumes.length < totalResumes && (
           <div className="flex justify-center p-4">
+            {/*
+              The label stays put: with aria-disabled the button no longer
+              vanishes from the focus model when it goes inert, and the
+              <Loading /> region above already announces the load.
+            */}
             <Button
               size="sm"
               variant="outline"
-              onClick={() => loadResumes(page + 1)}
-              disabled={loading}
-              className="btn btn-primary"
+              onClick={() => {
+                // aria-disabled keeps the button focusable and in the tab
+                // order, so refusing the activation is the handler's job.
+                if (loading) return;
+                loadResumes(page + 1);
+              }}
+              aria-disabled={loading}
+              className="btn btn-primary aria-disabled:opacity-50"
             >
-              {loading ? t("profile.loading") : t("profile.loadMore")}
+              {t("profile.loadMore")}
             </Button>
           </div>
         )}

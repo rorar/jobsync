@@ -475,16 +475,26 @@ function JobsContainer({
               )}
               {jobs.length < totalJobs && (
                 <div className="flex justify-center p-4">
+                  {/*
+                    The label stays put: with aria-disabled the button no
+                    longer vanishes from the focus model when it goes inert,
+                    and the <Loading /> region above already announces the
+                    load.
+                  */}
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      loadJobs(page + 1, filterKey, searchTerm || undefined)
-                    }
-                    disabled={loading}
-                    className="btn btn-primary"
+                    onClick={() => {
+                      // aria-disabled keeps the button focusable and in the
+                      // tab order, so refusing the activation is the
+                      // handler's job.
+                      if (loading) return;
+                      loadJobs(page + 1, filterKey, searchTerm || undefined);
+                    }}
+                    aria-disabled={loading}
+                    className="btn btn-primary aria-disabled:opacity-50"
                   >
-                    {loading ? t("common.loading") : t("jobs.loadMore")}
+                    {t("jobs.loadMore")}
                   </Button>
                 </div>
               )}

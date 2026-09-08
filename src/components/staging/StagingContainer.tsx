@@ -763,19 +763,30 @@ function StagingContainer() {
                 )}
                 {vacancies.length < totalCount && (
                   <div className="flex justify-center p-4">
+                    {/*
+                      The label stays put: with aria-disabled the button no
+                      longer vanishes from the focus model when it goes
+                      inert, and the <Loading /> region above already
+                      announces the load.
+                    */}
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() =>
+                      onClick={() => {
+                        // aria-disabled keeps the button focusable and in
+                        // the tab order, so refusing the activation is the
+                        // handler's job.
+                        if (loading) return;
                         loadVacancies(
                           page + 1,
                           activeTab,
                           searchTerm || undefined,
-                        )
-                      }
-                      disabled={loading}
+                        );
+                      }}
+                      aria-disabled={loading}
+                      className="aria-disabled:opacity-50"
                     >
-                      {loading ? t("common.loading") : t("common.loadMore")}
+                      {t("common.loadMore")}
                     </Button>
                   </div>
                 )}

@@ -379,21 +379,29 @@ function TasksContainer({
           )}
           {tasks.length < totalTasks && (
             <div className="flex justify-center p-4">
+              {/*
+                The label stays put: with aria-disabled the button no longer
+                vanishes from the focus model when it goes inert, and the
+                <Loading /> region above already announces the load.
+              */}
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
+                onClick={() => {
+                  // aria-disabled keeps the button focusable and in the tab
+                  // order, so refusing the activation is the handler's job.
+                  if (loading) return;
                   loadTasks(
                     page + 1,
                     filterKey,
                     statusFilter,
                     searchTerm || undefined,
-                  )
-                }
-                disabled={loading}
-                className="btn btn-primary"
+                  );
+                }}
+                aria-disabled={loading}
+                className="btn btn-primary aria-disabled:opacity-50"
               >
-                {loading ? t("common.loading") : t("tasks.loadMore")}
+                {t("tasks.loadMore")}
               </Button>
             </div>
           )}
