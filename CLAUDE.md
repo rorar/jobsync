@@ -1021,6 +1021,8 @@ E2E_PROD=0 ./scripts/test-e2e.sh e2e/crud/<one>.spec.ts   # spec iteration while
 ```
 On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
 
+**Full reference: `docs/e2e-run-modes.md`** — every difference with the file:line it came from, what each mode has actually found, and the traps (`.next-e2e`, the standalone warning, mock data being dev-only). The summary below is the part worth carrying in every session.
+
 **Production is the default since 2026-09-08; `E2E_PROD=0` opts into the dev server.** The
 decision rests on measurements in `docs/BUGS.md` (E2E-B35, E2E-B42, E2E-B43): seven full dev runs
 on 2026-09-07 each paid one watchdog restart, which landed inside `job-detail-panels.spec.ts:440`
