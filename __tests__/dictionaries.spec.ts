@@ -30,6 +30,20 @@ import { forms } from "@/i18n/dictionaries/forms";
 // to the en block alone shipped silently and rendered as the raw key string in
 // de/fr/es.
 import { admin } from "@/i18n/dictionaries/admin";
+// The remaining nine. Every dictionary file is now in the map: the check is
+// only worth what it covers, and "which namespaces are in it" was itself the
+// blind spot — admin sat outside it for its whole life. All nine were verified
+// consistent at the time they were added, so this pins the state rather than
+// reporting a backlog.
+import { api } from "@/i18n/dictionaries/api";
+import { blacklist } from "@/i18n/dictionaries/blacklist";
+import { deck } from "@/i18n/dictionaries/deck";
+import { enrichment } from "@/i18n/dictionaries/enrichment";
+import { insideTrack } from "@/i18n/dictionaries/insideTrack";
+import { jobStatus } from "@/i18n/dictionaries/jobStatus";
+import { logoAsset } from "@/i18n/dictionaries/logoAsset";
+import { profile } from "@/i18n/dictionaries/profile";
+import { questions } from "@/i18n/dictionaries/questions";
 
 const LOCALES = ["en", "de", "fr", "es"] as const;
 
@@ -56,6 +70,16 @@ const namespaceDictionaries = {
   forms,
   // Admin tab strings (companies, job titles, locations, sources, skills):
   admin,
+  // Completing the map:
+  api,
+  blacklist,
+  deck,
+  enrichment,
+  insideTrack,
+  jobStatus,
+  logoAsset,
+  profile,
+  questions,
 } as const;
 
 describe("getDictionary", () => {
