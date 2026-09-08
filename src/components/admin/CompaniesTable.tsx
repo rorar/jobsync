@@ -10,7 +10,7 @@ import {
 } from "../ui/table";
 import { Company } from "@/models/job.model";
 import { Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { deleteCompanyById } from "@/actions/company.actions";
 import { toast } from "../ui/use-toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
@@ -30,6 +30,12 @@ function CompaniesTable({
   editCompany,
 }: CompaniesTableProps) {
   const { t } = useTranslations();
+  // A successful delete unmounts the row that holds the button the user pressed,
+  // so there is nothing left for Radix to restore focus to and a keyboard user
+  // is dropped on document.body. The table survives the delete, so it is the
+  // stable landing place; `tabIndex={-1}` lets it take focus programmatically
+  // without joining the tab order.
+  const tableRef = useRef<HTMLTableElement>(null);
   const [alert, setAlert] = useState<AlertDialog>({
     openState: false,
     deleteAction: false,
@@ -73,15 +79,17 @@ function CompaniesTable({
 
   return (
     <>
-      <Table>
+      <Table ref={tableRef} tabIndex={-1}>
         <TableHeader>
           <TableRow>
             <TableHead className="hidden w-[100px] sm:table-cell">
-              <span className="sr-only">Company Logo</span>
+              <span className="sr-only">{t("admin.companyLogo")}</span>
             </TableHead>
-            <TableHead>Company Name</TableHead>
-            <TableHead className="hidden sm:table-cell">Value</TableHead>
-            <TableHead>Jobs Applied</TableHead>
+            <TableHead>{t("admin.companyName")}</TableHead>
+            <TableHead className="hidden sm:table-cell">
+              {t("admin.value")}
+            </TableHead>
+            <TableHead>{t("admin.jobsApplied")}</TableHead>
             <TableHead>{t("common.actions")}</TableHead>
           </TableRow>
         </TableHeader>
@@ -113,17 +121,19 @@ function CompaniesTable({
                       onClick={() => editCompany(company.id)}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                      <span className="sr-only">{t("common.edit")}</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-lg"
                       className="text-destructive"
-                      aria-label={t("common.delete")}
+                      data-testid="delete-row"
+                      aria-label={t("common.deleteNamed").replace(
+                        "{name}",
+                        company.label,
+                      )}
                       onClick={() => onDeleteCompany(company)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      <span className="sr-only">{t("common.delete")}</span>
                     </Button>
                   </div>
                 </TableCell>
@@ -133,13 +143,14 @@ function CompaniesTable({
         </TableBody>
       </Table>
       <DeleteAlertDialog
-        pageTitle="company"
+        pageTitle={t("admin.deleteTargetCompany")}
         open={alert.openState}
         onOpenChange={() => setAlert({ openState: false, deleteAction: false })}
         onDelete={() => deleteCompany(alert.itemId)}
         alertTitle={alert.title}
         alertDescription={alert.description}
         deleteAction={alert.deleteAction}
+        returnFocusTo={tableRef}
       />
     </>
   );
