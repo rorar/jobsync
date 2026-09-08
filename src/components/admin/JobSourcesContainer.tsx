@@ -24,15 +24,18 @@ function JobSourcesContainer() {
   const loadJobSources = useCallback(
     async (page: number) => {
       setLoading(true);
-      const { data, total } = await getJobSourceList(
-        page,
-        recordsPerPage,
-        "applied"
-      );
-      if (data) {
-        setSources((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalJobSources(total ?? 0);
-        setPage(page);
+      try {
+        const { data, total } = await getJobSourceList(
+          page,
+          recordsPerPage,
+          "applied"
+        );
+        if (data) {
+          setSources((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalJobSources(total ?? 0);
+          setPage(page);
+        }
+      } finally {
         setLoading(false);
       }
     },

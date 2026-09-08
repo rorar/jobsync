@@ -27,15 +27,18 @@ function CompaniesContainer() {
   const loadCompanies = useCallback(
     async (page: number) => {
       setLoading(true);
-      const { data, total } = await getCompanyList(
-        page,
-        recordsPerPage,
-        "applied"
-      );
-      if (data) {
-        setCompanies((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalCompanies(total ?? 0);
-        setPage(page);
+      try {
+        const { data, total } = await getCompanyList(
+          page,
+          recordsPerPage,
+          "applied"
+        );
+        if (data) {
+          setCompanies((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalCompanies(total ?? 0);
+          setPage(page);
+        }
+      } finally {
         setLoading(false);
       }
     },

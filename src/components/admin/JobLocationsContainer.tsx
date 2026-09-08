@@ -24,15 +24,18 @@ function JobLocationsContainer() {
   const loadJobLocations = useCallback(
     async (page: number) => {
       setLoading(true);
-      const { data, total } = await getJobLocationsList(
-        page,
-        recordsPerPage,
-        "applied"
-      );
-      if (data) {
-        setLocations((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalJobLocations(total ?? 0);
-        setPage(page);
+      try {
+        const { data, total } = await getJobLocationsList(
+          page,
+          recordsPerPage,
+          "applied"
+        );
+        if (data) {
+          setLocations((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalJobLocations(total ?? 0);
+          setPage(page);
+        }
+      } finally {
         setLoading(false);
       }
     },

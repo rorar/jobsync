@@ -24,15 +24,18 @@ function JobTitlesContainer() {
   const loadJobTitles = useCallback(
     async (page: number) => {
       setLoading(true);
-      const { data, total } = await getJobTitleList(
-        page,
-        recordsPerPage,
-        "applied"
-      );
-      if (data) {
-        setTitles((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalJobTitles(total ?? 0);
-        setPage(page);
+      try {
+        const { data, total } = await getJobTitleList(
+          page,
+          recordsPerPage,
+          "applied"
+        );
+        if (data) {
+          setTitles((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalJobTitles(total ?? 0);
+          setPage(page);
+        }
+      } finally {
         setLoading(false);
       }
     },
