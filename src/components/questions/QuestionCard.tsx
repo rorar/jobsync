@@ -52,6 +52,11 @@ export function QuestionCard({
             {question.question}
           </button>
           <div className="flex gap-1">
+            {/*
+              No sr-only span beside the aria-label: aria-label REPLACES the
+              element's content for assistive technology, so the span was never
+              announced and editing it alone changed nothing.
+            */}
             <Button
               variant="ghost"
               size="icon-lg"
@@ -59,7 +64,6 @@ export function QuestionCard({
               onClick={() => onEdit(question)}
             >
               <Pencil className="h-3.5 w-3.5" />
-              <span className="sr-only">{t("questions.edit")}</span>
             </Button>
             <Button
               variant="ghost"
@@ -69,7 +73,6 @@ export function QuestionCard({
               onClick={() => setShowDeleteDialog(true)}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span className="sr-only">{t("questions.delete")}</span>
             </Button>
           </div>
         </div>

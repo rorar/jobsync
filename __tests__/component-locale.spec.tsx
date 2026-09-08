@@ -219,7 +219,12 @@ describe.each(LOCALES)("QuestionCard renders in %s", (locale) => {
     );
     const editText = dict["questions.edit"];
     expect(editText).toBeTruthy();
-    expect(screen.getAllByText(editText).length).toBeGreaterThanOrEqual(1);
+    // By ACCESSIBLE NAME, not by text node. The control is an icon button whose
+    // name comes from its aria-label; it used to also carry an sr-only span with
+    // the same string, which was dead weight (aria-label replaces an element's
+    // content for assistive technology) and was removed. Asserting the name is
+    // both what survives that and what the user actually hears.
+    expect(screen.getByRole("button", { name: editText })).toBeInTheDocument();
   });
 
   it("renders delete menu item with translated text", () => {
@@ -232,9 +237,16 @@ describe.each(LOCALES)("QuestionCard renders in %s", (locale) => {
     );
     const deleteText = dict["questions.delete"];
     expect(deleteText).toBeTruthy();
-    // Delete text appears in the dropdown item AND in the alert dialog action button
-    const deleteElements = screen.getAllByText(deleteText);
-    expect(deleteElements.length).toBeGreaterThanOrEqual(1);
+    // Also by accessible name, and for a second reason: the old text-node
+    // assertion passed without ever reaching the row's delete button.
+    // `questions.delete` and `common.delete` hold the SAME string in all four
+    // locales, so `getAllByText` was satisfied by the dialog's confirm button
+    // alone — the control this test names was never checked.
+    // Exactly TWO, and the count is the whole point: the row's icon button and
+    // the dialog's confirm action. `>= 1` would be satisfied by the dialog
+    // alone, which is how the old assertion passed while never reaching the
+    // control it names.
+    expect(screen.getAllByRole("button", { name: deleteText })).toHaveLength(2);
   });
 
   it("renders translated delete dialog title", () => {

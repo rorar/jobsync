@@ -169,8 +169,17 @@ function QuestionsContainer({
           </div>
         </CardHeader>
         <CardContent>
-          {loading && <Loading />}
-          {!loading && (
+          {/*
+            `questions.length === 0` distinguishes the FIRST load from a
+            pagination load. It used to be `{loading && …}` / `{!loading && …}`,
+            which blanked the whole list on every "Load More": the list, the
+            count and the button itself all unmounted and came back, so the
+            keyboard user's focus was destroyed rather than merely moved, and
+            the page jumped. Only the initial fetch has nothing to keep on
+            screen.
+          */}
+          {loading && questions.length === 0 && <Loading />}
+          {(!loading || questions.length > 0) && (
             <>
               <QuestionList
                 questions={questions}
@@ -194,19 +203,19 @@ function QuestionsContainer({
               )}
             </>
           )}
-          {!loading && questions.length < totalQuestions && (
+          {questions.length < totalQuestions && (
             <div className="flex justify-center p-4">
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  loadQuestions(
-                    page + 1,
-                    filterKey,
-                    searchTerm || undefined
-                  )
-                }
-                disabled={loading}
+                onClick={() => {
+                  // aria-disabled keeps the button focusable and in the tab
+                  // order, so refusing the activation is the handler's job.
+                  if (loading) return;
+                  loadQuestions(page + 1, filterKey, searchTerm || undefined);
+                }}
+                aria-disabled={loading}
+                className="aria-disabled:opacity-50"
               >
                 {t("questions.loadMore")}
               </Button>
