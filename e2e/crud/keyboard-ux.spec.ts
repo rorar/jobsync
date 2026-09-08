@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { rowsByText, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+// Imported from its own file rather than `../helpers` on purpose: the barrel
+// imports `@playwright/test`, and `__tests__/console-oracle.spec.ts` has to be
+// able to reach the classifier from Jest. See the header of that module.
+import { classifyConsoleErrors } from "../helpers/console-oracle";
 
 // ---------------------------------------------------------------------------
 // Reference-data cleanup (E2E-B24 / E2E-B25)
@@ -323,99 +327,13 @@ type ConsoleErrorOracle = {
   /**
    * APPLICATION console errors recorded since the last `mark()`.
    *
-   * Browser transport failures are deliberately not among them; they are
-   * warned about instead. See `classifyConsoleErrors`.
+   * Browser transport failures and a DEVELOPMENT React build's hydration
+   * complaints are deliberately not among them; they are warned about
+   * instead. See `classifyConsoleErrors` in `../helpers/console-oracle`, which
+   * carries the whole argument and its measurements.
    */
   sinceMark: () => string[];
 };
-
-/**
- * Split a console-error window into what the APPLICATION did and what the
- * HARNESS did. Only the first half may fail a test.
- *
- * WHY THE TRANSPORT HALF MUST NOT FAIL A TEST — MEASURED, NOT ASSUMED
- * -------------------------------------------------------------------
- * On the 2026-09-05 full run, "Enter key creates a new option in Title
- * combobox" failed at this oracle with eight entries, every one of them
- * `Failed to load resource: net::ERR_CONNECTION_RESET` or `…_REFUSED`. The
- * behaviour under test had already passed: the trigger showed the created
- * title and the `${title} created` announcement had landed. The cause is in
- * `/tmp/jobsync-e2e-dev.log`, one line above the second `✓ Ready in` —
- * `⚠ Server is approaching used memory threshold, restarting...`. Next.js
- * restarted ITSELF against the 3072 MB heap cap `scripts/dev-e2e.sh` sets, and
- * every request in flight failed at the socket. No kernel OOM was involved,
- * which is why looking for one found nothing.
- *
- * Three reasons that cannot be a test failure:
- *   1. `Failed to load resource: net::ERR_*` is emitted by Chromium's network
- *      stack. No application code ran to produce it, so it is not evidence
- *      about application code — which is the only thing this oracle judges.
- *   2. The restart is the dev server's DESIGNED response to its own heap
- *      threshold. That makes it a recurring property of the harness, not an
- *      accident, and an oracle that fails on it makes every long run randomly
- *      red at an arbitrary test.
- *   3. It lands on whichever test is mid-flight — the most misleading failure
- *      shape available: a green behaviour reported as a code defect at a
- *      file:line unrelated to the cause. Triaging that costs a full cycle and
- *      teaches the team that the oracle is noise, which is how an oracle gets
- *      deleted. This one exists because real console errors were being missed.
- *
- * They are still REPORTED — `sinceMark` warns them to stdout, which Playwright
- * copies into the JSON report — because an oracle that silently discards the
- * inconvenient half is worse than no oracle at all.
- *
- * WHY EVERY PREDICATE IS ANCHORED RATHER THAN A SUBSTRING (E2E-B28)
- * -----------------------------------------------------------------
- * What this replaces was three bare substrings — `favicon`, `404`,
- * `Failed to fetch` — added in `9a891c32e` (2026-03-26) with no recorded
- * reason and never edited since. `404` was the dangerous one: as a substring
- * it also suppresses a GENUINE application error whose message embeds the
- * status, and this app writes several (`api/logos/[id]/route.ts:67,96,102`,
- * `api/profile/resume/route.ts:112`). Each rule below is anchored to the shape
- * of a message the BROWSER emits, so an application error that merely mentions
- * 404 now fails the test, as it always should have.
- *
- * Provenance, since the finding was that none was recorded: the `net::ERR_`
- * rule is measured, above. The other two are RECONSTRUCTED intent. They are
- * therefore written to suppress strictly less than the substrings did, never
- * more — the reconstruction can be wrong in the direction of noise, not in the
- * direction of silence.
- */
-
-/** Chromium's network stack gave up on a request. Never application code. */
-const BROWSER_TRANSPORT_ERROR = /^Failed to load resource: net::ERR_/;
-
-/** A `fetch()` that never reached a server. Same class as `net::ERR_*`. */
-const FETCH_TRANSPORT_ERROR = /^(TypeError: )?Failed to fetch\b/;
-
-/** Chromium's own message for a request the server answered with a 404. */
-const BROWSER_RESOURCE_404 =
-  /^Failed to load resource: the server responded with a status of 404\b/;
-
-function classifyConsoleErrors(errors: string[]): {
-  app: string[];
-  transport: string[];
-} {
-  const app: string[] = [];
-  const transport: string[] = [];
-
-  for (const e of errors) {
-    if (BROWSER_TRANSPORT_ERROR.test(e) || FETCH_TRANSPORT_ERROR.test(e)) {
-      transport.push(e);
-      continue;
-    }
-    // A missing static asset is not an application fault. `favicon` is kept
-    // from the original filter and is UNMEASURED — Playwright's `msg.text()`
-    // for a resource-load failure carries no URL, so this may well match
-    // nothing. It is retained rather than deleted because removing it could
-    // only be justified by a run that proves it dead, and dropping it costs
-    // nothing while the 404 rule above already covers the case it named.
-    if (BROWSER_RESOURCE_404.test(e) || e.includes("favicon")) continue;
-    app.push(e);
-  }
-
-  return { app, transport };
-}
 
 /**
  * A console-error oracle with an EXPLICIT observation window.
@@ -450,7 +368,7 @@ function collectConsoleErrors(page: Page): ConsoleErrorOracle {
       windowStart = errors.length;
     },
     sinceMark: () => {
-      const { app, transport } = classifyConsoleErrors(
+      const { app, transport, frameworkHydration } = classifyConsoleErrors(
         errors.slice(windowStart),
       );
       if (transport.length > 0) {
@@ -462,6 +380,21 @@ function collectConsoleErrors(page: Page): ConsoleErrorOracle {
             `console window — the dev server was unreachable, which is a ` +
             `statement about the harness and not about the app: ` +
             `${JSON.stringify(transport)}`,
+        );
+      }
+      if (frameworkHydration.length > 0) {
+        // Same contract as the transport warning above, and for the same
+        // reason: a suppressed message that leaves no trace is how a suite
+        // starts lying. Under a production build this branch is unreachable —
+        // the prose it matches exists only in React's development bundle — so
+        // seeing it at all also tells the reader which server answered.
+        console.warn(
+          `[keyboard-ux] ${frameworkHydration.length} development-build ` +
+            `hydration report(s) inside the console window — E2E-B11 traced ` +
+            `these to the Next.js dev server's tree shape, above app code, ` +
+            `and a production run reports the same class of defect as ` +
+            `"Minified React error #418", which still fails: ` +
+            `${JSON.stringify(frameworkHydration)}`,
         );
       }
       return app;

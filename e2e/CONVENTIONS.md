@@ -169,6 +169,14 @@ several others need as a precondition — gets its own file next to it and is im
 |---|---|---|
 | `ensureResumeExists(page, title, { confirmWith? })` / `deleteResume(page, title)` | `../helpers/resume-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `automation-crud`, `automation-wizard-modules`, `keyboard-ux` |
 
+There is one file in `helpers/` that is NOT there to be shared: `helpers/console-oracle.ts` has a
+single caller (`crud/keyboard-ux.spec.ts`) and lives outside the spec so that **Jest** can import
+it. `jest.config.ts:214-218` refuses to look for tests under `e2e/`, which does not stop a test in
+`__tests__/` importing from it — and `__tests__/console-oracle.spec.ts` is the only automatic gate
+the console oracle's classification rules have, since Playwright does not run in CI and Jest does.
+The module therefore imports nothing, `@playwright/test` least of all. Do not move it back into the
+spec on the strength of rule 7 above; that would delete the test with it.
+
 **Never copy a fixture into a spec.** Six private copies of the resume fixture is how `898a5119`
 — one commit that added a second submit button to the Create Resume dialog and renamed the
 success toast — stayed half-repaired for five months: the fix had to be found six times and was
