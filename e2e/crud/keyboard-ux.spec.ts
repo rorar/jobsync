@@ -595,7 +595,9 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
-    await titleInput.type(title, { delay: 20 });
+    // pressSequentially, not fill(): the combobox filters on every keystroke,
+    // and fill() emits a single input event, which exercises a different path.
+    await titleInput.pressSequentially(title, { delay: 20 });
     // Registered before the write — see the Title test above.
     createdJobTitles.push(title);
     await titleInput.press("Enter");
@@ -994,7 +996,8 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     // auth redirect and hydration that got us to this point.
     consoleErrors.mark();
 
-    await searchInput.type(`QuickKW ${uid}`, { delay: 10 });
+    // pressSequentially, not fill(): see the Title test above.
+    await searchInput.pressSequentially(`QuickKW ${uid}`, { delay: 10 });
     await searchInput.press("Enter");
 
     await expect(page.getByText(`QuickKW ${uid}`).first()).toBeVisible();
