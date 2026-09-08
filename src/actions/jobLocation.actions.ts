@@ -108,9 +108,18 @@ export const deleteJobLocationById = async (
       );
     }
 
+    // ADR-015, and the comment above is why this line is not a copy of it: an
+    // Education is owned through the SAME resume chain as a WorkExperience
+    // (`Education.ResumeSection` -> `Resume` -> `profile` -> `userId`,
+    // prisma/schema.prisma:233-234), and this guard was counting it unscoped.
+    // The defect the paragraph above describes as fixed — "another user's
+    // resume blocked this delete, and leaked its existence" — was still live
+    // one guard below it. Found 2026-09-08 while surveying the reference
+    // deletes for E2E-B44.
     const educations = await prisma.education.count({
       where: {
         locationId,
+        ResumeSection: { Resume: { profile: { userId: user.id } } },
       },
     });
     if (educations > 0) {

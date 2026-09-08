@@ -225,6 +225,28 @@ describe("Job Location Actions", () => {
       expect(prisma.location.delete).not.toHaveBeenCalled();
     });
 
+    // ADR-015 regression. The education guard counted `{ locationId }` alone
+    // until 2026-09-08, so another user's Education row blocked this delete and
+    // thereby leaked its existence — the exact defect the comment above the
+    // workExperience guard says was already fixed there. Nothing caught it
+    // because the tests around it assert only the COUNT, never the scope, so
+    // this case asserts the where clause rather than the outcome.
+    it("scopes the education guard to this user's resume chain", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.education.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(0);
+
+      await deleteJobLocationById("loc-1");
+
+      expect(prisma.education.count).toHaveBeenCalledWith({
+        where: {
+          locationId: "loc-1",
+          ResumeSection: { Resume: { profile: { userId: mockUser.id } } },
+        },
+      });
+    });
+
     it("should prevent deletion when associated jobs exist", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);

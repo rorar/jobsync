@@ -94,9 +94,20 @@ export const deleteTagById = async (
       throw new Error("errors.notAuthenticated");
     }
 
+    // ADR-015: scope both guards to this user's rows. They counted globally
+    // until 2026-09-08, so another user's job or question blocked this delete
+    // and the refusal leaked that the row existed — the same defect
+    // jobLocation.actions.ts:95-98 records having fixed for WorkExperience.
+    // Note the two ownership columns differ: Job carries `userId`
+    // (prisma/schema.prisma:399) and Question carries `createdBy` (:784).
+    // Found while surveying the reference deletes for E2E-B44.
     const [jobs, questions] = await Promise.all([
-      prisma.job.count({ where: { tags: { some: { id: tagId } } } }),
-      prisma.question.count({ where: { tags: { some: { id: tagId } } } }),
+      prisma.job.count({
+        where: { tags: { some: { id: tagId } }, userId: user.id },
+      }),
+      prisma.question.count({
+        where: { tags: { some: { id: tagId } }, createdBy: user.id },
+      }),
     ]);
 
     if (jobs > 0 || questions > 0) {
