@@ -25,6 +25,11 @@ import { push } from "@/i18n/dictionaries/push";
 import { webhook } from "@/i18n/dictionaries/webhook";
 import { crm } from "@/i18n/dictionaries/crm";
 import { forms } from "@/i18n/dictionaries/forms";
+// admin.ts was omitted from this map since it was created, so the six admin
+// tabs' keys were the only user-visible namespace left unguarded: a key added
+// to the en block alone shipped silently and rendered as the raw key string in
+// de/fr/es.
+import { admin } from "@/i18n/dictionaries/admin";
 
 const LOCALES = ["en", "de", "fr", "es"] as const;
 
@@ -49,6 +54,8 @@ const namespaceDictionaries = {
   crm,
   // Shared form-control strings (SelectFormCtrl, Combobox):
   forms,
+  // Admin tab strings (companies, job titles, locations, sources, skills):
+  admin,
 } as const;
 
 describe("getDictionary", () => {
