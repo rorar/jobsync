@@ -154,10 +154,38 @@ async function navigateToJobsTable(page: Page) {
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
 
-  // Always switch to Table view by clicking the Table radio button
+  // Always switch to Table view by clicking the Table radio button.
+  //
+  // The flip is CONFIRMED, not just requested. A click is not a flip, and an
+  // unverified one leaves the page in Kanban — where `MyJobsTable` is not
+  // rendered at all (`JobsContainer.tsx:437-445` is a ternary), so every `tr`
+  // read downstream finds nothing about jobs that exist. Clicking the radio
+  // when it is already active is a no-op (`toolbar-radio-group.tsx:157-158`
+  // guards on `if (!active)`), so this stays idempotent.
   const tableRadio = page.getByRole("radio", { name: /table/i });
   await tableRadio.waitFor({ state: "visible", timeout: 5000 });
   await tableRadio.click();
+  await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+}
+
+/**
+ * Non-throwing probe: is the Jobs view CONFIRMED to be Table?
+ *
+ * For the teardown re-check only. `navigateToJobsTable` asserts the flip and is
+ * right to throw; this one answers a question in a catch block, where throwing
+ * would replace a real test failure with a teardown one.
+ *
+ * `false` means "cannot see", NOT "not there" — the caller must not read that
+ * as evidence a row is gone.
+ */
+async function tableViewConfirmed(page: Page): Promise<boolean> {
+  const tableRadio = page.getByRole("radio", { name: /table/i });
+  try {
+    await tableRadio.waitFor({ state: "visible", timeout: 3000 });
+    return (await tableRadio.getAttribute("aria-checked")) === "true";
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -350,6 +378,18 @@ async function deleteJobTracked(page: Page, jobTitle: string): Promise<boolean> 
       .getByRole("alertdialog")
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => null);
+    // `row` is a `tr` locator and `tr`s exist only in Table view, so an
+    // invisible row is evidence of deletion ONLY once that view is confirmed.
+    // `deleteJob` may well have thrown before `navigateToJobsTable` ever got
+    // the flip to take, which is exactly when this read would otherwise lie.
+    if (!(await tableViewConfirmed(page))) {
+      console.warn(
+        `[job-detail-panels] could not confirm Table view, so the absence of ` +
+          `"${jobTitle}" proves nothing (Kanban renders no <tr>); reporting it ` +
+          `as a possible leak`,
+      );
+      return false;
+    }
     return !(await row.isVisible().catch(() => false));
   }
 }

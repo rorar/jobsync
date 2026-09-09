@@ -70,17 +70,36 @@ async function navigateToMyJobs(page: Page) {
  * The kanban branch renders cards, not `tr`s, so a row locator asked in kanban
  * view finds nothing and a delete guarded on it is skipped in silence — the
  * exact defect `cad321fb` removed from `job-status-crud.spec.ts`.
+ *
+ * RETURNS whether Table view is CONFIRMED (`aria-checked="true"` on the Table
+ * radio). Returning early on a missing toggle used to leave the page in kanban
+ * and say nothing, which reproduced that same defect one level up; `false` now
+ * tells the caller its row read proves nothing. Never throws: this is teardown.
+ *
+ * The short visibility probe guards HYDRATION LAG, not the empty state. The
+ * toggle is always rendered once the client has mounted — `KanbanViewModeToggle`
+ * sits in the `CardHeader` (`JobsContainer.tsx:366-368`) gated only on
+ * `mounted`, entirely outside the empty-state branch — and `navigateToMyJobs`
+ * waits on `add-job-btn`, which is not gated on `mounted`.
  */
-async function ensureTableView(page: Page) {
+async function ensureTableView(page: Page): Promise<boolean> {
   const tableRadio = page.getByRole("radio", { name: /table/i });
   try {
     await tableRadio.waitFor({ state: "visible", timeout: 3000 });
   } catch {
-    return; // toggle not rendered — nothing to switch
+    return false; // toggle never mounted — a row read here would prove nothing
   }
-  if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
-    await tableRadio.click();
-    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+  try {
+    if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
+      await tableRadio.click();
+      await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+    }
+    return true;
+  } catch {
+    // swallow-ok: the assertion is not discarded — a flip that did not take IS
+    // this function's `false`, and the caller reports it. Throwing instead
+    // would replace a real test failure with a teardown one.
+    return false;
   }
 }
 
@@ -147,9 +166,16 @@ async function deleteJobTracked(page: Page, title: string): Promise<boolean> {
   // accessibility tree behind it for that whole window — a role locator would
   // answer "no such row" about a row that is still in the database.
   const row = rowsByText(page, title).first();
+  // Hoisted so the catch can read it too. `false` until proven otherwise, so a
+  // throw BEFORE the flip (a failed navigation, say) also reports "cannot see"
+  // rather than "gone".
+  let tableConfirmed = false;
   try {
     await navigateToMyJobs(page);
-    await ensureTableView(page);
+    // Load-bearing return value: `row` is a `tr` locator, and `tr`s exist only
+    // in table view. This spec ends several tests in kanban deliberately, so
+    // "not present" without a confirmed flip means "not looking at a table".
+    tableConfirmed = await ensureTableView(page);
 
     // Wait, do not probe. `count()` does not auto-wait and would answer 0 about
     // a table that has not rendered yet, skipping the delete in silence.
@@ -157,7 +183,16 @@ async function deleteJobTracked(page: Page, title: string): Promise<boolean> {
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => true)
       .catch(() => false);
-    if (!present) return true;
+    if (!present) {
+      if (!tableConfirmed) {
+        console.warn(
+          `[cleanup] could not confirm table view, so the absence of "${title}" ` +
+            `proves nothing (kanban renders no <tr>); reporting it as a possible leak`,
+        );
+        return false;
+      }
+      return true;
+    }
 
     await row.getByTestId("job-actions-menu-btn").first().click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
@@ -178,6 +213,15 @@ async function deleteJobTracked(page: Page, title: string): Promise<boolean> {
       .getByRole("alertdialog")
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => null);
+    // Same reasoning as the absence path above: an invisible `tr` is only
+    // evidence of deletion when we know we are looking at a table.
+    if (!tableConfirmed) {
+      console.warn(
+        `[cleanup] could not confirm table view, so the absence of "${title}" ` +
+          `proves nothing (kanban renders no <tr>); reporting it as a possible leak`,
+      );
+      return false;
+    }
     return !(await row.isVisible().catch(() => false));
   }
 }

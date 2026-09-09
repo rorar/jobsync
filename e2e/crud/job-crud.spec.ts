@@ -168,19 +168,42 @@ async function navigateToJobs(page: Page) {
  * (Kanban shows cards, no column header → no collision), and only `deleteJob`
  * — which queries `role="row"` and never `getByLabel` — switches to Table.
  *
- * Idempotent: clicking the already-active radio is a no-op, and the toggle is
- * absent in the empty state, so we guard with a short visibility probe.
+ * Idempotent: clicking the already-active radio is a no-op.
+ *
+ * RETURNS whether Table view is CONFIRMED (`aria-checked="true"` on the Table
+ * radio). `false` means we could not get there, and a caller that reads `tr`s
+ * must treat "no row" as "cannot see", not as "gone": in Kanban `MyJobsTable`
+ * is not rendered at all (`JobsContainer.tsx:437-445` is a ternary), so a row
+ * locator finds nothing about a job that is on screen as a card and present in
+ * the database. Never throws — this runs in teardown.
+ *
+ * The short visibility probe guards HYDRATION LAG, not the empty state. This
+ * comment used to claim the toggle "is absent in the empty state"; that is
+ * false. `KanbanViewModeToggle` sits in the `CardHeader`
+ * (`JobsContainer.tsx:366-368`) gated only on `mounted`, entirely outside the
+ * empty-state branch — so it renders for an empty list too, and the only window
+ * in which it is missing is before the client has mounted. That window is
+ * reachable from here because `navigateToJobs` waits on `add-job-btn`, which is
+ * not gated on `mounted`.
  */
-async function ensureTableView(page: Page) {
+async function ensureTableView(page: Page): Promise<boolean> {
   const tableRadio = page.getByRole("radio", { name: "Table" });
   try {
     await tableRadio.waitFor({ state: "visible", timeout: 3000 });
   } catch {
-    return; // toggle not rendered (e.g. empty state) — nothing to switch
+    return false; // toggle never mounted — a row read here would prove nothing
   }
-  if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
-    await tableRadio.click();
-    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+  try {
+    if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
+      await tableRadio.click();
+      await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+    }
+    return true;
+  } catch {
+    // swallow-ok: the assertion is not discarded — a flip that did not take IS
+    // this function's `false`, and the caller reports it. Throwing instead
+    // would replace a real test failure with a teardown one.
+    return false;
   }
 }
 
@@ -459,6 +482,18 @@ async function deleteJobTracked(page: Page, jobTitle: string): Promise<boolean> 
       .getByRole("alertdialog")
       .waitFor({ state: "detached", timeout: 3000 })
       .catch(() => null);
+    // `row` is a `tr` locator and `tr`s exist only in Table view, so an
+    // invisible row is evidence of deletion ONLY once that view is confirmed.
+    // Re-established here rather than read back out of `deleteJob`: the flip
+    // that matters is the one in force at the moment of THIS read, and
+    // `deleteJob` may well have thrown before it ever got that far.
+    if (!(await ensureTableView(page))) {
+      console.warn(
+        `[cleanup] could not confirm Table view, so the absence of "${jobTitle}" ` +
+          `proves nothing (Kanban renders no <tr>); reporting it as a possible leak`,
+      );
+      return false;
+    }
     return !(await row.isVisible().catch(() => false));
   }
 }
