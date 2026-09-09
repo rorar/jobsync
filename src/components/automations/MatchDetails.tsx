@@ -22,6 +22,18 @@ interface MatchDetailsProps {
   discoveredAt?: Date;
 }
 
+/**
+ * Headings here are h3 because this component renders under TWO different
+ * ancestries and one level has to satisfy both:
+ *
+ *   /dashboard/myjobs/[id]      JobDetails.tsx:189 "AI match analysis"  (h2)
+ *   /dashboard/automations/[id] DiscoveredJobDetail.tsx:171             (h3)
+ *
+ * They were h5, which was legal only while the first of those was an h4. When
+ * that became an h2 the outline stepped 2 -> 5, which axe's heading-order rule
+ * fails (it flags any increase of more than one). h3 is one below the first and
+ * level with the second, so both routes read correctly.
+ */
 export function MatchDetails({ matchData, discoveredAt }: MatchDetailsProps) {
   const { t, locale } = useTranslations();
   if (!matchData) return null;
@@ -47,7 +59,7 @@ export function MatchDetails({ matchData, discoveredAt }: MatchDetailsProps) {
             <div className="space-y-3">
               {matchData.skills.matched.length > 0 && (
                 <div>
-                  <h5 className="text-sm font-medium text-green-600">{t("automations.matchedSkills")}</h5>
+                  <h3 className="text-sm font-medium text-green-600">{t("automations.matchedSkills")}</h3>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {matchData.skills.matched.map((skill, i) => (
                       <Badge key={i} variant="secondary" className="text-xs">
@@ -59,7 +71,7 @@ export function MatchDetails({ matchData, discoveredAt }: MatchDetailsProps) {
               )}
               {matchData.skills.missing.length > 0 && (
                 <div>
-                  <h5 className="text-sm font-medium text-amber-600">{t("automations.missingSkills")}</h5>
+                  <h3 className="text-sm font-medium text-amber-600">{t("automations.missingSkills")}</h3>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {matchData.skills.missing.map((skill, i) => (
                       <Badge key={i} variant="outline" className="text-xs">
@@ -71,7 +83,7 @@ export function MatchDetails({ matchData, discoveredAt }: MatchDetailsProps) {
               )}
               {matchData.skills.transferable.length > 0 && (
                 <div>
-                  <h5 className="text-sm font-medium text-blue-600">{t("automations.transferableSkills")}</h5>
+                  <h3 className="text-sm font-medium text-blue-600">{t("automations.transferableSkills")}</h3>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {matchData.skills.transferable.map((skill, i) => (
                       <Badge key={i} variant="outline" className="text-xs">
@@ -91,7 +103,7 @@ export function MatchDetails({ matchData, discoveredAt }: MatchDetailsProps) {
             <div className="space-y-3">
               {matchData.requirements.met.length > 0 && (
                 <div>
-                  <h5 className="text-sm font-medium text-green-600">{t("automations.metRequirements")}</h5>
+                  <h3 className="text-sm font-medium text-green-600">{t("automations.metRequirements")}</h3>
                   <ul className="text-sm mt-1 space-y-1">
                     {matchData.requirements.met.map((req, i) => (
                       <li key={i}>
@@ -104,7 +116,7 @@ export function MatchDetails({ matchData, discoveredAt }: MatchDetailsProps) {
               )}
               {matchData.requirements.missing.length > 0 && (
                 <div>
-                  <h5 className="text-sm font-medium text-red-600">{t("automations.missingRequirements")}</h5>
+                  <h3 className="text-sm font-medium text-red-600">{t("automations.missingRequirements")}</h3>
                   <ul className="text-sm mt-1 space-y-1">
                     {matchData.requirements.missing.map((req, i) => (
                       <li key={i}>
