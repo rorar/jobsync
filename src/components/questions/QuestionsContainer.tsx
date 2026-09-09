@@ -141,7 +141,7 @@ function QuestionsContainer({
     <>
       <Card className="h-full">
         <CardHeader className="flex-row justify-between items-center">
-          <CardTitle>{t("questions.title")}</CardTitle>
+          <CardTitle as="h1">{t("questions.title")}</CardTitle>
           <div className="flex items-center">
             <div className="ml-auto flex items-center gap-2">
               <div className="relative">

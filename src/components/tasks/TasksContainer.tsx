@@ -253,7 +253,7 @@ function TasksContainer({
     <>
       <Card x-chunk="dashboard-tasks-chunk-0" className="h-full">
         <CardHeader className="flex-row justify-between items-center">
-          <CardTitle>{t("tasks.title")}</CardTitle>
+          <CardTitle as="h1">{t("tasks.title")}</CardTitle>
           <div className="flex items-center">
             <div className="ml-auto flex items-center gap-2">
               <div className="relative">

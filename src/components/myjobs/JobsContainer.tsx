@@ -361,7 +361,7 @@ function JobsContainer({
     <>
       <Card x-chunk="dashboard-06-chunk-0">
         <CardHeader className="flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <CardTitle>{t("jobs.title")}</CardTitle>
+          <CardTitle as="h1">{t("jobs.title")}</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             {mounted && (
               <KanbanViewModeToggle value={viewMode} onChange={setViewMode} />

@@ -82,7 +82,7 @@ const ProfileContainer = () => {
       <ProfilePreferencesCard />
       <Card>
       <CardHeader className="flex-row justify-between items-center">
-        <CardTitle>{t("profile.title")}</CardTitle>
+        <CardTitle as="h1">{t("profile.title")}</CardTitle>
         <div className="flex items-center">
           <Button
             size="sm"
