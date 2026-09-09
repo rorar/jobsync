@@ -118,7 +118,7 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-muted-foreground" />
-          <CardTitle className="text-base">{t("jobs.statusHistory")}</CardTitle>
+          <CardTitle as="h2" className="text-base">{t("jobs.statusHistory")}</CardTitle>
         </div>
       </CardHeader>
       <CardContent>

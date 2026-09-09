@@ -88,9 +88,9 @@ export const KanbanColumn = React.memo(function KanbanColumn({
         style={{ backgroundColor: STAGE_TINT }}
       >
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--stage-color)" }}>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--stage-color)" }}>
             {getStatusLabel(t, status)}
-          </h3>
+          </h2>
           <Badge variant="secondary" className="text-xs px-1.5 py-0 min-w-[20px] justify-center">
             {jobs.length}
           </Badge>

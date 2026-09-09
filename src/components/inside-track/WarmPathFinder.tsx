@@ -305,14 +305,14 @@ function WarmPathFinderInner({
       {status === "results" && (
         <div className="space-y-4">
           {/* Panel heading */}
-          <h3 className="text-sm font-semibold">{panelTitle}</h3>
+          <h2 className="text-sm font-semibold">{panelTitle}</h2>
 
           {/* ── Insiders section ── */}
           {insiders.length > 0 && (
             <section aria-label={t("insideTrack.warmPath.insidersListLabel")}>
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 {t("insideTrack.warmPath.sectionInsiders")}
-              </h4>
+              </h3>
               <ul aria-label={t("insideTrack.warmPath.insidersListLabel")}>
                 {insiders.map((insider) => (
                   <WarmPathInsiderRow
@@ -330,9 +330,9 @@ function WarmPathFinderInner({
           {/* ── Network paths section ── */}
           {networkPaths.length > 0 && (
             <section aria-label={t("insideTrack.warmPath.pathsListLabel")}>
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 {t("insideTrack.warmPath.sectionNetwork")}
-              </h4>
+              </h3>
               <ul aria-label={t("insideTrack.warmPath.pathsListLabel")}>
                 {networkPaths.map((path) => (
                   <WarmPathNetworkRow

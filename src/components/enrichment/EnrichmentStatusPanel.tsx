@@ -217,7 +217,7 @@ export function EnrichmentStatusPanel({
             companyName={companyName}
             size="sm"
           />
-          <CardTitle className="text-base">{t("enrichment.statusPanel")}</CardTitle>
+          <CardTitle as="h2" className="text-base">{t("enrichment.statusPanel")}</CardTitle>
         </div>
       </CardHeader>
       <CardContent>

@@ -423,7 +423,7 @@ function TasksTable({
 
           return (
             <div key={group} className="mb-6">
-              <h3
+              <h2
                 className={cn(
                   "text-sm font-semibold mb-2 px-2 py-1",
                   group === "Overdue",
@@ -439,7 +439,7 @@ function TasksTable({
                   Later: t("tasks.later"),
                   "No Due Date": t("tasks.noDueDate"),
                 } as Record<DateGroup, string>)[group]} ({groupTasks.length})
-              </h3>
+              </h2>
               <Table>
                 {renderTableHeader()}
                 <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
@@ -464,9 +464,9 @@ function TasksTable({
       <>
         {Object.entries(groupedTasks).map(([activityType, groupTasks]) => (
           <div key={activityType} className="mb-6">
-            <h3 className="text-sm font-semibold mb-2 px-2 py-1">
+            <h2 className="text-sm font-semibold mb-2 px-2 py-1">
               {activityType === "No Activity Type" ? t("tasks.noActivityType") : activityType} ({groupTasks.length})
-            </h3>
+            </h2>
             <Table>
               {renderTableHeader()}
               <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
@@ -498,9 +498,9 @@ function TasksTable({
 
           return (
             <div key={dateStr} className="mb-6">
-              <h3 className="text-sm font-semibold mb-2 px-2 py-1">
+              <h2 className="text-sm font-semibold mb-2 px-2 py-1">
                 {displayDate} ({groupTasks.length})
-              </h3>
+              </h2>
               <Table>
                 {renderTableHeader()}
                 <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>
@@ -533,9 +533,9 @@ function TasksTable({
 
           return (
             <div key={dateStr} className="mb-6">
-              <h3 className="text-sm font-semibold mb-2 px-2 py-1">
+              <h2 className="text-sm font-semibold mb-2 px-2 py-1">
                 {displayDate} ({groupTasks.length})
-              </h3>
+              </h2>
               <Table>
                 {renderTableHeader()}
                 <TableBody>{groupTasks.map(renderTaskRow)}</TableBody>

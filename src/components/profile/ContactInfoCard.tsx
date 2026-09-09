@@ -18,7 +18,7 @@ function ContactInfoCard({ contactInfo, openDialog }: ContactInfoCardProps) {
     <Card>
       <CardHeader className="flex-row justify-between relative">
         <div>
-          <CardTitle>
+          <CardTitle as="h2">
             {firstName} {lastName}
           </CardTitle>
           <CardDescription>{headline}</CardDescription>

@@ -58,7 +58,7 @@ function ExperienceCard({
 
   return (
     <div>
-      <CardTitle className="pl-6 py-3">
+      <CardTitle as="h2" className="pl-6 py-3">
         {experienceSection?.sectionTitle}
       </CardTitle>
       <div className="space-y-3">
@@ -102,7 +102,7 @@ function ExperienceCard({
                 </div>
               </CardHeader>
               <CardContent>
-                <h3>{Company?.label}</h3>
+                <h4>{Company?.label}</h4>
                 <CardDescription>
                   {formatMonthYear(startDate, locale)} -{" "}
                   {endDate ? formatMonthYear(endDate, locale) : t("profile.present")}
