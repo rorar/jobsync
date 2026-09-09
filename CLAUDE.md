@@ -1103,6 +1103,14 @@ count alone — check it against tsc or a run first:**
    fails the typecheck.
 2. **Dynamic template imports** — `src/i18n/lingui.ts:8` resolves `./messages/${locale}.ts` at
    runtime, which no static analyser follows, so all four catalogs look orphaned.
+   **The whole LinguiJS block is staged, not dead, and must not be deleted.** knip reports six
+   files and two dependencies for it — `src/i18n/lingui.ts`, `src/i18n/messages/{de,en,es,fr}.ts`,
+   `src/i18n/provider.tsx` (which exports `LinguiClientProvider`; the *live* provider is
+   `LocaleProvider` from `locale-context.tsx`, wired at `src/app/layout.tsx:8`), plus
+   `@lingui/core` and `@lingui/react`. All of it is groundwork for the migration the i18n adapter
+   pattern was built for (see § i18n — Architecture), which is tracked as a GitHub issue and is
+   going to happen. It is genuinely unreferenced today and will stay that way until the switch;
+   that is the plan working, not a leak. Confirmed by the maintainer 2026-09-09.
 3. **Framework-convention entries** — `src/instrumentation.ts` starts the scheduler, the CRM cron,
    the event consumers and the FATAL env validation. Deleting it breaks nothing at build time and
    silently disables all of it at runtime.
