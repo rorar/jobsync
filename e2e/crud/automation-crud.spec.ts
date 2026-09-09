@@ -1,17 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, uniqueId } from "../helpers";
+import { ensureEnglishLocale, expectToast, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToAutomations(page: Page) {
   await page.goto("/dashboard/automations");
@@ -276,7 +269,27 @@ test.describe("Automation CRUD", () => {
   // `createdAutomationNames` above. On a green test this list is already empty
   // (deleteAutomation de-registers), so the hook costs nothing and stays
   // silent; a warning here therefore means a REAL leak, not routine noise.
-  test.afterEach(async ({ page }) => {
+  test.afterEach(async ({ page }, testInfo) => {
+    // A hook shares the test's 60 s budget (playwright.config.ts:34), and this
+    // one does not sweep a table — it replays the whole UI delete flow per
+    // leaked name: `openAutomationDropdown` waits 10 s for the card and 5 s for
+    // the menu (:125,:138), then the dialog's close is 10 s and the card's
+    // disappearance 15 s (:224,:231), on top of a `navigateToAutomations`. One
+    // leaked name can therefore cost more than the 45 s `job-crud.spec.ts:43`
+    // and `profile-crud.spec.ts:167` buy for a three-table sweep, so this takes
+    // the 60 s the other three siblings use (`job-detail-panels.spec.ts:58`,
+    // `kanban.spec.ts:258`, `enrichment.spec.ts:65`). `kanban` is the one it is
+    // copied from: that hook is the other per-row UI delete LOOP rather than a
+    // table sweep, so its cost is shaped like this one's. Keep the number small
+    // enough that a body which has itself become slow still surfaces.
+    //
+    // It sits above the early return deliberately: the green path returns
+    // without awaiting anything, so the extension costs nothing there, and the
+    // leaked path is the only one that reaches the deletes — which is precisely
+    // the path this hook exists for. Without it, a teardown that outlasts what
+    // the body left of the budget reports a TIMEOUT where a real failure was.
+    test.setTimeout(testInfo.timeout + 60_000);
+
     // Swap the reference out BEFORE the first await: clearing afterwards would
     // keep entries alive into the next test if a delete throws, and clearing in
     // a beforeEach would not run at all under test.skip.
