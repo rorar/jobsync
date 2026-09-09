@@ -79,7 +79,14 @@ const ProfileContainer = () => {
 
   return (
     <div className="space-y-4">
-      <ProfilePreferencesCard />
+      {/*
+        The resume card comes FIRST because its title is the page's name: it is
+        rendered as an h1 and every other heading on this page has to sit below
+        it. ProfilePreferencesCard opens with an h2, so while it was above, a
+        screen-reader user met a section of the page before the page named
+        itself. Moving it down is the only fix that neither duplicates the
+        title nor invents a second one. See UI-B18 in docs/BUGS.md.
+      */}
       <Card>
       <CardHeader className="flex-row justify-between items-center">
         <CardTitle as="h1">{t("profile.title")}</CardTitle>
@@ -153,6 +160,7 @@ const ProfileContainer = () => {
         )}
       </CardContent>
       </Card>
+      <ProfilePreferencesCard />
     </div>
   );
 };
