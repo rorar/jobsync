@@ -26,7 +26,7 @@ export default function ActivityCalendar({
   return (
     <Card className="w-[100%]">
       <CardHeader>
-        <CardTitle className="text-green-600">{t("dashboard.activityCalendar")}</CardTitle>
+        <CardTitle as="h2" className="text-green-600">{t("dashboard.activityCalendar")}</CardTitle>
       </CardHeader>
       <CardContent className="h-[200px]">
         <ResponsiveCalendar

@@ -62,7 +62,7 @@ function ActivityTypesContainer() {
       <div className="col-span-3">
         <Card>
           <CardHeader className="flex-row justify-between items-center">
-            <CardTitle>{t("admin.activityTypes")}</CardTitle>
+            <CardTitle as="h2">{t("admin.activityTypes")}</CardTitle>
           </CardHeader>
           <CardContent>
             {/*

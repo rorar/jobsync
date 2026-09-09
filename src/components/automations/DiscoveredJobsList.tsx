@@ -93,7 +93,7 @@ export function DiscoveredJobsList({
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <Briefcase className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">{t("automations.noDiscoveredJobs")}</h3>
+          <h2 className="text-lg font-medium">{t("automations.noDiscoveredJobs")}</h2>
           <p className="text-muted-foreground text-center mt-2">
             {t("automations.noDiscoveredJobsDesc")}
           </p>
@@ -105,7 +105,7 @@ export function DiscoveredJobsList({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("automations.discoveredJobs")}</CardTitle>
+        <CardTitle as="h2">{t("automations.discoveredJobs")}</CardTitle>
         <CardDescription>
           {t("automations.discoveredJobsDesc")}
         </CardDescription>

@@ -122,7 +122,7 @@ export default function StatusFunnelWidget() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-sm font-medium text-green-600 dark:text-green-400">
+            <CardTitle as="h2" className="text-sm font-medium text-green-600 dark:text-green-400">
               {t("dashboard.pipeline")}
             </CardTitle>
             {state.status === "loaded" && !isEmpty && headlineConversion !== null && (

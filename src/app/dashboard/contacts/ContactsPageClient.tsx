@@ -249,7 +249,7 @@ export default function ContactsPageClient() {
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <Users className="h-16 w-16 text-muted-foreground" />
           <div className="text-center">
-            <h3 className="text-lg font-medium">{t("crm.noContacts")}</h3>
+            <h2 className="text-lg font-medium">{t("crm.noContacts")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {t("crm.noContactsDescription")}
             </p>

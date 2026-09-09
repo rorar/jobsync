@@ -127,7 +127,7 @@ export function LogsTab({ automationId, runKey }: LogsTabProps) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle>{t("automations.automationLogs")}</CardTitle>
+            <CardTitle as="h2">{t("automations.automationLogs")}</CardTitle>
             {logData.isRunning && (
               <Badge variant="default" className="gap-1">
                 <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />

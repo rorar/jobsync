@@ -182,7 +182,7 @@ export default function CrmTasksPageClient() {
       <Card key={task.id as string} className="mb-3">
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-sm font-medium leading-snug">
+            <CardTitle as="h2" className="text-sm font-medium leading-snug">
               {task.title as string}
             </CardTitle>
             <div className="flex shrink-0 items-center gap-1">

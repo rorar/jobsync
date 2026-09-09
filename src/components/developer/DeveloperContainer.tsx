@@ -100,7 +100,7 @@ export function MockActivitiesCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>{t("developer.mockDataManagement")}</CardTitle>
+          <CardTitle as="h2">{t("developer.mockDataManagement")}</CardTitle>
           <CardDescription>
             {t("developer.mockDataDesc")}
           </CardDescription>
@@ -197,7 +197,7 @@ export function ClearAllMockDataCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>{t("developer.clearAllMockData")}</CardTitle>
+          <CardTitle as="h2">{t("developer.clearAllMockData")}</CardTitle>
           <CardDescription>
             {t("developer.clearAllMockDataDesc")}
           </CardDescription>
@@ -262,7 +262,7 @@ export function ClearE2ETestDataCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>{t("developer.clearE2ETestData")}</CardTitle>
+          <CardTitle as="h2">{t("developer.clearE2ETestData")}</CardTitle>
           <CardDescription>
             {t("developer.clearE2ETestDataDesc")}
           </CardDescription>
@@ -343,7 +343,7 @@ export function MockProfileCard() {
       {message && <StatusBanner message={message} />}
       <Card>
         <CardHeader>
-          <CardTitle>{t("developer.mockProfileData")}</CardTitle>
+          <CardTitle as="h2">{t("developer.mockProfileData")}</CardTitle>
           <CardDescription>
             {t("developer.mockProfileDataDesc")}
           </CardDescription>
@@ -455,7 +455,7 @@ export function RetentionCleanupCard() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>{t("developer.retentionCleanup")}</CardTitle>
+          <CardTitle as="h2">{t("developer.retentionCleanup")}</CardTitle>
           <CardDescription>
             {t("developer.retentionCleanupDesc")}
           </CardDescription>

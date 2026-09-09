@@ -17,7 +17,7 @@ export default function JobsAppliedCard() {
   return (
     <Card className="sm:col-span-2">
       <CardHeader className="pb-3">
-        <CardTitle className="text-green-600">{t("dashboard.title")}</CardTitle>
+        <CardTitle as="h2" className="text-green-600">{t("dashboard.title")}</CardTitle>
         <CardDescription className="max-w-lg text-balance leading-relaxed">
           {t("dashboard.createJobsAndTasks")}
         </CardDescription>

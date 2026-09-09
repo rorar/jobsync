@@ -55,7 +55,7 @@ function JobSourcesContainer() {
       <div className="col-span-3">
         <Card x-chunk="dashboard-06-chunk-0">
           <CardHeader className="flex-row justify-between items-center">
-            <CardTitle>{t("admin.jobSources")}</CardTitle>
+            <CardTitle as="h2">{t("admin.jobSources")}</CardTitle>
             <div className="flex items-center">
               <div className="ml-auto flex items-center gap-2">
               </div>
