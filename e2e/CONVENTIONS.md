@@ -85,7 +85,7 @@ test.describe("MyAggregate CRUD", () => {
 
 5. **No `test.beforeEach` with login or navigation to dashboard**: Each test navigates to its own page via its own `navigateTo*()` helper.
 
-6. **Import shared helpers**: Don't duplicate `selectOrCreateComboboxOption`, `expectToast`, `login`, or `uniqueId`. Import from `../helpers`.
+6. **Import shared helpers**: Don't duplicate `selectOrCreateComboboxOption`, `expectToast`, `ensureEnglishLocale`, or `uniqueId`. Import from `../helpers`.
 
 7. **Keep aggregate-specific helpers local**: `navigateToJobs()`, `createJob()`, `deleteJob()` stay in `job-crud.spec.ts`. Only truly generic helpers go in `helpers/index.ts`.
 
@@ -96,7 +96,10 @@ Smoke tests go in `e2e/smoke/`. They test auth flows or unauthenticated pages. T
 ```typescript
 import { test, expect, type Page } from "@playwright/test";
 
-// Smoke tests may define their own login() since they TEST the auth flow
+// Smoke tests define their own login() since they TEST the auth flow. There is
+// deliberately no shared one: `helpers/index.ts` exported a `login()` that no
+// spec ever imported (T3) — both smoke specs and `global-setup.ts` had each
+// inlined their own, because each needs a different assertion about the flow.
 async function login(page: Page) {
   await page.getByPlaceholder("id@example.com").fill("admin@example.com");
   await page.getByLabel("Password").fill("password123");
@@ -117,7 +120,7 @@ Available imports:
 | Helper | Purpose |
 |---|---|
 | `uniqueId()` | timestamp base-36 + worker index (E2E-B29: the timestamp alone collided across parallel workers) — unique test data suffix |
-| `login(page)` | UI login — only for smoke tests |
+| `ensureEnglishLocale(page)` | Set the `NEXT_LOCALE=en` cookie so the app renders in the language every CRUD assertion is written in. Was copied privately into 16 specs before T4 consolidated it |
 | `expectToast(page, pattern, timeout?)` | Assert toast notification visible |
 | `selectOrCreateComboboxOption(page, label, placeholder, text, timeout?)` | 3-step combobox: exact → partial → create |
 | `safeWait(page, options, timeout?)` | Deterministic wait — replaces `waitForTimeout`. See below. |

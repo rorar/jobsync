@@ -1,16 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast, rowsByText } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast, rowsByText } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToCompanies(page: Page) {
   await page.goto("/dashboard/admin?tab=companies");

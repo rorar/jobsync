@@ -18,12 +18,7 @@
  * ones.
  */
 import { test, expect, type Page } from "@playwright/test";
-
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
+import { ensureEnglishLocale } from "../helpers";
 
 async function navigateToStaging(page: Page) {
   await page.goto("/dashboard/staging");

@@ -12,14 +12,9 @@
  * enlarged. Storage key: jobsync-staging-layout-size.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { ensureEnglishLocale } from "../helpers";
 
 const STORAGE_KEY = "jobsync-staging-layout-size";
-
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToStaging(page: Page) {
   await page.goto("/dashboard/staging");

@@ -1,15 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { ensureEnglishLocale } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /** Navigate to Settings > Push section. */
 async function navigateToPush(page: Page) {

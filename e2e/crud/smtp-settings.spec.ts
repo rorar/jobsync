@@ -1,16 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast, safeWait } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /** Dismiss any visible toast notifications that might overlay buttons. */
 async function dismissToasts(page: Page) {

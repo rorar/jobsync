@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
+  ensureEnglishLocale,
   uniqueId,
   selectOrCreateComboboxOption,
   expectToast,
@@ -98,13 +99,6 @@ test.afterEach(async ({ page }, testInfo) => {
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /**
  * Navigate to My Jobs and switch to Table view. Does NOT wait for a table.

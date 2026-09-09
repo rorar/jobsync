@@ -1,17 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
-import { uniqueId } from "../helpers";
+import { ensureEnglishLocale, uniqueId } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToAutomations(page: Page) {
   await page.goto("/dashboard/automations");

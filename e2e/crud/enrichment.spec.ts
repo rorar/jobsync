@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, selectOrCreateComboboxOption, rowsByText } from "../helpers";
+import { ensureEnglishLocale, uniqueId, selectOrCreateComboboxOption, rowsByText } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 import {
   ADMIN_TAB,
@@ -104,13 +104,6 @@ test.afterEach(async ({ page }, testInfo) => {
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToJobs(page: Page) {
   // Force table view via localStorage before navigation

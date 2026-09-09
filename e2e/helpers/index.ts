@@ -22,13 +22,37 @@ export function uniqueId(): string {
   return `${Date.now().toString(36)}w${worker}`;
 }
 
-/** Perform UI login. Only needed in tests that don't use storageState. */
-export async function login(page: Page) {
-  await page.getByPlaceholder("id@example.com").click();
-  await page.getByPlaceholder("id@example.com").fill("admin@example.com");
-  await page.getByLabel("Password").click();
-  await page.getByLabel("Password").fill("password123");
-  await page.getByRole("button", { name: "Login" }).click();
+/**
+ * Set the NEXT_LOCALE=en cookie so the app renders in English.
+ *
+ * Every CRUD spec asserts on English strings — role names, toast text, column
+ * headers — so a run that renders in another language fails on the selector
+ * rather than on the behaviour, and the failure names the wrong thing.
+ *
+ * What this actually pins is the SECOND of three priorities.
+ * `getUserLocale()` (src/lib/locale.ts:14) resolves
+ * `UserSettings.display.locale` → this cookie → `DEFAULT_LOCALE`. So it makes
+ * the fallback deterministic; it does NOT override a display locale already
+ * stored for the seeded user. If a spec ever renders in the wrong language
+ * despite calling this, the DB row is where to look, not the cookie.
+ *
+ * Consolidated here from SIXTEEN byte-identical private copies (T4,
+ * `docs/handoff-2026-09-08-open-items.md`), which is five times the "3+ spec
+ * files" bar for a shared helper in e2e/CONVENTIONS.md. It is generic rather
+ * than aggregate-specific — rule 7's test — because it names no page, no route
+ * and no aggregate, only the cookie the whole app reads.
+ *
+ * `domain: "localhost"` is not incidental. `addCookies` requires either
+ * url OR domain+path, and the suite's `baseURL` is a localhost port
+ * (`playwright.config.ts`, `scripts/lib-devserver.sh`). A run pointed at a
+ * different host via `E2E_BASE_URL` would need the domain to follow; the
+ * sixteen copies all hardcoded it, and consolidating does not change that —
+ * it just means there is now one line to edit instead of sixteen.
+ */
+export async function ensureEnglishLocale(page: Page) {
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
 }
 
 /**
