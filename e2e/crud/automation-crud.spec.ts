@@ -270,7 +270,9 @@ test.describe("Automation CRUD", () => {
   // (deleteAutomation de-registers), so the hook costs nothing and stays
   // silent; a warning here therefore means a REAL leak, not routine noise.
   test.afterEach(async ({ page }, testInfo) => {
-    // A hook shares the test's 60 s budget (playwright.config.ts:34), and this
+    // The after-hooks run on their OWN fresh budget — `max(project, test)`,
+    // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+    // corrected 2026-09-09, this comment used to claim the opposite), and this
     // one does not sweep a table — it replays the whole UI delete flow per
     // leaked name: `openAutomationDropdown` waits 10 s for the card and 5 s for
     // the menu (:125,:138), then the dialog's close is 10 s and the card's
@@ -286,8 +288,20 @@ test.describe("Automation CRUD", () => {
     // It sits above the early return deliberately: the green path returns
     // without awaiting anything, so the extension costs nothing there, and the
     // leaked path is the only one that reaches the deletes — which is precisely
-    // the path this hook exists for. Without it, a teardown that outlasts what
-    // the body left of the budget reports a TIMEOUT where a real failure was.
+    // the path this hook exists for.
+    //
+    // What it does NOT do, because the sibling specs' comments say otherwise
+    // and they are wrong: it does not rescue budget the body used up. Playwright
+    // gives the after-hooks a FRESH slot — `afterHooksSlot = { timeout:
+    // calculateMaxTimeout(project.timeout, testInfo.timeout), elapsed: 0 }`,
+    // `playwright/lib/worker/workerMain.js:328-329` — so teardown never inherits
+    // the body's spend, and a body that overran has already timed out before
+    // this line runs. What this call buys is the DIFFERENCE: the hook starts
+    // with `max(project, test)` and this raises it, live, because
+    // `timeoutManager.setTimeout` writes to the currently running slot and
+    // re-arms the deadline (`timeoutManager.js:105-110`). This teardown needs
+    // the extra: per leaked name it pays a 10 s card wait, a 5 s menu wait, a
+    // 10 s dialog close and a 15 s disappearance wait.
     test.setTimeout(testInfo.timeout + 60_000);
 
     // Swap the reference out BEFORE the first await: clearing afterwards would

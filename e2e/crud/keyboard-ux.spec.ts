@@ -82,12 +82,20 @@ async function deleteResumeTracked(page: Page, title: string): Promise<boolean> 
 // four EURES tests delete their own and de-register on proof, so a WARNING
 // about a resume means a real leak.
 test.afterEach(async ({ page }, testInfo) => {
-  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
-  // can navigate to four admin tables, so a green test could start failing on
-  // its TEARDOWN. Buy the extra time explicitly. It is not free: the extension
-  // covers the whole test, so a body that has itself become slow gets 105 s
-  // instead of 60 before it is called out. Keep the number small enough that a
-  // real slowdown still surfaces.
+  // This hook can navigate to four admin tables, so buy it extra time.
+  //
+  // CORRECTED 2026-09-09 — the previous version of this comment said a hook
+  // "shares the test's 60 s budget" and that the extension therefore lets a slow
+  // BODY off with 105 s. Both halves are wrong, and the source says so:
+  // Playwright gives the after-hooks a fresh slot, `afterHooksSlot = { timeout:
+  // calculateMaxTimeout(project.timeout, testInfo.timeout), elapsed: 0 }`
+  // (`playwright/lib/worker/workerMain.js:328-329`), so teardown never inherits
+  // what the body spent, and a body that overran has already timed out before
+  // this line is reached. The call raises the DIFFERENCE above that fresh
+  // maximum, taking effect immediately because `timeoutManager.setTimeout`
+  // writes to the running slot and re-arms its deadline
+  // (`timeoutManager.js:105-110`). Keep the number small enough that a real
+  // teardown slowdown still surfaces.
   test.setTimeout(testInfo.timeout + 45_000);
 
   // Swap the references out BEFORE the first await: clearing afterwards would

@@ -35,11 +35,14 @@ let createdCompanies: string[] = [];
 let createdLocations: string[] = [];
 
 test.afterEach(async ({ page }, testInfo) => {
-  // A hook shares the test's 60 s budget (playwright.config.ts:23) — and these
-  // bodies have already bought themselves 60 s extra, so teardown is competing
-  // with a body that is allowed to be slow. This one can visit three admin
-  // tables. Buy the extra time explicitly; keep it small enough that a body
-  // which has itself become slow still surfaces.
+  // The after-hooks run on their OWN fresh budget — `max(project, test)`,
+  // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+  // corrected 2026-09-09, this comment used to claim the opposite). These bodies
+  // raise their own timeout by 60 s, and because the hook's budget is
+  // `max(project, testInfo.timeout)` that RAISES the hook's starting budget too
+  // rather than competing with it — the previous wording had this backwards.
+  // This one can visit three admin tables, which is why it still buys more on
+  // top; keep the number small enough that a genuinely slow teardown surfaces.
   test.setTimeout(testInfo.timeout + 45_000);
 
   // Swap the registries out BEFORE the first await: clearing afterwards would

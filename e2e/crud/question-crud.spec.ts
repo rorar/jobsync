@@ -47,7 +47,9 @@ test.beforeEach(async ({ context }) => {
 let createdTags: string[] = [];
 
 test.afterEach(async ({ page }, testInfo) => {
-  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
+  // The after-hooks run on their OWN fresh budget — `max(project, test)`,
+  // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+  // corrected 2026-09-09, this comment used to claim the opposite) and this one
   // navigates to an admin table. Buy the extra time explicitly rather than let
   // a green test start failing on its teardown. Kept small so that a body which
   // has itself become slow still surfaces.

@@ -57,7 +57,9 @@ let createdJobSources: string[] = [];
 let createdResumes: string[] = [];
 
 test.afterEach(async ({ page }, testInfo) => {
-  // A hook shares the test's 60 s budget (playwright.config.ts:34) and this one
+  // The after-hooks run on their OWN fresh budget — `max(project, test)`,
+  // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+  // corrected 2026-09-09, this comment used to claim the opposite) and this one
   // can visit the profile page and four admin tables on top of a body that
   // already builds a resume and a job. Buy the extra time explicitly rather
   // than let a green test start failing on its teardown; keep it small enough
