@@ -57,7 +57,11 @@ not recounted` row of the block table in `docs/BUGS.md`.
 >   been migrated in `45ba0653`, so only `keyboard-ux` remained; and T9's line number had drifted,
 >   with the empty slot nested inside a second wrapper div, and the same dead slot present in two
 >   further containers the item did not name.
-> - **T8** stays open deliberately, for the reason it already gives.
+> - **T8** is CLOSED 2026-09-09, and its stated reason turned out to be wrong. The argument
+>   it "already gives" was written in the same commit that pruned six models out of
+>   `KNOWN_DEBT`, so it priced enforcement as it stood before that prune. Enforcing Job does
+>   not add a red line; the line was already being paid against `JobTitle`/`Company`/
+>   `Location`, which carry no finding id. See `E2E-B38` in `docs/BUGS.md`.
 > - **§2.3** — `bun knip` has now been run. It reports 21 unused files, 84 unused exports and 6
 >   unused dependencies, but **none of the files this session added**, including
 >   `e2e/helpers/console-oracle.ts`, which the note below suspected. All four of the false-positive
@@ -105,7 +109,7 @@ of six creates the inconsistency the review was trying to prevent.
 | **T5** | `keyboard-ux.spec.ts` and `profile-crud.spec.ts` carry private, already-diverged copies of the admin-cleanup functions | named at `e2e/helpers/admin-reference-cleanup.ts:16-33`. If a new tab is ever swept from either file, use the shared helper rather than a seventh copy |
 | **T6** | `profile-crud.spec.ts` uses FIXED literals (`"Software Developer"`, `"Senior Engineer"`, `"MIT"`, `"Boston"`) where the comments claimed uid-suffixed names. The comments are corrected; **the hazard is not**: `deleteAdminReferenceRow` matches a case-insensitive SUBSTRING, so under `E2E_WORKERS>1` one worker's teardown can delete a row another worker's form is using. `"MIT"` is the shortest and most exposed. The suite is single-worker by default, which is why this has never been seen | `e2e/crud/profile-crud.spec.ts`, see the corrected note above `locationText` in "add education and edit school name" |
 | **T7** | `automation-crud.spec.ts` is the only spec whose `afterEach` can navigate and delete yet never calls `test.setTimeout(testInfo.timeout + N)`. Unmeasured; flagged because the new instrumentation makes its teardown slower on a failing path | `e2e/crud/automation-crud.spec.ts`; compare `job-crud`, `profile-crud`, `job-detail-panels`, `kanban`, and the new `enrichment` hook |
-| **T8** | `"Job:E2E-B38"` remains in `KNOWN_DEBT` **deliberately**. Its mechanism is unchanged: the Job is deleted inline in test bodies, so it leaks only when a body throws first, and a green run cannot distinguish "fixed" from "not exercised". Enforcing it would add a second red line to every genuine failure | `scripts/check-e2e-residue.sh:144` |
+| ~~**T8**~~ | **CLOSED 2026-09-09.** The Job delete moved into the `afterEach` in the three specs that still did it inline, and `"Job:E2E-B38"` is out of `KNOWN_DEBT`. The reason recorded here — "enforcing it would add a second red line to every genuine failure" — was false when written: the four models pruned in the same commit refuse their delete while a Job references them, so the gate already failed on that path, naming models with no finding id. The conversion REMOVES that line. Proven both ways: 128 passed with Job absent from the debt block, and a deliberate post-`createJob` failure giving 1 failed / EXIT=1 / `[residue] OK` | `scripts/check-e2e-residue.sh` (entry removed) |
 | **T9** | Dead empty action slot: `<div className="ml-auto flex items-center gap-2">` with no children. The new container dropped it rather than copying it | `src/components/admin/JobSourcesContainer.tsx:57` |
 
 ### 2.3 Housekeeping and process
