@@ -141,15 +141,28 @@ KNOWN_DEBT=(
   # precondition two specs depend on and neither owns. A fixture is not residue.
   "Person:E2E-B22"     # +4 — structural: no deletePerson exists, by GDPR design
   "Referral:E2E-B23"   # +1 — structural, same shape as Person
-  "Job:E2E-B38"        # KEPT while the six above go. Its mechanism is unchanged:
-                       #   the Job is deleted INLINE in test bodies, so it leaks
-                       #   only when a body throws first — +1 in the one run of
-                       #   four that had a failure, 0 in the others, and 0 in the
-                       #   green run that cleared the six. A green run cannot
-                       #   distinguish "fixed" from "not exercised" here, so
-                       #   enforcing it would add a second red line to every
-                       #   genuine failure.
 )
+
+# REMOVED 2026-09-09: "Job:E2E-B38". The entry argued that enforcing Job would
+# "add a second red line to every genuine failure", and it was written in the
+# same commit that pruned the six above it — so it described the cost of
+# enforcement as it stood BEFORE that prune, and was already false when the ink
+# dried.
+#
+# What it missed: JobTitle, Company, Location and JobSource became ENFORCED in
+# that same commit, and their deletes REFUSE while a Job references them
+# (`jobtitle.actions.ts:136-147` and its siblings). A Job that survived a failing
+# body therefore blocked the reference sweep, and the gate already failed — for
+# those four models, which carry no finding id and sit one causal layer away from
+# the cause, while the one model that HAS an explanatory id was filed under
+# "outstanding debt (not the failure below)". The red line was being paid in the
+# worse currency.
+#
+# The Job delete now lives in the afterEach of all five specs that create one
+# (job-crud, job-detail-panels and enrichment converted 2026-09-09; kanban and
+# job-status-crud already were), so the sweep succeeds on the failing path too.
+# That REMOVES the red line rather than adding one, and Job becomes a model
+# whose delta means what it says.
 
 # REMOVED 2026-09-08, and the removal is the point of the entry rather than
 # tidying: while a model sits in this array the gate PRINTS it and carries on, so

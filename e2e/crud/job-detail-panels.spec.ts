@@ -31,11 +31,21 @@ import {
 //      writes it: a `selectOrCreateComboboxOption` that creates the row and then
 //      fails its follow-up assertion has still leaked one.
 //   3. De-registration only on a PROVEN delete — there is none here, because
-//      nothing in a test body deletes a reference row.
+//      no test body deletes anything any more.
 //   4. The afterEach swaps the registries out before its first await.
 //   5. It navigates itself, inside the sweep.
 //   6. Two tiers — the deleters swallow, the sweep re-checks and warns. Nothing
 //      rethrows: a hook that throws replaces the real test failure with its own.
+//
+// THE JOB IS DRAINED BY THE HOOK TOO (E2E-B38)
+// Each body used to end on `await deleteJob(page, jobTitle)`, which is the path
+// a failed assertion skips. The consequence was not one extra row: the sweep
+// below cannot delete a JobTitle, Company or Location while a Job still points
+// at it (see the hook), so one failed assertion produced a `[residue] FAIL`
+// naming three models that had nothing to do with it and carrying no finding id
+// to explain them. Deletion is not the subject of any test here, so there is
+// nothing to lose by moving it out and that whole failure mode to gain.
+let createdJobs: string[] = [];
 let createdJobTitles: string[] = [];
 let createdCompanies: string[] = [];
 let createdLocations: string[] = [];
@@ -54,10 +64,16 @@ test.afterEach(async ({ page }, testInfo) => {
   // The after-hooks run on their OWN fresh budget — `max(project, test)`,
   // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
   // corrected 2026-09-09, this comment used to claim the opposite) and this one
-  // can visit the profile page and three admin tables on top of bodies that
-  // already build a resume and a job. Buy the extra time explicitly rather than
-  // let a green test start failing on its teardown; keep it small enough that a
-  // body which has itself become slow still surfaces.
+  // can visit My Jobs, the profile page and three admin tables on top of bodies
+  // that already build a resume and a job. Buy the extra time explicitly rather
+  // than let a green test start failing on its teardown; keep it small enough
+  // that a body which has itself become slow still surfaces.
+  //
+  // 60_000 is UNCHANGED by the job drain added below. All three bodies raise
+  // their own timeout by 60 s, so the hook's fresh slot is max(60 s, 120 s) and
+  // this call makes 180 s — against typical teardown work of ~10 s (one job,
+  // read off `deleteJobTracked`'s waits) + ~8 s (one resume) + ~30 s (three
+  // admin tabs). The slack comes from the inherited 120 s floor, not from N.
   test.setTimeout(testInfo.timeout + 60_000);
 
   // Swap the registries out BEFORE the first await: clearing afterwards would
@@ -68,20 +84,43 @@ test.afterEach(async ({ page }, testInfo) => {
     { tab: ADMIN_TAB.company, names: createdCompanies },
     { tab: ADMIN_TAB.location, names: createdLocations },
   ];
+  const jobs = createdJobs;
   const resumes = createdResumes;
+  createdJobs = [];
   createdJobTitles = [];
   createdCompanies = [];
   createdLocations = [];
   createdResumes = [];
 
-  // Resume first. NOT for a dependency reason — that claim was here until
+  try {
+    // JOBS FIRST, and that ORDER is required rather than tidy:
+    // `deleteJobTitleById` (jobtitle.actions.ts:110-145) and `deleteCompanyById`
+    // (company.actions.ts:337-375) both count the referencing Jobs and refuse
+    // while one remains. This used to be satisfied by the body deleting the job
+    // before the hook ran, which held only on the green path; the sequencing is
+    // now inside the hook, so it holds on the failing path too.
+    for (const title of jobs) {
+      if (!(await deleteJobTracked(page, title))) {
+        console.warn(`[job-detail-panels] leaked job survived cleanup: ${title}`);
+      }
+    }
+  } catch (error) {
+    // swallow-ok: cleanup net — a hook that throws replaces the real test
+    // failure with its own. `deleteJobTracked` already swallows and re-checks,
+    // so reaching here means something outside it broke; say so.
+    console.warn(
+      `[job-detail-panels] afterEach cleanup failed: ${String(error)}`,
+    );
+  }
+
+  // Resume second. NOT for a dependency reason — that claim was here until
   // 2026-09-08 and was wrong. `Job.resumeId` is an OPTIONAL relation with no
   // `onDelete` (`prisma/schema.prisma:436-437`), and `deleteResumeById` guards
   // only against Automations, never against Jobs
   // (`src/actions/profile.actions.ts:389-398`), so a resume CAN go while its
-  // job is still there. The order is kept because it is harmless and because
-  // the sweep below genuinely does depend on the Job being gone; only the
-  // stated reason changes.
+  // job is still there. It sits here because this is where the bodies put it
+  // relative to the job delete, and moving it would change behaviour for no
+  // reason; only the sweep genuinely depends on an ordering.
   // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts), so
   // on a red run this costs one navigation and reports nothing — it cannot turn
   // a failing test into a differently-failing one.
@@ -89,12 +128,7 @@ test.afterEach(async ({ page }, testInfo) => {
     await deleteResume(page, title);
   }
 
-  // The Job is deleted by the body, and that ORDER is required rather than
-  // tidy: `deleteJobTitleById` (jobtitle.actions.ts:110-145) and
-  // `deleteCompanyById` (company.actions.ts:337-375) both refuse while a Job
-  // still references the row. On a red run the job survives and the sweep warns
-  // about three rows instead of silently leaving them — which is the honest
-  // outcome, not a second bug.
+  // Reference rows last, for the reason given above the job loop.
   await sweepReferenceGroups(page, groups, "job-detail-panels");
 });
 
@@ -212,6 +246,18 @@ async function createJob(
   await firstResumeOption.waitFor({ state: "visible", timeout: 10000 });
   await firstResumeOption.click();
 
+  // Registered immediately before the click that writes the Job, and not
+  // earlier. The three reference registrations above sit at the combobox that
+  // writes THEIR row; this is the same rule applied to the Job, whose only write
+  // site is this submit — `addJob` is reachable from nowhere else. The sibling
+  // specs (kanban.spec.ts:111, job-status-crud.spec.ts:351) register up at the
+  // Title combobox instead, which is also "before the write" but over-broadly: a
+  // body that dies while filling the Job Source registers a Job that was never
+  // created, and the hook then pays a full absence timeout chasing it.
+  //
+  // The assertion after the click is NOT the registration point: a save that
+  // succeeds and then fails the dialog-close wait has still written the row.
+  createdJobs.push(opts.title);
   await page.getByTestId("save-job-btn").click();
 
   // Wait for the dialog to close (confirms save + redirect completed)
@@ -266,6 +312,46 @@ async function deleteJob(page: Page, jobTitle: string) {
   await expectToast(page, /Job has been deleted successfully/, 15000);
   // DOM locator, because the read happens as the AlertDialog closes (E2E-B40).
   await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 15000 });
+}
+
+/**
+ * Teardown wrapper around `deleteJob`. Returns whether the job is absent
+ * afterwards; never throws, because this is teardown and a hook that throws
+ * replaces the real test failure with its own.
+ *
+ * Deliberately WRAPS `deleteJob` rather than reimplementing the flow the way
+ * `kanban.spec.ts:144-183` and `job-status-crud.spec.ts:133-180` do. Everything
+ * that makes `deleteJob` worth keeping lives in its comments — the toast/count
+ * pair and the dev-server-restart measurement behind the 15 s — and a second
+ * copy would have to carry them or lose them.
+ *
+ * The cost of wrapping rather than copying is the absence path: those two probe
+ * `waitFor({ state: "visible" })` and return early, while this one lets
+ * `navigateToPopulatedJobsTable`'s table wait and `deleteJob`'s own 15 s
+ * visibility wait expire and reports through the catch. Same answer, a little
+ * slower, once, in teardown, on a path that only exists when a body has already
+ * failed.
+ */
+async function deleteJobTracked(page: Page, jobTitle: string): Promise<boolean> {
+  // DOM locator, never `getByRole` (E2E-B40): the re-check below can be read
+  // while a confirm AlertDialog is still open or animating out, and Radix blanks
+  // the accessibility tree behind it for that whole window — a role locator
+  // would answer "no such row" about a row that is still in the database.
+  const row = rowsByText(page, jobTitle).first();
+  try {
+    await deleteJob(page, jobTitle);
+    return true;
+  } catch {
+    // swallow-ok: cleanup net. Dismiss anything still on screen before the
+    // re-check — an open AlertDialog eats the pointer, so the next name in the
+    // loop would be reported as a second leak that never existed.
+    await page.keyboard.press("Escape").catch(() => null);
+    await page
+      .getByRole("alertdialog")
+      .waitFor({ state: "detached", timeout: 3000 })
+      .catch(() => null);
+    return !(await row.isVisible().catch(() => false));
+  }
 }
 
 /** Navigate to job detail by clicking the job title link in the table. */
@@ -385,10 +471,11 @@ test.describe("Job Detail Panels", () => {
       emptyState.or(triggerButton.first()).or(resultsList.first()),
     ).toBeVisible({ timeout: 15000 });
 
-    // Cleanup. The resume is removed by the afterEach, not from here: it used to
-    // be the line after this one, which meant a throwing `deleteJob` abandoned
-    // it (see `createdResumes`).
-    await deleteJob(page, jobTitle);
+    // Cleanup is entirely in the afterEach now — the resume since 2026-09-08,
+    // the JOB as of this change. It used to be this line, which is the path a
+    // failed assertion above skips; and a surviving Job then blocks the
+    // reference sweep, so one red assertion produced three more red lines about
+    // JobTitle, Company and Location. See the file header.
   });
 
   test("status history timeline renders on job detail page", async ({
@@ -433,10 +520,11 @@ test.describe("Job Detail Panels", () => {
       expect(itemCount).toBeGreaterThanOrEqual(1);
     }
 
-    // Cleanup. The resume is removed by the afterEach, not from here: it used to
-    // be the line after this one, which meant a throwing `deleteJob` abandoned
-    // it (see `createdResumes`).
-    await deleteJob(page, jobTitle);
+    // Cleanup is entirely in the afterEach now — the resume since 2026-09-08,
+    // the JOB as of this change. It used to be this line, which is the path a
+    // failed assertion above skips; and a surviving Job then blocks the
+    // reference sweep, so one red assertion produced three more red lines about
+    // JobTitle, Company and Location. See the file header.
   });
 
   test("status history timeline shows status change after update", async ({
@@ -478,9 +566,10 @@ test.describe("Job Detail Panels", () => {
       timeline.getByText("Applied").first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Cleanup. The resume is removed by the afterEach, not from here: it used to
-    // be the line after this one, which meant a throwing `deleteJob` abandoned
-    // it (see `createdResumes`).
-    await deleteJob(page, jobTitle);
+    // Cleanup is entirely in the afterEach now — the resume since 2026-09-08,
+    // the JOB as of this change. It used to be this line, which is the path a
+    // failed assertion above skips; and a surviving Job then blocks the
+    // reference sweep, so one red assertion produced three more red lines about
+    // JobTitle, Company and Location. See the file header.
   });
 });
