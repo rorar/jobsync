@@ -61,7 +61,7 @@ export default function DataExportSettings() {
   return (
     <div className="rounded-lg border p-4 space-y-2">
       <div className="space-y-0.5">
-        <h4 className="text-sm font-medium">{t("settings.exportTitle")}</h4>
+        <h3 className="text-sm font-medium">{t("settings.exportTitle")}</h3>
         <p className="text-sm text-muted-foreground">
           {t("settings.exportDesc")}
         </p>

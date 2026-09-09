@@ -353,7 +353,7 @@ function ApiKeySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.apiKeys")}</h3>
+          <h2 className="text-lg font-medium">{t("settings.apiKeys")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.apiKeysDesc")}
           </p>
@@ -369,7 +369,7 @@ function ApiKeySettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.apiKeys")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.apiKeys")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.apiKeysDesc")}{" "}
           {t("settings.apiKeysDescSecure")}

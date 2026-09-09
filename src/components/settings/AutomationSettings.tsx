@@ -87,7 +87,7 @@ function AutomationSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.automationSettings")}</h3>
+          <h2 className="text-lg font-medium">{t("settings.automationSettings")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.automationSettingsDesc")}
           </p>
@@ -103,7 +103,7 @@ function AutomationSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.automationSettings")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.automationSettings")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.automationSettingsDesc")}
         </p>

@@ -54,7 +54,7 @@ function JobFormSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.jobFormSettings")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.jobFormSettings")}</h2>
         <p className="text-sm text-muted-foreground">{t("settings.jobFormSettingsDesc")}</p>
       </div>
 

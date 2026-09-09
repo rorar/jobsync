@@ -96,10 +96,10 @@ export default function PrivacySecuritySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
+          <h2 className="text-lg font-medium flex items-center gap-2">
             <ShieldCheck className="h-5 w-5" />
             {t("settings.privacyTitle")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.privacyDesc")}
           </p>
@@ -115,10 +115,10 @@ export default function PrivacySecuritySettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium flex items-center gap-2">
+        <h2 className="text-lg font-medium flex items-center gap-2">
           <ShieldCheck className="h-5 w-5" />
           {t("settings.privacyTitle")}
-        </h3>
+        </h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.privacyDesc")}
         </p>

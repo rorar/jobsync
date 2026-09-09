@@ -109,7 +109,7 @@ export default function CompanyBlacklistSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">{t("blacklist.title")}</h3>
+        <h2 className="text-lg font-medium">{t("blacklist.title")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
           {t("blacklist.description")}
         </p>

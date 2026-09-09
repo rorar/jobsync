@@ -218,9 +218,9 @@ function EnrichmentModuleSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">
+          <h2 className="text-lg font-medium">
             {t("enrichment.modulesTitle")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("enrichment.modulesDescription")}
           </p>
@@ -236,9 +236,9 @@ function EnrichmentModuleSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">
+        <h2 className="text-lg font-medium">
           {t("enrichment.modulesTitle")}
-        </h3>
+        </h2>
         <p className="text-sm text-muted-foreground">
           {t("enrichment.modulesDescription")}
         </p>

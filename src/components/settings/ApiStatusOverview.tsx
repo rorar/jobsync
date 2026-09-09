@@ -201,9 +201,9 @@ function ApiStatusOverview() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">
+          <h2 className="text-lg font-medium">
             {t("enrichment.healthOverviewTitle")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("enrichment.healthOverviewDescription")}
           </p>
@@ -223,9 +223,9 @@ function ApiStatusOverview() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h3 className="text-lg font-medium">
+          <h2 className="text-lg font-medium">
             {t("enrichment.healthOverviewTitle")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("enrichment.healthOverviewDescription")}
           </p>
