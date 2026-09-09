@@ -47,6 +47,24 @@ not recounted` row of the block table in `docs/BUGS.md`.
 
 ---
 
+> **STATUS 2026-09-09.** Most of this section is now closed; the document is left as the
+> snapshot it was rather than rewritten, so the reasoning that produced each item stays readable.
+>
+> - **§2.1 (the admin reference screen)** — closed. Recorded as `UI-B1`–`UI-B18` in `docs/BUGS.md`,
+>   which supersedes the item list here.
+> - **§2.2 T1–T7 and T9** — closed. Two premises here were stale by the time they were worked:
+>   T5 said two specs carried private copies of the admin deleters, but `profile-crud` had already
+>   been migrated in `45ba0653`, so only `keyboard-ux` remained; and T9's line number had drifted,
+>   with the empty slot nested inside a second wrapper div, and the same dead slot present in two
+>   further containers the item did not name.
+> - **T8** stays open deliberately, for the reason it already gives.
+> - **§2.3** — `bun knip` has now been run. It reports 21 unused files, 84 unused exports and 6
+>   unused dependencies, but **none of the files this session added**, including
+>   `e2e/helpers/console-oracle.ts`, which the note below suspected. All four of the false-positive
+>   shapes `CLAUDE.md` § Dead Code Detection names are present in the output, so the list behaves
+>   exactly as documented and must not be acted on by importer count. The rest is pre-existing.
+>   `install-hooks.sh` is still deliberately not run.
+
 ## 2. Open items — not fixed, each with its citation
 
 Nothing below is blocking. Every item was found by reading code this session and left alone
