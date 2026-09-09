@@ -127,7 +127,7 @@ async function deleteResumeAndVerifyGone(page: Page, title: string) {
 //      `selectOrCreateComboboxOption` that writes the row and then fails its
 //      follow-up assertion has still leaked one.
 //   3. De-registration only on a proven delete (see `deleteResumeAndVerifyGone`
-//      above and `deleteAdminReferenceRow` below).
+//      above and `deleteAdminReferenceRow` in `../helpers/admin-reference-cleanup`).
 //   4. The afterEach swaps the references out before its first await.
 //   5. It navigates itself, inside the try.
 //   6. Two tiers — the deleters swallow, the hook re-checks and warns. Nothing
@@ -136,8 +136,9 @@ async function deleteResumeAndVerifyGone(page: Page, title: string) {
 // The FOLLOW-UP that used to stand here — "they belong in e2e/helpers/ as soon
 // as a third caller appears" — has been discharged: callers three through six
 // arrived at once, and the two deleters now live in
-// `../helpers/admin-reference-cleanup`. `keyboard-ux.spec.ts` still holds its
-// own copy and is the remaining migration.
+// `../helpers/admin-reference-cleanup`. `keyboard-ux.spec.ts` was the last
+// private copy and was migrated on 2026-09-09, so there is now exactly ONE
+// implementation of these two functions in the suite.
 //
 // The four registries themselves are declared near the top of the file, so that
 // `deleteResumeAndVerifyGone` can de-register on proof without a forward
@@ -394,11 +395,12 @@ test("add summary section", async ({ page }) => {
 test("add work experience", async ({ page }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume Experience ${uid}`;
-  // A FIXED name, not uid-suffixed — teardown finds it through the registry
-  // below, not through its name. See the corrected note on `locationText` in
-  // "add education and edit school name" for what that costs under parallel
-  // workers.
-  const jobText = "Software Developer";
+  // uid-suffixed, and NOT so that teardown can find it — cleanup in this file
+  // is registry-driven (`createdJobTitles.push` below). The suffix is what
+  // keeps one worker's teardown from deleting a reference row another worker's
+  // form is still using; the full argument is on `locationText` in "add
+  // education and edit school name".
+  const jobText = `Software Developer ${uid}`;
 
   await navigateToProfile(page);
   // Registered BEFORE the write: a create that fails after the row was written
@@ -430,7 +432,7 @@ test("add work experience", async ({ page }) => {
   );
   await expect(page.getByLabel("Job Title")).toContainText(jobText);
 
-  const companyText = "company test";
+  const companyText = `company test ${uid}`;
   createdCompanies.push(companyText);
   await selectOrCreateComboboxOption(
     page,
@@ -440,7 +442,7 @@ test("add work experience", async ({ page }) => {
   );
   await expect(page.getByLabel("Company")).toContainText(companyText);
 
-  const locationText = "location test";
+  const locationText = `location test ${uid}`;
   createdLocations.push(locationText);
   await selectOrCreateComboboxOption(
     page,
@@ -471,11 +473,12 @@ test("add work experience", async ({ page }) => {
 test("edit experience dialog opens and cancels", async ({ page }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume EditExp ${uid}`;
-  // A FIXED name, not uid-suffixed — teardown finds it through the registry
-  // below, not through its name. See the corrected note on `locationText` in
-  // "add education and edit school name" for what that costs under parallel
-  // workers.
-  const jobText = "Software Developer";
+  // uid-suffixed — same reason as in "add work experience"; the full argument
+  // is on `locationText` in "add education and edit school name". Note that
+  // `jobText` is also concatenated into a `getByText(jobText + "Edit")` below,
+  // which still holds: that locator wants the heading's text immediately
+  // followed by the Edit button's, and the suffix is INSIDE the heading.
+  const jobText = `Software Developer ${uid}`;
 
   await navigateToProfile(page);
   // Registered BEFORE the write: a create that fails after the row was written
@@ -507,7 +510,7 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   );
   await expect(page.getByLabel("Job Title")).toContainText(jobText);
 
-  const companyText = "company test";
+  const companyText = `company test ${uid}`;
   createdCompanies.push(companyText);
   await selectOrCreateComboboxOption(
     page,
@@ -517,7 +520,7 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   );
   await expect(page.getByLabel("Company")).toContainText(companyText);
 
-  const locationText = "location test";
+  const locationText = `location test ${uid}`;
   createdLocations.push(locationText);
   await selectOrCreateComboboxOption(
     page,
@@ -568,16 +571,27 @@ test("multi-section integration: summary + experience + education", async ({
 }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume Full ${uid}`;
-  const schoolName = "MIT";
+  // `schoolName` is uid-suffixed for a DIFFERENT reason from the three below
+  // it. `Education.school` is a free-text column, not a reference model — it is
+  // registered in no registry and never reaches `deleteAdminReferenceRow`, so
+  // the cross-worker delete hazard does not apply to it. What does apply is the
+  // READ side: it is asserted through `getByRole("heading", { name: schoolName })`,
+  // and that option matches a case-insensitive SUBSTRING, so a bare `"MIT"` is
+  // satisfied by a heading reading "Summit" or "Smith". Three characters is not
+  // an assertion.
+  const schoolName = `MIT ${uid}`;
+  // `degreeName` and `fieldOfStudy` are deliberately NOT suffixed: they are
+  // free-text columns like `school`, but unlike it they are only ever FILLED —
+  // nothing asserts on them and nothing deletes by them, so neither hazard
+  // above exists.
   const degreeName = "Master of Science";
   const fieldOfStudy = "Computer Science";
-  // FIXED names, not uid-suffixed — teardown finds them through the registries
-  // below. See the corrected note on `locationText` in "add education and edit
-  // school name"; `"MIT"` is the shortest of them and the most exposed to the
-  // substring match described there.
-  const jobTitle = "Senior Engineer";
-  const companyName = "E2E Corp";
-  const locationText = "Boston";
+  // uid-suffixed — these three DO reach `deleteAdminReferenceRow` through the
+  // registries below. The full argument is on `locationText` in "add education
+  // and edit school name".
+  const jobTitle = `Senior Engineer ${uid}`;
+  const companyName = `E2E Corp ${uid}`;
+  const locationText = `Boston ${uid}`;
   const summaryText =
     "Experienced software engineer with deep expertise.";
 
@@ -768,23 +782,36 @@ test("add education and edit school name", async ({ page }) => {
 
   await page.getByPlaceholder("Ex: Stanford").fill(originalSchool);
 
-  // CORRECTED 2026-09-08. This note used to read "uid-suffixed so teardown can
-  // delete it", and the line under it is `"Cambridge"` — a fixed literal. Three
-  // other sites in this file repeat the claim about `"Software Developer"`,
-  // `"Senior Engineer"` and `"MIT"`, which are fixed too. Nothing here is
-  // uid-suffixed, and teardown never depended on it: cleanup in this file is
-  // REGISTRY-driven (`createdLocations.push` below, swept by the afterEach), so
-  // it deletes what a test recorded rather than what a name pattern matches.
+  // THE ARGUMENT FOR THE `${uid}` SUFFIX ON EVERY REFERENCE NAME IN THIS FILE.
+  // The other sites point here rather than repeat it.
   //
-  // The concurrency hazard the old note described is real and UNADDRESSED: a
-  // fixed name is shared with every other worker running this file, and
-  // `deleteAdminReferenceRow` matches a case-insensitive SUBSTRING, so under
-  // `E2E_WORKERS>1` one worker's teardown can delete a row another worker's form
-  // is still using. The suite runs single-worker by default
-  // (`scripts/test-e2e.sh`), which is why this has never been seen. Giving these
-  // names a `uniqueId()` suffix is the fix; it was not done here because it
-  // changes what several assertions match and wants its own run.
-  const locationText = "Cambridge";
+  // First, what the suffix is NOT for. A note here used to read "uid-suffixed so
+  // teardown can delete it"; that was wrong twice over — the line under it was a
+  // fixed literal, and teardown never depended on the name's shape. Cleanup in
+  // this file is REGISTRY-driven (`createdLocations.push` below, swept by the
+  // afterEach), so it deletes what a test RECORDED, not what a pattern matches.
+  //
+  // What it IS for is concurrency. `deleteAdminReferenceRow` matches a
+  // case-insensitive SUBSTRING of the row's text, so a fixed name is the same
+  // string in every concurrent copy of this file: under `E2E_WORKERS>1` one
+  // worker's teardown deletes the Location row another worker's form is at that
+  // moment pointing at, and the second worker fails somewhere that names neither
+  // the first worker nor the delete. The suite runs single-worker by default
+  // (`scripts/test-e2e.sh`), which is the only reason this was never seen.
+  //
+  // FIXED 2026-09-09 (handoff T6). Every reference name this file creates —
+  // JobTitle, Company, Location — now carries `${uid}`, so no two workers write
+  // or delete the same row. It costs nothing on the read side: every assertion
+  // over these values already went through the VARIABLE, never a repeated
+  // literal, so there was no assertion to keep in step. Free-text columns are
+  // treated separately at their own sites (`schoolName`, `degreeName`,
+  // `fieldOfStudy` in "multi-section integration").
+  //
+  // The one thing to keep in mind when adding a name here: it is fed to
+  // `selectOrCreateComboboxOption`, which builds `new RegExp(text, "i")` for its
+  // partial-option match, so the value must stay free of regex metacharacters.
+  // `uniqueId()` is base36 plus `w<worker>`, so a space-joined suffix is safe.
+  const locationText = `Cambridge ${uid}`;
   // Registered before the write. `selectOrCreateComboboxOption` CREATES the row
   // when it is absent, and that row outlives the resume: deleting the resume
   // removes the WorkExperience/Education that points at the reference, never

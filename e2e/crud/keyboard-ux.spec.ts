@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { rowsByText, uniqueId } from "../helpers";
+import { ensureEnglishLocale, rowsByText, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
 // Imported from its own file rather than `../helpers` on purpose: the barrel
 // imports `@playwright/test`, and `__tests__/console-oracle.spec.ts` has to be
 // able to reach the classifier from Jest. See the header of that module.
@@ -28,143 +32,22 @@ import { classifyConsoleErrors } from "../helpers/console-oracle";
 //   6. Two tiers — the deleters swallow, the hook re-checks and warns. Nothing
 //      rethrows: a hook that throws replaces the real test failure with its own.
 //
-// FOLLOW-UP: `profile-crud.spec.ts` carries its own copy of
-// `loadUntilAdminRowVisible` / `deleteAdminReferenceRow`, because the two specs
-// were repaired under separate file ownership. They belong in `e2e/helpers/`
-// as soon as a third caller appears (e2e/CONVENTIONS.md — "Adding a new shared
-// helper": 3+ spec files).
+// The FOLLOW-UP that used to stand here — "`profile-crud.spec.ts` carries its
+// own copy of `loadUntilAdminRowVisible` / `deleteAdminReferenceRow`, and they
+// belong in `e2e/helpers/` as soon as a third caller appears" — has been
+// discharged. Callers three through six arrived at once, the pair moved to
+// `../helpers/admin-reference-cleanup`, `profile-crud` was migrated in
+// `45ba0653`, and this file was the LAST private copy. Its two functions were
+// byte-identical to the shared ones once comments and the `export` keyword are
+// set aside, so nothing was lost in the move; what the shared header adds is
+// the E2E-B40 argument spelled out in full, the `ADMIN_TAB.source` /
+// `ADMIN_TAB.activityType` entries this file never needed, and the note that
+// `name` is matched as a case-insensitive SUBSTRING.
 let createdJobTitles: string[] = [];
 let createdCompanies: string[] = [];
 let createdLocations: string[] = [];
 let createdTags: string[] = [];
 let createdResumes: string[] = [];
-
-/**
- * Admin tab that owns each reference model. The tab is a URL parameter
- * (`AdminTabsContainer.tsx:33` reads `?tab`), so teardown never has to click
- * through the tab list.
- */
-const ADMIN_TAB = {
-  jobTitle: "job-titles",
-  company: "companies",
-  location: "locations",
-  tag: "skills",
-} as const;
-
-/**
- * Click "Load More" until the named row is visible, or until there is nothing
- * left to load. Adapted from `company-crud.spec.ts:24-55`, the one existing
- * admin-table deletion in this suite.
- *
- * Every admin container pages at `APP_CONSTANTS.RECORDS_PER_PAGE` (25) and
- * APPENDS on Load More, so a row created during the run can sit past page 1.
- * The 10-iteration cap means a table beyond 250 rows would report "not found"
- * for a row that exists; the seeded template starts with zero of all four
- * models, so that is far out of reach.
- *
- * EVERY read below is a DOM locator, and none of them may become a `getByRole`
- * (E2E-B40). This helper is called in a loop over several names against the
- * same table, and a delete that the server refused leaves its AlertDialog on
- * screen; Radix's `hideOthers()` (`@radix-ui/react-dialog/dist/index.mjs:137`)
- * then sets `aria-hidden="true"` on the table behind it and the accessibility
- * tree is EMPTY for that whole window. A role locator would report "row not
- * found" for every remaining name — and `deleteAdminReferenceRow` reads that
- * as "the row was never written", so the leak would be reported as cleaned.
- * The blinding is silent, permanent and green, which is why it is spelled out
- * here rather than left to the reader of `getByRole`.
- */
-async function loadUntilAdminRowVisible(
-  page: Page,
-  name: string,
-): Promise<boolean> {
-  const row = rowsByText(page, name).first();
-  // `tr` under any table on the page: the count only has to MOVE for the
-  // Load More poll below, so it does not matter that the header is included.
-  const allRows = page.locator("table tr");
-
-  // Row 0 is the header, so row 1 appearing means data has loaded.
-  await allRows
-    .nth(1)
-    .waitFor({ state: "visible", timeout: 15000 })
-    .catch(() => null);
-
-  for (let i = 0; i < 10; i++) {
-    if (await row.isVisible().catch(() => false)) return true;
-    const loadMore = page.getByRole("button", { name: /Load More/i });
-    if (!(await loadMore.isVisible().catch(() => false))) break;
-    const rowsBefore = await allRows.count();
-    await loadMore.click();
-    await expect
-      .poll(() => allRows.count(), { timeout: 15000 })
-      .toBeGreaterThan(rowsBefore);
-  }
-  return row.isVisible().catch(() => false);
-}
-
-/**
- * Delete one reference row from the admin table currently on screen.
- *
- * Returns whether the row is gone afterwards — a row that was never written
- * counts as gone, since there is no residue either way. Never throws: this is
- * teardown, and the caller turns a `false` into a warning.
- */
-async function deleteAdminReferenceRow(
-  page: Page,
-  name: string,
-): Promise<boolean> {
-  // DOM locator, not `getByRole`. Every read below that touches the TABLE — the
-  // trigger, the proof, and the re-check in the catch — happens with the
-  // DeleteAlertDialog open or closing, and Radix
-  // sets `aria-hidden` on the table behind it, so a role locator matches NOTHING
-  // for that window and every phrasing of "the row is gone" is satisfied by a
-  // row still on screen and still in the database (E2E-B40, `rowsByText` in
-  // e2e/helpers). `hasText` takes the string literally, so `escapeRegExp` goes.
-  const row = rowsByText(page, name).first();
-  try {
-    if (!(await loadUntilAdminRowVisible(page, name))) return true;
-    // DOM locator again, and for the same reason as `loadUntilAdminRowVisible`:
-    // this read happens against the TABLE, which is what Radix blanks.
-    //
-    // A TEST ID rather than a label: every admin table now names its delete
-    // button after the row it deletes (`common.deleteNamed` — "Delete Acme
-    // Corp"), so `[aria-label="Delete"]` matches nothing and a widened name
-    // match would break again at the next rewording or locale change. The
-    // attribute is on the delete button of all six admin tables. The confirm
-    // button below is a different control and keeps its plain "Delete" label.
-    await row.locator('[data-testid="delete-row"]').first().click();
-    const dialog = page.getByRole("alertdialog");
-    await dialog.waitFor({ state: "visible", timeout: 5000 });
-    // `DeleteAlertDialog` renders Cancel + Delete; the destructive one is
-    // `AlertDialogAction`, labelled `common.delete` ("Delete", en).
-    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
-    // The row disappearing is the proof, not the toast: the container calls its
-    // reload only on success, so a delete the server REFUSED (the row is still
-    // referenced) leaves the row exactly where it was.
-    await row.waitFor({ state: "detached", timeout: 10000 });
-    return true;
-  } catch {
-    // swallow-ok: cleanup net — a throwing teardown would replace the real test
-    // failure with its own. Re-check instead of assuming, so a row the net
-    // failed to delete is reported rather than passing in silence.
-    //
-    // Dismiss whatever is still on screen before that re-check and before the
-    // next name in the loop. Two of the three ways this catch is reached leave
-    // an AlertDialog OPEN: the row is still referenced, so `DeleteAlertDialog`
-    // renders no destructive action at all (`DeleteAlertDialog.tsx:89` —
-    // `{deleteAction && <AlertDialogAction/>}`) and the click above times out;
-    // or the delete was refused server-side and the row never detached. An
-    // open dialog is not inert — Radix blanks the accessibility tree behind it
-    // and its overlay swallows the pointer, so the NEXT name would fail to
-    // click its own Delete button and be reported as a second leak that never
-    // existed. Escape is the dialog's own documented dismissal.
-    await page.keyboard.press("Escape").catch(() => null);
-    await page
-      .getByRole("alertdialog")
-      .waitFor({ state: "detached", timeout: 3000 })
-      .catch(() => null);
-    return !(await row.isVisible().catch(() => false));
-  }
-}
 
 /**
  * Delete a resume created by this spec and prove it is gone.
@@ -211,7 +94,11 @@ test.afterEach(async ({ page }, testInfo) => {
   // keep entries alive into the next test if a delete throws, and clearing in a
   // beforeEach would not run at all under test.skip.
   const resumes = createdResumes;
-  const referenceGroups: Array<{ tab: string; names: string[] }> = [
+  // No explicit annotation: `sweepReferenceGroups` takes `AdminReferenceTab`,
+  // the union of the admin tab slugs, and the widened `Array<{ tab: string }>`
+  // this line used to carry would not assign to it. Inference off `ADMIN_TAB`
+  // keeps the literal types.
+  const referenceGroups = [
     { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
     { tab: ADMIN_TAB.company, names: createdCompanies },
     { tab: ADMIN_TAB.location, names: createdLocations },
@@ -250,29 +137,22 @@ test.afterEach(async ({ page }, testInfo) => {
       }
     }
 
-    for (const { tab, names } of referenceGroups) {
-      if (names.length === 0) continue;
-      await page.goto(`/dashboard/admin?tab=${tab}`);
-      await page.waitForLoadState("domcontentloaded");
-      for (const name of names) {
-        if (!(await deleteAdminReferenceRow(page, name))) {
-          console.warn(
-            `[keyboard-ux] leaked ${tab} row survived cleanup: ${name}`,
-          );
-        }
-      }
-    }
+    // The navigate-and-delete loop that used to be inlined here is now
+    // `sweepReferenceGroups`, which does the same thing with the same warning
+    // shape (`[spec] leaked <tab> row survived cleanup: <name>`) and adds a
+    // try/catch of its own that names the groups it may have left behind. The
+    // viewport widening above stays HERE and must stay ahead of this call: the
+    // shared helper knows nothing about the "Mobile Viewport" describe block.
+    await sweepReferenceGroups(page, referenceGroups, "keyboard-ux");
   } catch (error) {
+    // swallow-ok: afterEach cleanup net — a throwing hook replaces the real test
+    // failure with its own, which is strictly worse than a warned-about leak.
+    // The guard started flagging this block when the inlined sweep loop became a
+    // call to `sweepReferenceGroups`: that helper asserts, so the try now
+    // reaches an assertion indirectly where it previously did not.
     console.warn(`[keyboard-ux] afterEach cleanup failed: ${String(error)}`);
   }
 });
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");

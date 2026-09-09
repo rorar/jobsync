@@ -180,7 +180,11 @@ export async function deleteAdminReferenceRow(
     // match would break again at the next rewording or locale change. The
     // attribute is on the delete button of all six tables — CompaniesTable,
     // JobTitlesTable, JobLocationsTable, JobSourcesTable, TagsTable,
-    // ActivityTypesTable.
+    // ActivityTypesTable. The dialog's confirm button below is a DIFFERENT
+    // control and keeps its plain "Delete" label, which is why the click after
+    // this one still matches by name — carried over from the private copy in
+    // keyboard-ux.spec.ts when that copy was retired, because it answers the
+    // obvious next question and nothing else here said it.
     await row.locator('[data-testid="delete-row"]').first().click();
     const dialog = page.getByRole("alertdialog");
     await dialog.waitFor({ state: "visible", timeout: 5000 });
