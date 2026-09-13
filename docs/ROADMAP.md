@@ -2265,7 +2265,7 @@ Dynamische Dateipfade und Dateinamen für generierte/exportierte Dokumente (CV, 
 - Status-Transition-Dialog mit optionaler Notiz
 - Undo-Toast (5s) für Status-Änderungen
 - Loading/Empty/Error States, Keyboard Navigation, Dark Mode, motion-reduce
-- 7 React-Komponenten: KanbanBoard, KanbanColumn, KanbanCard, StatusTransitionDialog, KanbanEmptyState, KanbanViewModeToggle, index barrel
+- 6 React-Komponenten: KanbanBoard, KanbanColumn, KanbanCard, StatusTransitionDialog, KanbanEmptyState, KanbanViewModeToggle (Barrel `index.ts` 2026-09-13 entfernt — nie importiert, alle sechs Komponenten werden per Direktpfad importiert)
 
 - Kanban-Board als **UI-View** über den Job Status Workflow (→ 5.3) — keine eigene Entität
 - Priorisierung und Sortierung nach Deadline, Match-Score
@@ -2791,10 +2791,10 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
   - `credential-resolver.ts` — liest `manifest.credential`, egal wo registriert
   - `degradation.ts` — nutzt `moduleRegistry` + Prisma, egal wo registriert
   - `rate-limiter.ts` (TokenBucket) — modul-agnostisch
-  - **Facade-Registries** (`data-enrichment/registry.ts`, `job-discovery/registry.ts` etc.) — bleiben als typisierte Query-Layer. Sie registrieren nichts (`.register()` ist bereits No-Op), sie filtern nur per `moduleRegistry.getByType()`. Unverändert.
+  - **Facade-Registries** (`job-discovery/registry.ts`, `ai-provider/registry.ts`) — bleiben als typisierte Query-Layer. Sie registrieren nichts (`.register()` ist bereits No-Op), sie filtern nur per `moduleRegistry.getByType()`. Unverändert. (`data-enrichment/registry.ts` und `reference-data/registry.ts` existierten als derselbe Fassaden-Typ, hatten aber nie einen Aufrufer — am 2026-09-13 gelöscht, siehe CLAUDE.md § Data Enrichment Connector.)
 
 - **⚠ Aufmerksamkeitspunkt: Import-Reihenfolge bei Facade-Abfragen:**
-  Die Facade-Registries (`enrichmentConnectorRegistry.create()`, `getEnrichmentModuleByDimension()`) und der `EnrichmentOrchestrator` rufen `moduleRegistry.getByType()` / `moduleRegistry.create()` auf. Module MÜSSEN registriert sein bevor die erste Facade-Abfrage erfolgt. Garantie: `register-all.ts` wird in `module.actions.ts` und in den Runner-Startup-Paths importiert — bevor jede Facade aufgerufen wird. Bei Self-Registration muss sichergestellt werden, dass `register-all.ts` NICHT lazy-loaded wird (kein `dynamic import()`), sondern als synchroner Top-Level-Import eingebunden bleibt.
+  Die verbliebenen Facade-Registries (`job-discovery/registry.ts`, `ai-provider/registry.ts`) und der `EnrichmentOrchestrator` rufen `moduleRegistry.getByType()` / `moduleRegistry.create()` auf. Module MÜSSEN registriert sein bevor die erste Facade-Abfrage erfolgt. Garantie: `register-all.ts` wird in `module.actions.ts` und in den Runner-Startup-Paths importiert — bevor jede Facade aufgerufen wird. Bei Self-Registration muss sichergestellt werden, dass `register-all.ts` NICHT lazy-loaded wird (kein `dynamic import()`), sondern als synchroner Top-Level-Import eingebunden bleibt.
 
 - **Voraussetzung:** Module Lifecycle Manager (→ 0.4) implementiert
 - **Konsumenten:** Marketplace (→ 2.11), Phase 1 Module SDK (unten), alle zukünftigen Module
