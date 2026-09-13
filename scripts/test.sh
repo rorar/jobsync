@@ -72,8 +72,18 @@ guard_host_load "test.sh" || exit 75
 # The limits CLAUDE.md used to ask every caller to prepend by hand. A wrapper
 # whose protection depends on being invoked correctly is not a wrapper: the full
 # suite is ~6 min over 300+ suites, and an unguarded run has starved this host.
-MEM_MAX="${JEST_MEM_MAX:-4G}"
-NODE_HEAP="${JEST_NODE_HEAP:-3072}"
+#
+# 2026-09-13: MEM_MAX/NODE_HEAP raised 4G/3072->8G/6144 after a MEASURED,
+# deliberate container resize (cgroupfs memory.max 16G->32G, memory.high
+# 14G->28G, live, no swap either side). `--maxWorkers=1` above is UNCHANGED —
+# that policy is about worker COUNT vs CPU affinity (still 5 threads for this
+# session per /proc/self/status Cpus_allowed_list), which the memory resize
+# does not touch. Verify current cgroup values with
+# `cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.high` before re-raising
+# either number -- `free -h` inside this LXC guest reports the HOST, not the
+# container's own cgroup.
+MEM_MAX="${JEST_MEM_MAX:-8G}"
+NODE_HEAP="${JEST_NODE_HEAP:-6144}"
 TIMEOUT="${JEST_TIMEOUT:-1800}"
 # --foreground: without it timeout puts jest in its own process group and Ctrl-C
 # no longer reaches it, which also breaks `--watch`.

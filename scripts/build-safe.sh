@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Resource-confined production build. The cap protects the host regardless of its size;
-# do not raise it to "fit" a bigger box -- see CLAUDE.md "resource discipline".
+# do not raise it just because a box LOOKS bigger -- see CLAUDE.md "resource discipline".
 #
 # Wraps scripts/build.sh in a systemd memory cgroup so an over-large build is
 # OOM-killed INSIDE its own scope instead of swap-deathing the host. On hosts
 # with plenty of RAM or in CI, run scripts/build.sh directly — this wrapper is
 # only for constrained machines.
 #
+# 2026-09-13: raised 7G->12G / heap 6144->10240 after a MEASURED, deliberate
+# container resize (cgroupfs memory.max 16G->32G, memory.high 14G->28G, live,
+# no swap either side). Verify current values with
+# `cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.high` before touching
+# these again -- do not re-guess from `free -h`, which reports the HOST inside
+# this LXC guest, not the container's own cgroup.
+#
 # Tunables (env vars):
-#   BUILD_MEM_MAX     cgroup memory cap              (default 7G)
-#   BUILD_NODE_HEAP   node --max-old-space-size, MB  (default 6144)
+#   BUILD_MEM_MAX     cgroup memory cap              (default 12G)
+#   BUILD_NODE_HEAP   node --max-old-space-size, MB  (default 10240)
 #   BUILD_TIMEOUT     wall-clock cap, seconds        (default 900)
 #   ALLOW_UNCONFINED  =1 -> run heap-capped + niced even without a cgroup
 #                          (default: abort rather than risk a host hang)
@@ -19,8 +26,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/lib-runtime-guard.sh"
 guard_host_load "build-safe" || exit 75
 
-MEM_MAX="${BUILD_MEM_MAX:-7G}"
-NODE_HEAP="${BUILD_NODE_HEAP:-6144}"
+MEM_MAX="${BUILD_MEM_MAX:-12G}"
+NODE_HEAP="${BUILD_NODE_HEAP:-10240}"
 TIMEOUT="${BUILD_TIMEOUT:-900}"
 
 # Free RAM so the confined build runs alone.

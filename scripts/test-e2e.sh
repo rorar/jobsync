@@ -475,9 +475,18 @@ echo "[test-e2e] ${SERVER_KIND} server ready :${PORT} | workers=${WORKERS} login
 #    plain nice/ionice. That is deliberate — a host without transient scopes can
 #    still run the suite — but it is two branches, not three.
 #
-#   E2E_MEM_MAX     cgroup memory cap for runner + browsers  (default 6G)
+#   E2E_MEM_MAX     cgroup memory cap for runner + browsers  (default 10G)
 #   E2E_CPU_QUOTA   cgroup CPUQuota                          (default 400%)
-MEM_MAX="${E2E_MEM_MAX:-6G}"
+#
+# 2026-09-13: raised 6G->10G after a MEASURED, deliberate container resize
+# (cgroupfs memory.max 16G->32G, memory.high 14G->28G, live, no swap either
+# side). Chromium's per-process memory is real usage, not a leak signature —
+# more headroom here reduces false-positive OOM kills rather than masking a
+# bug. Concurrent worst case with dev-e2e.sh's unchanged 8G (server + runner
+# in the same run) is 18G, still well under the 28G throttle. Recheck with
+# `cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.high` before raising
+# again -- not `free -h`, which reports the HOST inside this LXC guest.
+MEM_MAX="${E2E_MEM_MAX:-10G}"
 CPU_QUOTA="${E2E_CPU_QUOTA:-400%}"
 # The residue gate refuses to judge a swamped run, and it counts the timeouts
 # from a JSON report. Nothing produced one: `PLAYWRIGHT_JSON_OUTPUT_NAME` was

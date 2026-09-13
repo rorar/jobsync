@@ -31,9 +31,19 @@
 #     bound the dev server after it took the host down twice, and a production
 #     server needs the same bound, merely a thriftier one.
 #
+# 2026-09-13: MEM_MAX/NODE_HEAP raised 4G/2048->6G/3072 after a MEASURED,
+# deliberate container resize (cgroupfs memory.max 16G->32G, memory.high
+# 14G->28G, live, no swap either side). Production has no known leak (unlike
+# dev-e2e.sh's Flight-bundle issue), so more headroom here is a real win, not
+# just delaying a bug. Concurrent worst case (this server + test-e2e.sh's
+# runner+browsers cgroup) stays well under the 28G throttle threshold; recheck
+# both before raising further with
+# `cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.high` — not `free -h`,
+# which reports the HOST inside this LXC guest, not the container's cgroup.
+#
 # Tunables (env):
-#   E2E_PROD_NODE_HEAP   node --max-old-space-size, MB  (default 2048)
-#   E2E_PROD_MEM_MAX     cgroup memory backstop         (default 4G)
+#   E2E_PROD_NODE_HEAP   node --max-old-space-size, MB  (default 3072)
+#   E2E_PROD_MEM_MAX     cgroup memory backstop         (default 6G)
 #   E2E_PROD_CPU_QUOTA   cgroup CPUQuota                (default 300%, "" = none)
 #   NEXT_DIST_DIR        build directory                (default .next-e2e)
 source "$(dirname "$0")/env.sh"
@@ -80,8 +90,8 @@ fi
 # SERVER — setting it in the Playwright process would not reach it.
 export NEXTAUTH_URL="$E2E_BASE_URL"
 
-PROD_NODE_HEAP="${E2E_PROD_NODE_HEAP:-2048}"
-PROD_MEM_MAX="${E2E_PROD_MEM_MAX:-4G}"
+PROD_NODE_HEAP="${E2E_PROD_NODE_HEAP:-3072}"
+PROD_MEM_MAX="${E2E_PROD_MEM_MAX:-6G}"
 E2E_PROD_CPU_QUOTA="${E2E_PROD_CPU_QUOTA-300%}"
 export NODE_OPTIONS="--max-old-space-size=${PROD_NODE_HEAP} ${NODE_OPTIONS:-}"
 
