@@ -191,6 +191,50 @@ not a post-state but a different *contract* — e.g. `profile-crud` asserts that
 instead of tolerating a missing row — keep a local function and give it a name that says so
 (`deleteResumeAndVerifyGone`), so nobody later unifies the two by name.
 
+## Converting `afterEach` to a Playwright fixture — the ordering trap (2026-09-13)
+
+Not to be confused with the "Shared Fixtures" above (`*-fixture.ts` helper files) — this is about
+Playwright's own native `test.extend()` fixture mechanism, `specs/e2e-test-infrastructure.allium`'s
+`FixtureOwnedTeardown` rule ("ownership belongs to a Playwright fixture..., not a hand-written
+`test.afterEach`"), and a real bug this project almost shipped while acting on it.
+
+**The trap:** `test.afterEach` hooks and Playwright's test-scoped fixture teardown are NOT
+interleaved on request. Hooks always run first, THEN fixtures tear down
+(`node_modules/playwright/lib/worker/workerMain.js:339` vs. `:345` — no exception, no
+configuration flag). If a spec's `afterEach` does ORDERED cleanup across several related models —
+this project's Job specs delete the Job first, then sweep JobTitle/Company/Location, because the
+reference-table deletes refuse while a Job still points at them — converting only the FIRST step
+(Job) into its own `test.extend()` fixture silently breaks the order: the fixture's teardown runs
+*after* the whole `afterEach`, so the reference sweep now runs against a Job that still exists,
+every single time. Playwright's own docs confirm this is expected, not a bug to report: sibling
+fixtures with no declared dependency have no guaranteed order either, and the framework explicitly
+does not promise any fixed interleaving between a bare `afterEach` and a fixture's teardown phase.
+
+**The fix, matching Playwright's own recommendation** ("if an after-hook tears down what a
+before-hook created, turn it into a fixture"): don't split ordered cleanup across a hook and a
+fixture, or across several fixtures with an implied-but-undeclared order. Move the **entire**
+existing `afterEach` body — every step, in the same order — into ONE local, `auto: true`
+test-scoped fixture:
+
+```ts
+const test = base.extend<{ cleanup: void }>({
+  cleanup: [async ({ page }, use) => {
+    await use();
+    // exact same steps, same order, as the afterEach it replaces
+  }, { auto: true }],
+});
+```
+
+`auto: true` makes the fixture run for every test in the file without any test destructuring it —
+the same implicit, file-wide behavior `test.afterEach` already has. `test.setTimeout()`'s extra-time
+bump still works identically inside fixture teardown: `afterEach` and fixture teardown share the
+same timeout slot (`workerMain.js:329,339,345`, `afterHooksSlot`).
+
+**Rule of thumb before converting any `afterEach` to a fixture:** if it does more than one thing,
+convert the whole thing at once, in place, rather than one step at a time. A partially-migrated
+`afterEach` is not "safer" — it's the specific shape that breaks silently, because the still-hooked
+steps and the newly-fixtured step stop being one atomic sequence.
+
 ## No `waitForTimeout` Policy (M-T-04)
 
 `page.waitForTimeout()` is an **anti-pattern** documented by Playwright itself.

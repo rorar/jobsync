@@ -2817,6 +2817,12 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
 - **Kein neuer Spec nötig** — nutzt bestehenden ModuleManifest-Vertrag aus `module-lifecycle.allium`
 - **Trust-Modell:** Wie Home Assistant / Obsidian — Community vertrauen, nicht sandboxen (Phase 1)
 - **Developer-Doku:** Template-Repository für Modul-Entwickler, Manifest-Referenz, Testing-Guide
+  — muss den Fund aus `e2e/CONVENTIONS.md` § "Converting afterEach to a Playwright fixture — the
+  ordering trap" (2026-09-13) übernehmen: `afterEach`-Hooks laufen immer vor Fixture-Teardown,
+  nie interleaved; ordered Cleanup über mehrere Modelle (z.B. Job vor JobTitle/Company/Location)
+  bricht silent, wenn nur EIN Schritt in ein Fixture umgezogen wird statt der ganzen Kette. Ein
+  externer Modul-Autor, der eigene co-located Tests (Phase 0c) mit Playwright statt Jest schreibt,
+  liefe in dieselbe Falle ohne diese Doku.
 - Cross-Ref: Marketplace UI (2.11) zeigt auch Community-Module. Plugin-Sandboxing als experimentelles Feature (→ 9.3)
 
 ### 8.8 Production Monitoring (Self-Hosted)
