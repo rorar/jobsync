@@ -23,7 +23,7 @@ E2E_PROD=0 ./scripts/test-e2e.sh e2e/crud/x.spec.ts      # spec iteration while 
 | React bundle | **development** Flight build | production Flight build |
 | memory watchdog | **present** — restarts the server mid-run | **absent** — not compiled in |
 | auth rate-limit bypass | `E2E_AUTH_RATE_LIMIT_BYPASS=1` (`scripts/dev-e2e.sh:10`) | none; `scripts/prod-e2e.sh:45-48` actively unsets it |
-| node heap / cgroup | 3072 MB / 8 G (`scripts/dev-e2e.sh:83,97`) | 2048 MB / 4 G (`scripts/prod-e2e.sh:83,84`) |
+| node heap / cgroup | 3072 MB / 8 G (`scripts/dev-e2e.sh:83,97`) | 3072 MB / 6 G (`scripts/prod-e2e.sh:93,94`) |
 | CPU quota | 300 % | 300 % |
 | server log | `/tmp/jobsync-e2e-dev.log` | `/tmp/jobsync-e2e-prod.log` |
 | restart report + attribution | printed | skipped (`scripts/test-e2e.sh:876`) — there is nothing to report |

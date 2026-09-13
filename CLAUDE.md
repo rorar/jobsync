@@ -54,10 +54,10 @@ convenience aliases; each exists because the bare command has taken this host do
 
 | Instead of | Run | Why |
 |---|---|---|
-| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. It prints its banner, the scope line and a final `EXIT=0`; anything else is a real error. |
+| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (8G) + `nice -n 19` + `ionice -c3` + 600 s timeout. It prints its banner, the scope line and a final `EXIT=0`; anything else is a real error. |
 | `npx jest` / `bun test` | `bash scripts/test.sh` | Defaults to `--maxWorkers=1`; `jest.config.ts` enforces it again for callers that bypass the script. Also translates the common `--workers=N` typo, which Jest silently ignores. Coverage is opt-in via `--coverage`. |
 | `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it **replaces** any server on :3737 with a fresh, correctly configured one (a production server from `.next-e2e/` by default; `E2E_PROD=0` gives the dev server with `env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). It also aborts a run that is measuring the machine (exit 124, see § E2E Test Infrastructure). |
-| `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
+| `bun run build` | `bash scripts/build-safe.sh` | 12G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
 
 **For the full Jest suite** (~6 min, 300+ suites) just run the wrapper — it now applies its own
 `nice`/`ionice`, heap cap, memory cgroup and timeout, so nothing needs prepending:
@@ -66,7 +66,7 @@ convenience aliases; each exists because the bare command has taken this host do
 bash scripts/test.sh
 ```
 
-Tunables if you need them: `JEST_MEM_MAX` (4G), `JEST_NODE_HEAP` (3072), `JEST_TIMEOUT` (1800).
+Tunables if you need them: `JEST_MEM_MAX` (8G), `JEST_NODE_HEAP` (6144), `JEST_TIMEOUT` (1800).
 
 **All four heavy wrappers refuse to start when this container is already busy.**
 `scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** three times for a second each and takes the MAX (three seconds of wall clock before every wrapper; the max biases toward aborting, deliberately, because resident agents are bursty). It aborts with exit
@@ -1043,7 +1043,7 @@ exist there.
 |---|---|---|
 | server | `scripts/dev-e2e.sh` → `next dev` | `scripts/prod-e2e.sh` → `next start` |
 | build | compile on request | `scripts/e2e-prod-build.sh` first, into **`.next-e2e/`** |
-| budgets | 3072 MB heap, 8 G cgroup | 2048 MB heap, 4 G cgroup |
+| budgets | 3072 MB heap, 8 G cgroup | 3072 MB heap, 6 G cgroup |
 | auth bypass | `E2E_AUTH_RATE_LIMIT_BYPASS=1` | **none** — inert under `NODE_ENV=production` by design, and `prod-e2e.sh` unsets it |
 | log | `/tmp/jobsync-e2e-dev.log` | `/tmp/jobsync-e2e-prod.log` |
 
