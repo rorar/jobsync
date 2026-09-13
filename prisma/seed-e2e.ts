@@ -25,9 +25,16 @@
  *     the template must be correct while both exist.)
  *   - Shared infrastructure, read-only to tests: SeedDataReadOnly in the spec.
  *     A fixture a test mutates belongs to that test, not here.
+ *
+ * Seeds, besides the user-independent SHARED_ACTIVITY_TYPE/STAGED_VACANCIES
+ * below: a `PublicApiKey` row `e2e/helpers/job-fixture.ts` uses to delete Jobs
+ * via `DELETE /api/v1/jobs/:id` instead of the UI (2026-09-13) — see that
+ * constant's own comment for why it's seeded rather than created per-run.
  */
 
 import { PrismaClient } from "@prisma/client";
+import { hashApiKey, getKeyPrefix } from "../src/lib/api/auth";
+import { E2E_JOB_TEARDOWN_API_KEY } from "../e2e/helpers/api-key-fixture";
 
 const prisma = new PrismaClient();
 
@@ -73,6 +80,31 @@ const SHARED_ACTIVITY_TYPE = {
   label: "E2E Activity Type",
   value: "e2e activity type",
 };
+
+/**
+ * The Public API key `e2e/helpers/job-fixture.ts` uses to tear down Jobs via
+ * `DELETE /api/v1/jobs/:id` instead of clicking through the UI (2026-09-13).
+ *
+ * `keyHash`/`keyPrefix` computed with the REAL `hashApiKey()`/`getKeyPrefix()`
+ * from `src/lib/api/auth.ts` — not a local sha256 reimplementation — so this
+ * row can never silently drift from what `validateApiKey()` actually checks.
+ * The plaintext lives once, in `e2e/helpers/api-key-fixture.ts`, imported by
+ * both this file and the fixture; see that file for why it is a shared
+ * constant rather than an env var.
+ *
+ * This bypasses `createPublicApiKey()`'s own validation (name length, the
+ * max-10-active-keys-per-user cap, `specs/api-key-management.allium:233`
+ * `rule CreatePublicApiKey`) exactly the way this file already bypasses
+ * whatever action governs ActivityType/StagedVacancy creation above — an
+ * established precedent in this file, not a new kind of shortcut. The
+ * `requires: active_keys.count < max_active_keys_per_user` clause governs the
+ * `CreatePublicApiKey` action, not a table-level constraint, so a row seeded
+ * outside that action doesn't violate it. This key permanently occupies one
+ * of the 10 slots; `settings-api-keys.spec.ts` never exercises the
+ * cap-reached path, so this has no test impact.
+ */
+const E2E_JOB_TEARDOWN_KEY_NAME =
+  "Job Teardown (seeded — prisma/seed-e2e.ts, do not delete)";
 
 const STAGED_VACANCIES = [
   {
@@ -141,6 +173,21 @@ async function main() {
     },
   });
 
+  // Idempotent on `keyHash` (the model's own `@unique` column), same pattern
+  // as the ActivityType upsert above.
+  const keyHash = hashApiKey(E2E_JOB_TEARDOWN_API_KEY);
+  await prisma.publicApiKey.upsert({
+    where: { keyHash },
+    update: { name: E2E_JOB_TEARDOWN_KEY_NAME, revokedAt: null },
+    create: {
+      userId: user.id,
+      name: E2E_JOB_TEARDOWN_KEY_NAME,
+      keyHash,
+      keyPrefix: getKeyPrefix(E2E_JOB_TEARDOWN_API_KEY),
+      permissions: "[]",
+    },
+  });
+
   for (const vacancy of STAGED_VACANCIES) {
     // No unique constraint covers (userId, sourceBoard, externalId) — it is an
     // index, not a key (schema.prisma:709) — so upsert is unavailable and the
@@ -167,6 +214,7 @@ async function main() {
   }
 
   console.log(`  ✓ Staged vacancies: ${STAGED_VACANCIES.length}`);
+  console.log("  ✓ Job-teardown Public API key");
   console.log("✅ E2E fixtures seeded");
 }
 
