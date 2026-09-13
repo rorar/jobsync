@@ -277,8 +277,8 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Current structure:** `src/lib/connector/data-enrichment/`:
 - **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
-- **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`. **Currently UNUSED (verified 2026-09-02): zero importers, and `orchestrator.ts:12` bypasses it for `moduleRegistry` directly.** Aspirational rather than live; `reference-data/registry.ts` is unused the same way, while the `job-discovery/` and `ai-provider/` facades ARE consumed. Decide before adding a module: route new code through these, or delete both files together with this paragraph — deleting the files alone leaves this text promising a seam that no longer exists.
-- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules.
+- **(no registry.ts facade)** — deleted 2026-09-13: zero importers since creation (verified by `git log --all -S` over the full history — `getActiveEnrichmentModules()`/`getEnrichmentModuleByDimension()` each appeared only in their own defining commit), and `orchestrator.ts` bypassed it for `moduleRegistry` directly from the same commit that introduced the facade. `reference-data/registry.ts` was unused the same way and deleted alongside it; the `job-discovery/` and `ai-provider/` facades ARE consumed and were kept. `orchestrator.ts.execute()` now reads `manifest.supportedDimensions` directly (the field `getEnrichmentModuleByDimension()` used to be the only reader of) as a chain-entry guard — see below.
+- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules. Skips a chain entry whose manifest does not declare `supportedDimensions` for the dimension being executed (catches a `DEFAULT_CHAINS` entry naming the wrong module before it fails inside the module itself).
   - Cache keys include `userId` to prevent cross-user data leakage (ADR-029).
   - Per-module timeout uses `Promise.race` (not AbortSignal propagation). Chain-level timeout at `CHAIN_TIMEOUT_MS`.
   - Enrichment log writes (`logAttempt`) are fire-and-forget (void return, `.catch(() => {})`) — best-effort, non-blocking.
@@ -291,7 +291,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Current structure:** `src/lib/connector/reference-data/`:
 - **types.ts** — `ReferenceDataConnector` interface (health-only, no lookup yet)
-- **registry.ts** — Facade over `moduleRegistry` for `reference_data` modules
+- **(no registry.ts facade)** — deleted 2026-09-13, see the data-enrichment note above; had zero consumers since it was copied from that pattern five days later.
 - **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/`, `modules/geo-codes/`, `modules/public-holidays/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
 
 ### GeoCode Reference Module (ROADMAP 1.21)
