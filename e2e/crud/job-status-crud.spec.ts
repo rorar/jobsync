@@ -1,14 +1,14 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import {
   selectOrCreateComboboxOption,
   expectToast,
-  rowsByText,
   uniqueId,
 } from "../helpers";
 import {
   ADMIN_TAB,
   sweepReferenceGroups,
 } from "../helpers/admin-reference-cleanup";
+import { deleteJobViaApi } from "../helpers/job-fixture";
 
 /**
  * Welle 4 (F-AJ-09 / dynamic Kanban) happy-path: a user creates a custom status
@@ -45,11 +45,22 @@ import {
 // asserts an OUTCOME rather than a click. Nothing is guarded by a bare
 // `count()`.
 //
-// WHY IT ALL MOVED INTO AN afterEach
+// WHY IT ALL MOVED OUT OF THE TEST BODY
 // Cleanup at the end of a test body is the path a failed assertion skips
 // (`scripts/check-e2e-residue.sh` names this shape in its header). Deletion is
 // not the subject of either test here, so there is nothing to lose by moving it
 // out and a whole failure mode to gain by doing so.
+//
+// (2026-09-13) MOVED AGAIN, from a hand-written `test.afterEach` into the
+// `cleanup` fixture below, and the Job step moved off UI-click deletion onto
+// `deleteJobViaApi` (`DELETE /api/v1/jobs/:id`). Required by
+// `specs/e2e-test-infrastructure.allium:868` (`FixtureOwnedTeardown`). The
+// whole chain — Job, then status, then the reference-group sweep — had to
+// move together into ONE `auto: true` fixture rather than split the Job step
+// into its own: Playwright's `afterEach` always runs before any fixture's
+// teardown, so a lone `afterEach` left behind would run the reference/status
+// sweep against a Job that still exists. See `../helpers/job-fixture.ts` for
+// the full ordering argument and why API deletion replaced the UI-click path.
 //
 // Six-part pattern, as documented in `keyboard-ux.spec.ts`, with the two shared
 // admin-table deleters now in `../helpers/admin-reference-cleanup`:
@@ -58,10 +69,11 @@ import {
 //      writes it — a create that then fails its assertion has still leaked.
 //   3. De-registration only on a PROVEN delete (nothing here de-registers,
 //      because no test body deletes anything any more).
-//   4. The afterEach swaps the registries out before its first await.
+//   4. The fixture's teardown swaps the registries out before its first await.
 //   5. It navigates itself.
-//   6. Two tiers — the deleters swallow, the hook re-checks and warns. Nothing
-//      rethrows: a hook that throws replaces the real test failure with its own.
+//   6. Two tiers — the deleters swallow, the teardown re-checks and warns.
+//      Nothing rethrows: teardown that throws replaces the real test failure
+//      with its own.
 let createdJobs: string[] = [];
 let createdStatuses: string[] = [];
 let createdJobTitles: string[] = [];
@@ -144,94 +156,10 @@ async function openEditDialog(page: Page, jobTitle: string) {
 // ---------------------------------------------------------------------------
 
 /**
- * Delete a job created by this spec and prove it is gone.
- *
- * Returns whether the job is absent afterwards — a job that was never created
- * counts as absent, since there is no residue either way. Never throws: this is
- * teardown, and the caller turns a `false` into a warning.
- *
- * `ensureTableView` is not optional here even though it looks it. The first
- * test leaves the view in Kanban, which renders cards rather than `tr`s, and
- * the previous cleanup's row locator found nothing there and reported success.
- */
-async function deleteJobTracked(page: Page, title: string): Promise<boolean> {
-  // DOM locator, never `getByRole` (E2E-B40): the readiness probe below and the
-  // removal proof at the end are both read while the confirm AlertDialog is
-  // open or animating out, and Radix's `hideOthers()` empties the accessibility
-  // tree behind it for that whole window. A role locator answers "no such row"
-  // about a row that is still on screen and still in the database — which is
-  // exactly how a delete that never happened reads as one that did.
-  const row = rowsByText(page, title).first();
-  // Hoisted so the catch can read it too. `false` until proven otherwise, so a
-  // throw BEFORE the flip (a failed navigation, say) also reports "cannot see"
-  // rather than "gone".
-  let tableConfirmed = false;
-  try {
-    await gotoMyJobs(page);
-    // Load-bearing return value: `row` is a `tr` locator, and `tr`s exist only
-    // in Table view. Without a confirmed flip, "not present" below would mean
-    // "not looking at a table", not "not in the database".
-    tableConfirmed = await ensureTableView(page);
-
-    // Wait, do not probe. The predecessor asked `count()` on the line after a
-    // navigation; `count()` does not auto-wait, so it answered 0 about a table
-    // that had not rendered yet and the delete was skipped in silence. A job
-    // that genuinely does not exist costs this timeout once, in teardown.
-    const present = await row
-      .waitFor({ state: "visible", timeout: 10000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!present) {
-      if (!tableConfirmed) {
-        console.warn(
-          `[cleanup] could not confirm Table view, so the absence of "${title}" ` +
-            `proves nothing (Kanban renders no <tr>); reporting it as a possible leak`,
-        );
-        return false;
-      }
-      return true;
-    }
-
-    await row.getByTestId("job-actions-menu-btn").first().click();
-    await page.getByRole("menuitem", { name: "Delete" }).click();
-    const dialog = page.getByRole("alertdialog");
-    await dialog.waitFor({ state: "visible", timeout: 5000 });
-    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
-    // The server's answer, then the view's — both are load-bearing. The toast
-    // (`jobs.deletedSuccess`, JobsContainer.tsx:236) comes from the completed
-    // round trip and is what stops the request being abandoned when the page
-    // closes; the row count comes from the reload the container only performs
-    // on success. Neither alone proves the row is gone.
-    await expectToast(page, /Job has been deleted successfully/);
-    await expect(rowsByText(page, title)).toHaveCount(0, { timeout: 15000 });
-    return true;
-  } catch {
-    // swallow-ok: cleanup net. Dismiss anything still on screen first — an open
-    // AlertDialog blanks the tree behind it and its overlay eats the pointer, so
-    // the NEXT name in the loop would fail to click its own control and be
-    // reported as a second leak that never existed.
-    await page.keyboard.press("Escape").catch(() => null);
-    await page
-      .getByRole("alertdialog")
-      .waitFor({ state: "detached", timeout: 3000 })
-      .catch(() => null);
-    // Same reasoning as the absence path above: an invisible `tr` is only
-    // evidence of deletion when we know we are looking at a table.
-    if (!tableConfirmed) {
-      console.warn(
-        `[cleanup] could not confirm Table view, so the absence of "${title}" ` +
-          `proves nothing (Kanban renders no <tr>); reporting it as a possible leak`,
-      );
-      return false;
-    }
-    return !(await row.isVisible().catch(() => false));
-  }
-}
-
-/**
  * Delete a custom JobStatus created by this spec and prove it is gone.
  *
- * Call AFTER `deleteJobTracked`. The server's `deleteJobStatus`
+ * Call AFTER the Job is deleted (`deleteJobViaApi`, in the `cleanup` fixture
+ * below). The server's `deleteJobStatus`
  * (jobStatus.actions.ts:357-360) treats a status as in-use when either a Job or
  * a `JobStatusHistory` row still points at it, and `JobStatusHistory` cascades
  * on `Job` delete (`prisma/schema.prisma`), so removing the job clears both
@@ -292,66 +220,88 @@ async function deleteStatusTracked(page: Page, label: string): Promise<boolean> 
     await deleteBtn.waitFor({ state: "detached", timeout: 10000 });
     return true;
   } catch {
-    // swallow-ok: cleanup net — see `deleteJobTracked`.
+    // swallow-ok: cleanup net — see the `cleanup` fixture below.
     await page.keyboard.press("Escape").catch(() => null);
     return !(await deleteBtn.isVisible().catch(() => false));
   }
 }
 
-test.afterEach(async ({ page }, testInfo) => {
-  // The after-hooks run on their OWN fresh budget — `max(project, test)`,
-  // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
-  // corrected 2026-09-09, this comment used to claim the opposite) and this one
-  // deletes a job, a status and three admin-table rows across four navigations.
-  // Buy the extra time explicitly rather than let a green test start failing on
-  // its teardown; keep it small enough that a body which has itself become slow
-  // still surfaces.
-  test.setTimeout(testInfo.timeout + 60_000);
+// `auto: true` so every test in this file gets it without opting in — the
+// direct replacement for the `test.afterEach` this used to be. Job deletion,
+// status deletion and the reference-group sweep stay in this ONE fixture,
+// in this order, for the reason at the top of the file: Playwright's
+// `afterEach` always runs before fixture teardown, so splitting the Job step
+// into its own fixture while the rest stayed in `afterEach` would silently
+// break the required Job-before-status-before-references order every run.
+const test = base.extend<{ cleanup: void }>({
+  cleanup: [
+    async ({ page }, use, testInfo) => {
+      await use();
 
-  // Swap the registries out BEFORE the first await: clearing afterwards would
-  // keep entries alive into the next test if a delete throws, and clearing in a
-  // beforeEach would not run at all under test.skip.
-  const jobs = createdJobs;
-  const statuses = createdStatuses;
-  const referenceGroups = [
-    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
-    { tab: ADMIN_TAB.company, names: createdCompanies },
-    { tab: ADMIN_TAB.location, names: createdLocations },
-  ];
-  createdJobs = [];
-  createdStatuses = [];
-  createdJobTitles = [];
-  createdCompanies = [];
-  createdLocations = [];
+      // Teardown runs on its OWN fresh budget — `max(project, test)`, not
+      // what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+      // corrected 2026-09-09, this comment used to claim the opposite) and this
+      // one deletes a job, a status and three admin-table rows across four
+      // navigations. Buy the extra time explicitly rather than let a green test
+      // start failing on its teardown; keep it small enough that a body which
+      // has itself become slow still surfaces. `testInfo.setTimeout`, not
+      // `test.setTimeout`: `test` is still being assigned by this very
+      // `extend()` call, so referencing it inside this callback would be a
+      // self-referential initializer (TS7022) — `TestInfo.setTimeout()` is the
+      // same operation on the same currently-running test.
+      testInfo.setTimeout(testInfo.timeout + 60_000);
 
-  try {
-    // ORDER IS A REQUIREMENT, not tidiness. Jobs first: `deleteJobStatus`
-    // refuses while a Job or a JobStatusHistory row points at the status, and
-    // `deleteJobTitleById` / `deleteCompanyById` each count referencing Jobs
-    // and refuse the same way. Sweeping in any other order leaves rows behind
-    // and reports them as failures of the wrong deleter.
-    for (const title of jobs) {
-      if (!(await deleteJobTracked(page, title))) {
-        console.warn(`[job-status-crud] leaked job survived cleanup: ${title}`);
+      // Swap the registries out BEFORE the first await: clearing afterwards would
+      // keep entries alive into the next test if a delete throws, and clearing in a
+      // beforeEach would not run at all under test.skip.
+      const jobs = createdJobs;
+      const statuses = createdStatuses;
+      const referenceGroups = [
+        { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+        { tab: ADMIN_TAB.company, names: createdCompanies },
+        { tab: ADMIN_TAB.location, names: createdLocations },
+      ];
+      createdJobs = [];
+      createdStatuses = [];
+      createdJobTitles = [];
+      createdCompanies = [];
+      createdLocations = [];
+
+      try {
+        // ORDER IS A REQUIREMENT, not tidiness. Jobs first: `deleteJobStatus`
+        // refuses while a Job or a JobStatusHistory row points at the status, and
+        // `deleteJobTitleById` / `deleteCompanyById` each count referencing Jobs
+        // and refuse the same way. Sweeping in any other order leaves rows behind
+        // and reports them as failures of the wrong deleter.
+        for (const title of jobs) {
+          try {
+            await deleteJobViaApi(page, title);
+          } catch (error) {
+            console.warn(
+              `[job-status-crud] leaked job survived cleanup: ${title} (${String(error)})`,
+            );
+          }
+        }
+        for (const label of statuses) {
+          if (!(await deleteStatusTracked(page, label))) {
+            console.warn(
+              `[job-status-crud] leaked job status survived cleanup: ${label}`,
+            );
+          }
+        }
+      } catch (error) {
+        // swallow-ok: cleanup net — teardown that throws replaces the real test
+        // failure with its own. Both deleters above already swallow and re-check,
+        // so reaching here means something outside them broke; say so rather than
+        // let it surface as a mystery failure of the test that just passed.
+        console.warn(`[job-status-crud] cleanup fixture failed: ${String(error)}`);
       }
-    }
-    for (const label of statuses) {
-      if (!(await deleteStatusTracked(page, label))) {
-        console.warn(
-          `[job-status-crud] leaked job status survived cleanup: ${label}`,
-        );
-      }
-    }
-  } catch (error) {
-    // swallow-ok: cleanup net — a hook that throws replaces the real test
-    // failure with its own. Both deleters above already swallow and re-check,
-    // so reaching here means something outside them broke; say so rather than
-    // let it surface as a mystery failure of the test that just passed.
-    console.warn(`[job-status-crud] afterEach cleanup failed: ${String(error)}`);
-  }
 
-  // Navigates itself and never throws.
-  await sweepReferenceGroups(page, referenceGroups, "job-status-crud");
+      // Navigates itself and never throws.
+      await sweepReferenceGroups(page, referenceGroups, "job-status-crud");
+    },
+    { auto: true },
+  ],
 });
 
 // ---------------------------------------------------------------------------
@@ -441,7 +391,7 @@ test.describe("Custom JobStatus → dynamic Kanban", () => {
       .filter({ has: page.getByRole("heading", { name: statusLabel, exact: true }) });
     await expect(statusColumn).toBeVisible({ timeout: 15000 });
 
-    // 4. Cleanup is in the afterEach, deliberately. What stood here was two
+    // 4. Cleanup is in the `cleanup` fixture, deliberately. What stood here was two
     //    try/catch blocks that could not work: both guarded the delete on a bare
     //    `await locator.count()`, which does not auto-wait, so it answered 0
     //    about a table that had not rendered and the whole block was skipped in
@@ -527,7 +477,7 @@ test.describe("Custom JobStatus → dynamic Kanban", () => {
     await expect(historyList).toBeVisible({ timeout: 15000 });
     await expect(historyList.getByRole("listitem")).toHaveCount(3);
 
-    // 5. Cleanup is in the afterEach. What stood here failed for the same
+    // 5. Cleanup is in the `cleanup` fixture. What stood here failed for the same
     //    reason as the first test's: `if (await confirm.count())` on the line
     //    after the click that opens the AlertDialog is a question asked before
     //    the answer can exist, so the confirm was never clicked and the job

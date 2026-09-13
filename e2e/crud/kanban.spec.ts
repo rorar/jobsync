@@ -1,14 +1,10 @@
-import { test, expect, type Page } from "@playwright/test";
-import {
-  expectToast,
-  rowsByText,
-  selectOrCreateComboboxOption,
-  uniqueId,
-} from "../helpers";
+import { test as base, expect, type Page } from "@playwright/test";
+import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
 import {
   ADMIN_TAB,
   sweepReferenceGroups,
 } from "../helpers/admin-reference-cleanup";
+import { deleteJobViaApi } from "../helpers/job-fixture";
 
 // ---------------------------------------------------------------------------
 // WHY THIS FILE NOW CREATES A JOB
@@ -65,45 +61,6 @@ async function navigateToMyJobs(page: Page) {
 }
 
 /**
- * Force the table view before a teardown read.
- *
- * The kanban branch renders cards, not `tr`s, so a row locator asked in kanban
- * view finds nothing and a delete guarded on it is skipped in silence — the
- * exact defect `cad321fb` removed from `job-status-crud.spec.ts`.
- *
- * RETURNS whether Table view is CONFIRMED (`aria-checked="true"` on the Table
- * radio). Returning early on a missing toggle used to leave the page in kanban
- * and say nothing, which reproduced that same defect one level up; `false` now
- * tells the caller its row read proves nothing. Never throws: this is teardown.
- *
- * The short visibility probe guards HYDRATION LAG, not the empty state. The
- * toggle is always rendered once the client has mounted — `KanbanViewModeToggle`
- * sits in the `CardHeader` (`JobsContainer.tsx:366-368`) gated only on
- * `mounted`, entirely outside the empty-state branch — and `navigateToMyJobs`
- * waits on `add-job-btn`, which is not gated on `mounted`.
- */
-async function ensureTableView(page: Page): Promise<boolean> {
-  const tableRadio = page.getByRole("radio", { name: /table/i });
-  try {
-    await tableRadio.waitFor({ state: "visible", timeout: 3000 });
-  } catch {
-    return false; // toggle never mounted — a row read here would prove nothing
-  }
-  try {
-    if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
-      await tableRadio.click();
-      await expect(tableRadio).toHaveAttribute("aria-checked", "true");
-    }
-    return true;
-  } catch {
-    // swallow-ok: the assertion is not discarded — a flip that did not take IS
-    // this function's `false`, and the caller reports it. Throwing instead
-    // would replace a real test failure with a teardown one.
-    return false;
-  }
-}
-
-/**
  * Create one job through the AddJob dialog, registering every row it writes
  * BEFORE the call that writes it.
  *
@@ -152,78 +109,6 @@ async function createTrackedJob(
   await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({
     timeout: 15000,
   });
-}
-
-/**
- * Delete a job this spec created and prove it is gone. Never throws — this is
- * teardown, and a hook that throws replaces the real test failure with its own.
- * Returns whether the job is absent afterwards; a job that was never created
- * counts as absent, since there is no residue either way.
- */
-async function deleteJobTracked(page: Page, title: string): Promise<boolean> {
-  // DOM locator, never `getByRole` (E2E-B40): the removal proof below is read
-  // while the confirm AlertDialog is closing, and Radix blanks the
-  // accessibility tree behind it for that whole window — a role locator would
-  // answer "no such row" about a row that is still in the database.
-  const row = rowsByText(page, title).first();
-  // Hoisted so the catch can read it too. `false` until proven otherwise, so a
-  // throw BEFORE the flip (a failed navigation, say) also reports "cannot see"
-  // rather than "gone".
-  let tableConfirmed = false;
-  try {
-    await navigateToMyJobs(page);
-    // Load-bearing return value: `row` is a `tr` locator, and `tr`s exist only
-    // in table view. This spec ends several tests in kanban deliberately, so
-    // "not present" without a confirmed flip means "not looking at a table".
-    tableConfirmed = await ensureTableView(page);
-
-    // Wait, do not probe. `count()` does not auto-wait and would answer 0 about
-    // a table that has not rendered yet, skipping the delete in silence.
-    const present = await row
-      .waitFor({ state: "visible", timeout: 10000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!present) {
-      if (!tableConfirmed) {
-        console.warn(
-          `[cleanup] could not confirm table view, so the absence of "${title}" ` +
-            `proves nothing (kanban renders no <tr>); reporting it as a possible leak`,
-        );
-        return false;
-      }
-      return true;
-    }
-
-    await row.getByTestId("job-actions-menu-btn").first().click();
-    await page.getByRole("menuitem", { name: "Delete" }).click();
-    const dialog = page.getByRole("alertdialog");
-    await dialog.waitFor({ state: "visible", timeout: 5000 });
-    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
-    // Both signals are load-bearing: the toast proves the server round trip
-    // completed, the row count proves the container reloaded on success.
-    await expectToast(page, /Job has been deleted successfully/);
-    await expect(rowsByText(page, title)).toHaveCount(0, { timeout: 15000 });
-    return true;
-  } catch {
-    // swallow-ok: cleanup net. Dismiss anything still on screen before the
-    // re-check — an open AlertDialog eats the pointer and the next name in the
-    // loop would be reported as a second leak that never existed.
-    await page.keyboard.press("Escape").catch(() => null);
-    await page
-      .getByRole("alertdialog")
-      .waitFor({ state: "detached", timeout: 3000 })
-      .catch(() => null);
-    // Same reasoning as the absence path above: an invisible `tr` is only
-    // evidence of deletion when we know we are looking at a table.
-    if (!tableConfirmed) {
-      console.warn(
-        `[cleanup] could not confirm table view, so the absence of "${title}" ` +
-          `proves nothing (kanban renders no <tr>); reporting it as a possible leak`,
-      );
-      return false;
-    }
-    return !(await row.isVisible().catch(() => false));
-  }
 }
 
 /**
@@ -277,6 +162,52 @@ async function switchToTableView(page: Page) {
 // Tests
 // ---------------------------------------------------------------------------
 
+// FixtureOwnedTeardown (specs/e2e-test-infrastructure.allium:868): the whole
+// per-file cleanup chain — Job deletion via the API, then the reference-group
+// sweep — lives in ONE local `auto: true` fixture rather than a hand-written
+// `afterEach`. Playwright's own `afterEach` hooks ALWAYS run before any
+// fixture's teardown code, with no guaranteed interleaving otherwise, so
+// splitting "delete the Job" into its own fixture while the reference sweep
+// stayed in `afterEach` would silently break the required order (Job first,
+// because `deleteJobTitleById`/`deleteCompanyById` refuse while a Job still
+// references them). See `e2e/helpers/job-fixture.ts` for the full rationale.
+const test = base.extend<{ cleanup: void }>({
+  cleanup: [
+    async ({ page }, use, testInfo) => {
+      await use();
+
+      testInfo.setTimeout(testInfo.timeout + 60_000);
+
+      const jobs = createdJobs;
+      const referenceGroups = [
+        { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+        { tab: ADMIN_TAB.company, names: createdCompanies },
+        { tab: ADMIN_TAB.location, names: createdLocations },
+      ];
+      createdJobs = [];
+      createdJobTitles = [];
+      createdCompanies = [];
+      createdLocations = [];
+
+      // ORDER IS A REQUIREMENT, not tidiness: `deleteJobTitleById` /
+      // `deleteCompanyById` count referencing Jobs and refuse while one exists,
+      // so the job goes first or the reference sweep reports failures of the
+      // wrong deleter.
+      for (const title of jobs) {
+        try {
+          await deleteJobViaApi(page, title);
+        } catch (error) {
+          console.warn(`[kanban] cleanup failed for "${title}": ${String(error)}`);
+        }
+      }
+
+      // Navigates itself and never throws.
+      await sweepReferenceGroups(page, referenceGroups, "kanban");
+    },
+    { auto: true },
+  ],
+});
+
 test.describe("Kanban Board", () => {
   test.beforeEach(async ({ context }) => {
     // The teardown below drives the admin tables through
@@ -287,50 +218,6 @@ test.describe("Kanban Board", () => {
     await context.addCookies([
       { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
     ]);
-  });
-
-  // Six-part teardown pattern, as documented in `keyboard-ux.spec.ts` and
-  // `job-status-crud.spec.ts`: arrays not scalars; registration at the write
-  // site and before it; registries swapped out before the first await; the hook
-  // navigates itself; two tiers, where the deleters swallow and the hook
-  // re-checks and warns; nothing rethrows.
-  //
-  // Four of the five tests below create nothing, and for them this hook costs
-  // one array read: `sweepReferenceGroups` skips empty groups without
-  // navigating, and the job loop does not execute.
-  test.afterEach(async ({ page }, testInfo) => {
-    test.setTimeout(testInfo.timeout + 60_000);
-
-    const jobs = createdJobs;
-    const referenceGroups = [
-      { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
-      { tab: ADMIN_TAB.company, names: createdCompanies },
-      { tab: ADMIN_TAB.location, names: createdLocations },
-    ];
-    createdJobs = [];
-    createdJobTitles = [];
-    createdCompanies = [];
-    createdLocations = [];
-
-    try {
-      // ORDER IS A REQUIREMENT, not tidiness: `deleteJobTitleById` /
-      // `deleteCompanyById` count referencing Jobs and refuse while one exists,
-      // so the job goes first or the reference sweep reports failures of the
-      // wrong deleter.
-      for (const title of jobs) {
-        if (!(await deleteJobTracked(page, title))) {
-          console.warn(`[kanban] leaked job survived cleanup: ${title}`);
-        }
-      }
-    } catch (error) {
-      // swallow-ok: cleanup net — a hook that throws replaces the real test
-      // failure with its own. The deleter already swallows and re-checks, so
-      // reaching here means something outside it broke; say so.
-      console.warn(`[kanban] afterEach cleanup failed: ${String(error)}`);
-    }
-
-    // Navigates itself and never throws.
-    await sweepReferenceGroups(page, referenceGroups, "kanban");
   });
 
   test("should toggle between table and kanban view", async ({ page }, testInfo) => {
