@@ -32,11 +32,27 @@ export const authConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
+      const isApiRoute = nextUrl.pathname.startsWith("/api/");
 
       if (isOnDashboard) {
         if (isLoggedIn) return true;
         return false;
-      } else if (isLoggedIn) {
+      }
+      // API routes (Public API v1: Authorization: Bearer, checked separately
+      // by withApiAuth) must never hit the "already signed in -> bounce to
+      // /dashboard" branch below. That branch exists for /signin and /signup
+      // (don't show the login form to someone already logged in) but
+      // `/api/v1/:path*` shares the same middleware matcher for CORS/security
+      // headers, not for this redirect. Before this fix, ANY caller of the
+      // Public API who ALSO carried a valid NextAuth session cookie in the
+      // same browser/client — e.g. the browser extension (ROADMAP 2.17,
+      // documented as its primary external consumer) running in the same
+      // browser as a logged-in dashboard tab — got silently 302'd to
+      // /dashboard instead of reaching the route, regardless of a perfectly
+      // valid Bearer token. Found 2026-09-13 via an E2E fixture whose
+      // `page.request` shares the browser context's cookies.
+      if (isApiRoute) return true;
+      if (isLoggedIn) {
         return Response.redirect(new URL("/dashboard", nextUrl));
       }
       return true;
