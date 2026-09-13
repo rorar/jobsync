@@ -308,9 +308,13 @@ describe("GET /api/v1/jobs", () => {
     const where = mockPrisma.job.findMany.mock.calls[0][0].where;
     expect(where.Status).toEqual({ value: "applied" });
     expect(where.OR).toBeDefined();
+    // No `mode: "insensitive"` — Postgres-only in Prisma, and this project
+    // runs SQLite. The route used to send it anyway; this mock never caught
+    // that because a mocked Prisma client doesn't validate the where-clause
+    // shape a real one would reject (2026-09-13, found via a real E2E call).
     expect(where.OR).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ JobTitle: { label: { contains: "Engineer", mode: "insensitive" } } }),
+        expect.objectContaining({ JobTitle: { label: { contains: "Engineer" } } }),
       ]),
     );
   });
