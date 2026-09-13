@@ -166,6 +166,10 @@ Three implementation details are load-bearing and non-obvious:
   (`FixtureOwnedTeardown`), which 25 of 27 spec files still violate. That divergence is now
   **known and recorded** rather than accidental — the honest position until Option 2 is either
   taken or the rule is narrowed to what holds.
+- **2026-09-13: narrowed for one model.** `docs/adr/046-job-e2e-teardown-fixture-and-api-based-deletion.md`
+  takes Option 2 for Job specifically, on new evidence this record's own measurement didn't have
+  (E2E-B38, E2E-B47) — not a reopening of the suite-wide deferral above, which still stands for
+  every other model.
 
 ## Supersedes ADR-043
 
