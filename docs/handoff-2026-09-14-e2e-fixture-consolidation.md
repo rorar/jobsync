@@ -1,7 +1,10 @@
 # Handoff — 2026-09-14, E2E fixture consolidation
 
 **Worktree:** `/home/pascal/projekte/jobsync-e2e` · **Branch:** `fix/e2e-elysium`
-**HEAD:** `308ebd41` · **Working tree:** clean · **6 commits ahead of `origin/fix/e2e-elysium`, none pushed**
+**Written at `308ebd41`**, before this document's own commit · **Working tree:** clean
+**Pushed 2026-09-14:** `d55b82bb..36a9d276 -> origin/fix/e2e-elysium`, seven commits, this document
+among them. A header that names the current HEAD cannot survive its own commit; this one names the
+range it describes instead.
 
 **Gates, all verified after the last commit:** `scripts/typecheck-safe.sh` `RC=0` / `EXIT=0`;
 `scripts/test.sh` 320 suites, 5910 passed + 2 todo; `scripts/test-e2e.sh` over the seven affected
@@ -170,9 +173,10 @@ table row and informed the residue gate's own wording. The heading is now marked
 
 ## 4. Open items — decisions needed
 
-### 4.1 Push (trivial, needs a word)
+### 4.1 Push — DONE 2026-09-14
 
-Six commits sit unpushed on `fix/e2e-elysium` (`9a7eaecf` … `308ebd41`). Push only when asked.
+The seven commits `9a7eaecf` … `36a9d276` (the six listed when this was written, plus this document)
+were pushed to `origin/fix/e2e-elysium` on request, fast-forward, `d55b82bb..36a9d276`.
 
 ### 4.2 `WEED-1` mis-attribution — unchanged, still open
 
@@ -202,13 +206,24 @@ Not converted, on the evidence in §2. What would reopen it, specifically:
 The full citation table survives in the previous handoff §3.3, **now corrected** (§3.5 above). It is
 no longer at risk from plan-file rotation.
 
-### 4.5 Minor, carried forward
+### 4.5 Minor, carried forward — DONE 2026-09-14, and the first item was bigger than stated
 
-- `docs/BUGS.md:1` still reads "Updated 2026-09-08" despite E2E-B48/E2E-B49 having been added since.
-- ROADMAP §8.7 Phase 0c is marked "✅ DONE" while all eleven co-located `__tests__/` directories hold
-  only `.gitkeep`. The glob and convention are real; the claim "Modul-Tests im Modul-Verzeichnis" has
-  zero instances. Not wrong, but worth a qualifier if anyone plans against it.
-- `docs/handoff-2026-09-13-session-resume.md` and now
+- `docs/BUGS.md` — the stale date was the visible end of a counting drift. The block table's ten rows
+  summed to 681 / 673 beneath a stated Total of 682 / 674, because `5a81d456` (2026-09-09) added
+  `E2E-B47` to the Total without giving it a row; the header line then went to 684 / 676 when
+  `30d127a0` (2026-09-13) recorded `E2E-B48`/`E2E-B49` without touching the table. Three findings had
+  no block row. Both sessions now have rows, the Total reconciles with the header at 684 / 676 / 2 / 6,
+  and the correction is logged in the file's own arithmetic block.
+- ROADMAP §8.7 Phase 0c now carries the qualifier. Counted rather than asserted: the glob is real and
+  active (`jest.config.ts:205`), co-located tests number **zero**, 11 of **14** module directories
+  have a `__tests__/` and each holds only a `.gitkeep` — including the `modules/logo-dev/__tests__/`
+  the bullet names as its example. `currency`, `geo-codes` and `public-holidays` have none at all.
+- Two drifted dates found while checking the above, both corrected: `docs/adr/046-…:13` and
+  `e2e/helpers/job-fixture.ts:9` dated `E2E-B47` to 2026-09-13. It is 2026-09-09 —
+  `git log -S "E2E-B47" -- docs/BUGS.md` returns exactly one commit, `5a81d456`, and the row's own
+  disposition cell reads "Fixed 2026-09-09". The wrong date entered through the plan file, which
+  called it "2026-09-13, today", and was copied twice from there.
+- `docs/handoff-2026-09-13-session-resume.md` and
   `docs/handoff-2026-09-14-post-job-teardown-migration.md` are both superseded for state purposes.
 
 ## 5. Two process errors from this session, recorded so they are not repeated
