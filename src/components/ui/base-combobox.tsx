@@ -27,8 +27,24 @@ import { ChevronsUpDown } from "lucide-react";
  * (Combobox, TagInput, EuresLocationCombobox, EuresOccupationCombobox)
  * can adopt it as their outer shell.
  *
- * NOTE: Currently only consumed by the generic Combobox. Other variants
- * can migrate incrementally per C4 Recommendation 2.
+ * NOTE: Not consumed by anything yet — and never has been. This line used to
+ * claim the generic Combobox consumed it; that was false on the day it was
+ * written, including in the commit that created this file. `git log --all -S`
+ * over src/ finds no import of it in any commit on any local branch.
+ *
+ * The control users actually see is `Combobox` in src/components/ComboBox.tsx,
+ * which implements the selection, creation and keyboard rules independently.
+ * This file is the intended target of the combobox consolidation deferred as
+ * ADR-038 section G — see docs/inside-track-implementation-debt.md:185-190,
+ * which also records why adoption must be one cross-cutting pass rather than
+ * incremental: BaseCombobox still lacks a trigger aria-label, an aria-live
+ * announce, a loading slot and overridable width, so migrating variants one at
+ * a time would regress accessibility.
+ *
+ * Consequences of the name having outrun the code are catalogued in
+ * docs/knip-unused-ui-primitives.md section 5, including an a11y finding
+ * (WEED-1) that was raised against, and "fixed" in, this file while the live
+ * trigger had carried both attributes for six days.
  */
 
 export interface BaseComboboxProps {
