@@ -2774,10 +2774,17 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
   - Verzeichnisstruktur (gruppiert nach Connector) bleibt als Konvention für menschliche Navigation — ist aber nicht mehr technisch erzwungen
   - **Allium-Validierung:** Die Spec-Regel `ModuleRegistration` sagt "Registration happens at application startup" — Self-Registration on import erfüllt das. Die Spec schreibt nicht vor WER die Registration auslöst (Domain-Event, nicht Implementation).
 
-- **Phase 0c — Co-located Tests: ✅ DONE (2026-04-08)**
+- **Phase 0c — Co-located Tests: ✅ DONE (2026-04-08) — Gerüst, kein Inhalt**
   - Modul-Tests im Modul-Verzeichnis: `modules/logo-dev/__tests__/`
   - Jest-Config: Glob-Pattern erweitern für `modules/**/__tests__/**`
   - Pragmatische Alternative: `/new-module` Scaffolding-Skill der Tests automatisch generiert
+  - **Was "DONE" hier heißt (nachgezählt 2026-09-14):** Das Glob-Pattern ist real und aktiv
+    (`jest.config.ts:205`, `<rootDir>/src/lib/connector/**/modules/**/__tests__/**/*.spec.ts`), die
+    Konvention steht. Co-located Tests existieren aber **null**: 11 der 14 Modul-Verzeichnisse haben
+    ein `__tests__/`, und jedes davon enthält ausschließlich eine `.gitkeep` — auch das oben als
+    Beispiel genannte `modules/logo-dev/__tests__/`. `currency`, `geo-codes` und `public-holidays`
+    haben gar keins. Wer gegen "Modul-Tests liegen im Modul-Verzeichnis" plant, plant gegen ein
+    leeres Gerüst: der Weg ist frei, gegangen ist ihn noch niemand.
 
 - **Bewusst nicht umgesetzt — vollständige Auto-Discovery:**
   - Ideal wäre `glob("modules/*/manifest.ts")` beim Start → gar kein `register-all.ts` mehr
