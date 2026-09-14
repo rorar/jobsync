@@ -10,7 +10,7 @@
 Five spec files (`e2e/crud/{job-crud,job-detail-panels,enrichment,kanban,job-status-crud}.spec.ts`)
 deleted their own Jobs by clicking through the UI in a hand-written `test.afterEach` hook, each with
 its own drifted copy of `ensureTableView`/`deleteJobTracked`. That mechanism caused two real, dated
-bugs: E2E-B38 (2026-09-09) and E2E-B47 (2026-09-13), both false "already deleted" results produced
+bugs: E2E-B38 (Job half resolved 2026-09-09) and E2E-B47 (2026-09-09), both false "already deleted" results produced
 by DOM-locator fragility — a view-mode mismatch between Kanban and Table, and a hydration race —
 because the teardown's only way to confirm a Job was gone was to look for its row on screen.
 

@@ -6,7 +6,7 @@
  * for the whole per-file cleanup chain (Job + its reference-group sweep), not
  * just the Job step. `docs/adr/045-e2e-owns-nothing-that-outlives-the-run.md`
  * deliberately deferred adopting fixtures suite-wide ("Option 2") pending
- * per-model measurement; E2E-B38/E2E-B47 (2026-09-09/13) are that measurement
+ * per-model measurement; E2E-B38/E2E-B47 (both 2026-09-09) are that measurement
  * for Job specifically — see the ADR this decision narrows for the full
  * reasoning. This does NOT apply to any other spec file.
  *
