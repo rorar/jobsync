@@ -1,4 +1,4 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-09-08
+# Bug Tracker — Collected 2026-03-24, Updated 2026-09-13
 
 **Total: 684 bugs found, 676 fixed, 2 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
 
@@ -29,9 +29,11 @@
 > | Session 2026-09-08 (agent swarm on the open list, `E2E-B44`, `E2E-B45`, `SEC-B1/B2`) | 4 | 4 | 0 | — |
 > | Session 2026-09-08 (a11y and i18n pass over the admin tabs, `UI-B1..B17`, `E2E-B46`) | 18 | 18 | 0 | — |
 > | Session 2026-09-09 (heading outline across all 20 routes, `UI-B18`) | 1 | 1 | 0 | — |
-> | **Total** | **682** | **674** | **2** | **6** |
+> | Session 2026-09-09 (job teardown reporting success it could not see, `E2E-B47`) | 1 | 1 | 0 | — |
+> | Session 2026-09-13 (Public API v1's first real caller, `E2E-B48`, `E2E-B49`) | 2 | 2 | 0 | — |
+> | **Total** | **684** | **676** | **2** | **6** |
 >
-> 674 + 2 + 6 = 682. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
+> 676 + 2 + 6 = 684. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
 > `E2E-B36` and `E2E-B38` open → fixed; `E2E-B22`, `E2E-B23`, `E2E-B24` and `E2E-B42` open →
 > closed as decided; `E2E-B44` filed, split out of `E2E-B24` so a product gap is not settled as a
 > side effect of a test-residue pass. The three remaining open items are the two inherited
@@ -43,6 +45,15 @@
 > forward with it. The base of 611 is derived as 650 − 21 − 18, i.e. from the previous line's
 > *found* total minus the two sessions as they stood when it was written; the previous *fixed*
 > total of 632 is not reproducible and was not used.
+>
+> **Corrected 2026-09-14:** the block table and the header line above had drifted apart in both
+> directions at once. `5a81d456` (2026-09-09) folded `E2E-B47` into the Total row without giving it
+> a block row, so the ten rows summed to 681 / 673 beneath a stated 682 / 674; `30d127a0`
+> (2026-09-13) then raised the header to 684 / 676 for `E2E-B48` and `E2E-B49` without touching the
+> table at all. Both sessions now have rows, and the Total reconciles with the header again. This is
+> the same failure as the 2026-09-06 correction recorded above, with the roles reversed — there the
+> summary lagged the table, here the table lagged the summary. The table stays the derivation: a row
+> is what makes a finding countable, not a bump to a total.
 >
 > **A hypothesis about the inherited off-by-one, since it now has a candidate.** The old line's
 > 632 + 19 = 651 against a stated 650 is one extra item in the OPEN column. `MOD-B1` is exactly
