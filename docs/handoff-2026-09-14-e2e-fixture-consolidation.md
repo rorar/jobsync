@@ -178,13 +178,52 @@ table row and informed the residue gate's own wording. The heading is now marked
 The seven commits `9a7eaecf` … `36a9d276` (the six listed when this was written, plus this document)
 were pushed to `origin/fix/e2e-elysium` on request, fast-forward, `d55b82bb..36a9d276`.
 
-### 4.2 `WEED-1` mis-attribution — unchanged, still open
+### 4.2 `WEED-1` mis-attribution — DONE 2026-09-14, partly; the rest is a decision
 
-`docs/BUGS.md:1445` and `CHANGELOG.md:491` credit an `aria-expanded` + `type="button"` a11y fix to
-`src/components/ui/base-combobox.tsx`, a file with zero importers. The live
-`src/components/ComboBox.tsx:135-136` already had both attributes five days earlier (`32a33707`).
-The shipped fix reached zero users. Mechanical documentation correction, no design decision.
-See the previous handoff §3.1.
+The WEED-1 row in `docs/BUGS.md` and `CHANGELOG.md:491` credited an `aria-expanded` + `type="button"`
+a11y fix to `src/components/ui/base-combobox.tsx`, a file with zero importers. Both are now corrected
+in place rather than deleted, and both say "changed no rendered markup" rather than "reached zero
+users" — a file with no importer emits no markup is provable; everything about users follows from it
+rather than having been measured.
+
+**Three claims in this item's own description were wrong**, found by re-verifying before editing:
+
+- The row is not at `docs/BUGS.md:1445`. It is further down, and citations into that file have now
+  drifted twice, so the corrected references name the WEED-1 row instead of a line number.
+- `32a33707` is the *later* patch being corrected, not the earlier commit. The earlier one is
+  `f8180a8e` (2026-03-26 07:57 UTC).
+- The gap is **6 days 7 hours**, not five. Naive date arithmetic in this timezone returns five
+  because the 2026-03-29 DST transition falls inside the interval and rounds 5 d 23 h down.
+
+**Scope was larger than "mechanical documentation correction".** This is item 5 of five in
+`docs/knip-unused-ui-primitives.md` § 5.5, Option A. Items 1, 3 and 5 are done — each is correct
+whether the file is kept or deleted:
+
+1. `src/components/ui/base-combobox.tsx`'s header no longer claims the generic Combobox consumes it.
+3. `e2e/crud/keyboard-ux.spec.ts`'s describe is now `Keyboard UX: Combobox (AddJob modal)`; it drives
+   the AddJob dialog, which renders `Combobox` (`AddJob.tsx:55`) and cannot render the orphan.
+5. The two records above.
+
+Items **2** (an `allium:tend` header note on `specs/base-combobox.allium`) and **4** (a `knip.ts`
+ignore entry) are open. Item 2 needs the tend agent, not a hand edit. Item 4 is gated on the product
+decision that document states plainly: **Option A** keep the file and fix the record, or **Option B**
+delete it and close ADR-038 §G properly. Suppressing knip's report is only right under A — under B
+the report is the reminder to finish. Nothing was decided here.
+
+The question the original weed pass should have asked is also answered: **all fourteen live combobox
+triggers render both attributes today**, so none of this is a present-day a11y gap. Enumerated by
+`role="combobox"` across `src/`, after a filename-based first pass missed three of them — which is
+the same mistake in miniature that produced WEED-1: judging by what a thing is called.
+
+One finding fell out of that and is **new, open, and not a bug**: three of the fourteen
+(`WizardShell.tsx:269`, `InterviewForm.tsx:270`, `:450`) never declare `type="button"` in JSX and
+sit inside real `<form onSubmit=…>` elements. They are correct only because Radix's `PopoverTrigger`
+injects `type` and `aria-expanded` ahead of the child's props (`@radix-ui/react-popover` 1.1.15,
+`dist/index.mjs:89,91,94`). Read literally, they diverge from `TriggerAriaExpanded`
+(`specs/ui-combobox-keyboard.allium:362-366`); read at runtime, they are fine. Nothing pins it
+either way, so a Radix change would turn three combobox triggers into submit buttons silently.
+Recorded in `docs/knip-unused-ui-primitives.md` § 5.5; a decision for a future `allium:weed` pass,
+not for this one.
 
 ### 4.3 API v1 route-stack duplication — unchanged, still deferred
 

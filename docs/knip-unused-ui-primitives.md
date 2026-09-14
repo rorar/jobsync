@@ -256,13 +256,19 @@ Because two specs, an E2E `describe` block and a C4 document all use the name `B
 behaviour that lives in `ComboBox.tsx`, verification work has repeatedly landed on the wrong file:
 
 1. **A weed finding was raised against, and "fixed" in, the file nothing renders.**
-   `docs/BUGS.md:1443` records *"WEED-1 | MEDIUM | BaseCombobox missing `aria-expanded` and
-   `type="button"` on trigger | Added both attributes (`base-combobox.tsx`)"*. The fix is
+   The WEED-1 row in `docs/BUGS.md` records *"WEED-1 | MEDIUM | BaseCombobox missing `aria-expanded`
+   and `type="button"` on trigger | Added both attributes (`base-combobox.tsx`)"*. The fix is
    `32a33707` (2026-04-01), which touched `src/components/ui/base-combobox.tsx` **and nothing else
-   in that area**. But the *live* trigger had already received both attributes five days earlier in
+   in that area**. But the *live* trigger had already received both attributes **six days** earlier in
    `f8180a8e` (2026-03-26) — `git show f8180a8e -- src/components/ComboBox.tsx` shows
    `+ type="button"` and `+ aria-expanded={isPopoverOpen}`. The weed pass compared the spec to the
    file the spec *names*, found the gap there, and patched a component no user reaches.
+
+   *(Corrected 2026-09-14: this paragraph said "five days". The elapsed time between the two commits
+   is 6 d 7 h 1 m, computed from author epochs. Naive date arithmetic in this timezone returns five,
+   because the 2026-03-29 DST transition falls inside the interval and rounds 5 d 23 h down. The
+   docs commit that recorded WEED-1, `86ed7f86`, landed 31 minutes after `32a33707` — so the row was
+   written from the landed diff, not ahead of it. The bookkeeping was faithful; the target was not.)*
 
 2. **The CHANGELOG announces a user-facing a11y fix that changed nothing users see.**
    `CHANGELOG.md:491`: *"**a11y:** BaseCombobox trigger now has `aria-expanded` and
@@ -273,7 +279,9 @@ behaviour that lives in `ComboBox.tsx`, verification work has repeatedly landed 
    (`test.describe("Keyboard UX: BaseCombobox (AddJob modal)", …)`). The tests are correct and
    valuable — they drive the AddJob dialog's real comboboxes — and the test body even knows the
    truth: a comment at `:356` reads *"ComboBox announces t(\"forms.optionCreated\")"*. Only the
-   `describe` name is wrong.
+   `describe` name is wrong. **Renamed 2026-09-14** to `Keyboard UX: Combobox (AddJob modal)`, with
+   the reason recorded in the comment block above it. The rename is safe because nothing selects on
+   that title — it appears only in this document and in the spec file itself.
 
 4. **A spec was extended for the dead file.** `fed10760` (2026-06-20,
    *"spec(combobox): add async-loading slot + trigger accessible-name guarantees"*) added
@@ -312,7 +320,7 @@ strand §G, ADR-038 and `BACKLOG.md:241`.
 entire file) · `specs/ui-combobox-keyboard.allium:286,310-312,343` · `docs/architecture/overview.md:240`
 (spec index row) · `docs/architecture/c4-component-combobox.md:129,148,204-208,368-372` ·
 `docs/adr/038-…:73-76` · `docs/inside-track-implementation-debt.md:185-190` ·
-`docs/BACKLOG.md:241` · `docs/BUGS.md:1443` · `CHANGELOG.md:491` ·
+`docs/BACKLOG.md:241` · `docs/BUGS.md` (the WEED-1 row) · `CHANGELOG.md:491` ·
 `e2e/crud/keyboard-ux.spec.ts:330,333`. Two of these (the ADR and the CHANGELOG) are historical
 records that should be corrected in place, not erased.
 
@@ -328,16 +336,62 @@ the record honest so no future weed/review pass burns budget on it again:
 
 1. Fix `base-combobox.tsx:30-31` — replace *"Currently only consumed by the generic Combobox"* with
    the truth: *"Not yet consumed by any component. Adoption is tracked as §G / ADR-038; see
-   `docs/inside-track-implementation-debt.md:185`."*
+   `docs/inside-track-implementation-debt.md:185`."* — **DONE 2026-09-14.** The replacement also
+   records that the claim was false in the creating commit, and why adoption has to be one pass.
 2. Add a header note to `specs/base-combobox.allium` recording that the selection/creation/keyboard
    rules are today implemented by `src/components/ComboBox.tsx`, and that `base-combobox.tsx`
    implements only the shell rules (`BaseComboboxOwns`) — so a weed pass knows which file to judge.
-   Per CLAUDE.md, spec edits go through `allium:tend`, not by hand.
+   Per CLAUDE.md, spec edits go through `allium:tend`, not by hand. — **OPEN.** Deliberately not
+   done by hand; it needs the `allium:tend` agent, which is a separate dispatch.
 3. Rename the E2E `describe` at `e2e/crud/keyboard-ux.spec.ts:333` to `ComboBox (AddJob modal)`.
+   — **DONE 2026-09-14**, as `Keyboard UX: Combobox (AddJob modal)`, keeping the file's existing
+   `Keyboard UX:` prefix.
 4. Add `src/components/ui/base-combobox.tsx` to `knip.ts`'s `ignore` array with a one-line comment
-   pointing at §G, so knip stops re-reporting it every run.
+   pointing at §G, so knip stops re-reporting it every run. — **OPEN, and gated on the Option A/B
+   choice below.** Suppressing the report is only right if the file is being kept; under Option B
+   the report is the reminder to finish the deletion. Note also that "knip reports it every run"
+   is inherited from this document and has not been re-measured since.
 5. Correct `docs/BUGS.md:1443` / `CHANGELOG.md:491` to note that the WEED-1 attributes were already
    present on the live trigger since `f8180a8e`, so the entry is not read as a shipped a11y fix.
+   — **DONE 2026-09-14.** Both records corrected in place rather than deleted. The corrections say
+   "changed no rendered markup" rather than "reached zero users": the provable fact is that a file
+   with no importer emits no markup, and everything about users follows from that rather than being
+   measured.
+
+**Re-verified 2026-09-14** by two independent read-only passes before any of the above was written:
+zero importers (grep at HEAD, no `src/components/ui/index.ts` barrel, and `git log --all -S` over
+`src/` returning only the creating commit); `ComboBox.tsx:135-136` carrying both attributes
+continuously since `f8180a8e`; and — the question the original weed pass should have asked — **all
+fourteen live combobox triggers render both attributes today**, so nothing here is a present-day
+a11y gap. Exactly one test asserts `aria-expanded` anywhere
+(`__tests__/EuresLanguageCombobox.spec.tsx:366-369`), and it mounts a third component; neither
+attribute is pinned on `ComboBox.tsx` or on this file, in literal or non-literal form
+(`toBeExpanded`, `{ expanded: … }` — zero hits in `e2e/` and `__tests__/`).
+
+**Three separate facts there, which must not collapse into "no gap":**
+
+- *Rendered output* — no defect. All fourteen triggers emit both attributes.
+- *Source consistency* — eleven declare `type="button"` in JSX; **three do not**:
+  `src/components/automations/WizardShell.tsx:269`, `src/components/crm/InterviewForm.tsx:270` and
+  `:450`. All three sit inside a real `<form onSubmit=…>`, and `src/components/ui/button.tsx:53-63`
+  sets no default `type`, so on JSX alone they read like submit-on-click defects. They are not:
+  Radix's `PopoverTrigger` sets `type: "button"` and `aria-expanded` **before** spreading the child's
+  props (`@radix-ui/react-popover` 1.1.15, `dist/index.mjs:89,91,94`), and `react-slot`'s `mergeProps`
+  returns `{...slotProps, ...overrideProps}` where a key the child omits keeps the slot's value.
+- *Spec* — read literally against JSX, those three diverge from `TriggerAriaExpanded`
+  (`specs/ui-combobox-keyboard.allium:362-366`), which says the trigger MUST *include* `type="button"`.
+  A spec-vs-source divergence with no user-visible consequence. Worth a future `allium:weed` pass
+  deciding whether the guarantee means "declares" or "renders" — it currently reads as the former
+  while the codebase satisfies the latter.
+
+The inherited-from-Radix arrangement is **version-coupled, not an invariant of the code under
+review**. If Radix ever stopped injecting `type`, those three regress silently into real
+submit-on-click bugs, and nothing in `__tests__/` or `e2e/` would catch it — which is the same
+absence of a pin that let WEED-1 be "fixed" in the wrong file without anything noticing.
+
+A corollary for the finding itself: since Radix supplies both attributes to every Popover-based
+trigger, the `type="button"` that `32a33707` added was a no-op at runtime *even on the counterfactual
+where this file had been imported*.
 
 **Option B (only with an explicit decision).** If §G is not going to happen, close it properly:
 delete the file, delete `specs/base-combobox.allium`, fold its still-true keyboard/selection rules

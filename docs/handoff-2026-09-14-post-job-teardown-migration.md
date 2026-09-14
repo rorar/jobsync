@@ -88,7 +88,14 @@ foundation) → `645b6ef6` (the 5 spec files) → `d9090fef` (CONVENTIONS.md + R
 
 ## 3. Open items — decisions needed
 
-### 3.1 `WEED-1` / `CHANGELOG.md:491` — still wrongly attributed, not yet fixed
+### 3.1 `WEED-1` / `CHANGELOG.md:491` — RESOLVED 2026-09-14, see the newer handoff §4.2
+
+> **Superseded.** Both records were corrected on 2026-09-14. Two details below are wrong and were
+> corrected at the same time: the row is not at `docs/BUGS.md:1445` (cite the WEED-1 row, not a line
+> number — that file's line numbers have drifted twice), and the gap is 6 days 7 hours, not 5 —
+> `32a33707` is the later patch, the earlier commit is `f8180a8e`. The history below is left as
+> written. See `docs/handoff-2026-09-14-e2e-fixture-consolidation.md` §4.2 for what was done and
+> what remains a decision.
 
 Verified again just now: `docs/BUGS.md:1445` and `CHANGELOG.md:491` both credit the `aria-expanded`
 + `type="button"` a11y fix to **`BaseCombobox`** (`src/components/ui/base-combobox.tsx`) — the file
