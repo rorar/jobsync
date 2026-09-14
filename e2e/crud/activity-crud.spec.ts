@@ -3,7 +3,6 @@ import {
   selectOrCreateComboboxOption,
   uniqueId,
   safeWait,
-  expectToast,
   rowsByText,
 } from "../helpers";
 import {
@@ -257,7 +256,6 @@ test.describe("Activity CRUD", () => {
 
     // Clean up
     await deleteActivityTracked(page, activityName);
-    await expectToast(page, /Activity has been deleted/);
   });
 
   test("should edit an activity", async ({ page }) => {
@@ -327,7 +325,6 @@ test.describe("Activity CRUD", () => {
 
     // Cleanup — delete using the updated name
     await deleteActivityTracked(page, updatedName);
-    await expectToast(page, /Activity has been deleted/);
   });
 
   test("should create and then delete an activity", async ({ page }) => {
@@ -348,11 +345,13 @@ test.describe("Activity CRUD", () => {
         .first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Delete the activity
+    // Delete the activity. `deleteActivityTracked` is what proves it landed: it
+    // waits for the success toast AND for the row to leave the table, so this
+    // test asserts nothing further. Re-asserting the toast here — which is what
+    // the last line used to do — waited a second time on an element that
+    // auto-dismisses, after a row check that is allowed to take 15s. It could
+    // only ever start failing late, and never catch anything the deleter missed.
     await deleteActivityTracked(page, deleteActivityName);
-
-    // Verify toast success message
-    await expectToast(page, /Activity has been deleted/);
   });
 
   test("should create activity with different times", async ({ page }) => {
@@ -375,7 +374,6 @@ test.describe("Activity CRUD", () => {
 
     // Clean up
     await deleteActivityTracked(page, morningActivity);
-    await expectToast(page, /Activity has been deleted/);
   });
 
   /**
@@ -436,7 +434,6 @@ test.describe("Activity CRUD", () => {
     await navigateToActivities(page);
     await stopRunningActivity(page);
     await deleteActivityTracked(page, activityName);
-    await expectToast(page, /Activity has been deleted/);
 
     await page.goto("/dashboard/admin?tab=activity-types");
     await page.waitForLoadState("domcontentloaded");
