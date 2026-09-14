@@ -11,6 +11,11 @@ import {
   loadUntilAdminRowVisible,
   sweepReferenceGroups,
 } from "../helpers/admin-reference-cleanup";
+import {
+  activityRows,
+  deleteActivity as deleteActivityFlow,
+  purgeActivity,
+} from "../helpers/activity-fixture";
 
 // storageState handles authentication — no per-test login needed
 
@@ -69,8 +74,8 @@ const E2E_ACTIVITY_TYPE = "E2E Activity Type";
  * Every test below deletes its activity inline as its last action — the path a
  * thrown assertion skips (E2E-B37 measured this exact shape leaving a row
  * behind). `createActivity` registers here itself so no caller can forget, and
- * `deleteActivity` de-registers only once the row is provably gone, so the
- * afterEach net below only ever deletes what genuinely leaked.
+ * `deleteActivityTracked` de-registers only once the row is provably gone, so
+ * the afterEach net below only ever deletes what genuinely leaked.
  *
  * An ARRAY, not a scalar: a test that creates two activities must not leak all
  * but the last. Module scope is per-worker (workers are separate processes
@@ -143,82 +148,24 @@ async function createActivity(
 }
 
 /**
- * Every row in the activities table whose text contains `activityName`.
+ * Delete an activity loudly, then drop it from this spec's tracking.
  *
- * DOM locator, not `getByRole("row")`: every read below happens while the
- * DeleteAlertDialog is open or closing, and Radix `aria-hidden`s the table for
- * that whole window. `rowsByText` (e2e/helpers/index.ts) has the mechanism and
- * the measurement — E2E-B40, found in task-crud, whose leak the comment in
- * `deleteActivity` already cited while repeating its cause.
- */
-function activityRows(page: Page, activityName: string) {
-  return rowsByText(page, activityName);
-}
-
-async function deleteActivity(page: Page, activityName: string) {
-  const activityRow = activityRows(page, activityName).first();
-  // The ActivitiesTable dropdown trigger has sr-only text "Toggle menu"
-  await activityRow
-    .getByRole("button", { name: "Toggle menu" })
-    .click({ force: true });
-  // Menu item text is t("common.delete") = "Delete"
-  await page.getByRole("menuitem", { name: /Delete/ }).click({ force: true });
-  // Confirm deletion in DeleteAlertDialog — button text is t("common.delete") = "Delete"
-  await page.getByRole("button", { name: "Delete" }).click({ force: true });
-
-  // Clicking is not deleting, and the row leaving the table is not enough
-  // either — that was this comment's original claim, and task-crud has since
-  // measured it wrong. `ActivitiesTable.deleteActivity` (:58-72) toasts
-  // `activities.deletedSuccess` only after the server action resolved, and
-  // `expectToast` reads the toast viewport through a CSS attribute selector, so
-  // no modal can hide it. Waiting for it is what stops the request being
-  // abandoned when the page closes at end of test.
-  await expectToast(page, /Activity has been deleted/);
-
-  // And the list agrees. Only meaningful since `activityRows` became a DOM
-  // locator: under the role engine this assertion was satisfied by the modal's
-  // own `aria-hidden`, which is how task-crud leaked 6 of the 7 tasks it
-  // created while reporting green (E2E-B40).
-  await expect(activityRows(page, activityName)).toHaveCount(0, {
-    timeout: 15000,
-  });
-
-  // Gone for real — drop it from the tracking so the afterEach does not
-  // re-delete a row that no longer exists. Anything that threw above skips this
-  // line and stays tracked, which is exactly the case the net exists for.
-  createdActivityNames = createdActivityNames.filter(
-    (n) => n !== activityName,
-  );
-}
-
-/**
- * Teardown-only deleter: same clicks, no assertions, never throws.
+ * The click flow, its two proofs and the DOM-locator rationale moved to
+ * `../helpers/activity-fixture` on 2026-09-14: `task-crud` needs the identical
+ * sequence, and the two private copies had drifted over each other's gaps. See
+ * that file's header for what each copy was missing.
  *
- * Deliberately NOT `deleteActivity`: that one is the flow the tests exercise
- * and must fail loudly when a step does not work, whereas teardown must stay
- * silent so it cannot turn one failed test into a failed run.
+ * What stays here is the bookkeeping. `createdActivityNames` is this spec's own
+ * array under this spec's own name, so de-registering belongs to the caller —
+ * the same `X` / `XTracked` split `resume-fixture`'s `deleteResume` and
+ * `keyboard-ux`'s `deleteResumeTracked` already use.
+ *
+ * Anything that throws inside `deleteActivityFlow` skips the line below and
+ * stays tracked, which is exactly the case the teardown net exists for.
  */
-async function purgeActivity(page: Page, activityName: string) {
-  const row = activityRows(page, activityName).first();
-  try {
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row
-      .getByRole("button", { name: "Toggle menu" })
-      .click({ force: true });
-    await page.getByRole("menuitem", { name: /Delete/ }).click({ force: true });
-    await page.getByRole("button", { name: "Delete" }).click({ force: true });
-    // `toHaveCount(0)` rather than `waitFor({ state: "detached" })`: detached is
-    // also true of a locator that matches nothing, so under the old role-based
-    // `activityRows` this resolved instantly against the modal's `aria-hidden`
-    // and the net "succeeded" without deleting anything (E2E-B40).
-    await expect(activityRows(page, activityName)).toHaveCount(0, {
-      timeout: 15000,
-    });
-  } catch {
-    // swallow-ok: cleanup net — the activity may already be gone, and a
-    // throwing hook would replace the real test failure with its own. The
-    // afterEach re-checks and warns, so a failure here is not silent.
-  }
+async function deleteActivityTracked(page: Page, activityName: string) {
+  await deleteActivityFlow(page, activityName);
+  createdActivityNames = createdActivityNames.filter((n) => n !== activityName);
 }
 
 test.describe("Activity CRUD", () => {
@@ -229,7 +176,8 @@ test.describe("Activity CRUD", () => {
 
   // Safety net for the inline deletes at the end of each test — see
   // `createdActivityNames` above. On a green test this list is already empty
-  // (deleteActivity de-registers), so the hook costs nothing and stays silent;
+  // (deleteActivityTracked de-registers), so the hook costs nothing and stays
+  // silent;
   // a warning here therefore means a REAL leak, not routine noise.
   test.afterEach(async ({ page }) => {
     // Swap the reference out BEFORE the first await: clearing afterwards would
@@ -308,7 +256,7 @@ test.describe("Activity CRUD", () => {
     ).toBeVisible({ timeout: 10000 });
 
     // Clean up
-    await deleteActivity(page, activityName);
+    await deleteActivityTracked(page, activityName);
     await expectToast(page, /Activity has been deleted/);
   });
 
@@ -378,7 +326,7 @@ test.describe("Activity CRUD", () => {
     );
 
     // Cleanup — delete using the updated name
-    await deleteActivity(page, updatedName);
+    await deleteActivityTracked(page, updatedName);
     await expectToast(page, /Activity has been deleted/);
   });
 
@@ -401,7 +349,7 @@ test.describe("Activity CRUD", () => {
     ).toBeVisible({ timeout: 10000 });
 
     // Delete the activity
-    await deleteActivity(page, deleteActivityName);
+    await deleteActivityTracked(page, deleteActivityName);
 
     // Verify toast success message
     await expectToast(page, /Activity has been deleted/);
@@ -426,7 +374,7 @@ test.describe("Activity CRUD", () => {
     ).toBeVisible({ timeout: 10000 });
 
     // Clean up
-    await deleteActivity(page, morningActivity);
+    await deleteActivityTracked(page, morningActivity);
     await expectToast(page, /Activity has been deleted/);
   });
 
@@ -487,7 +435,7 @@ test.describe("Activity CRUD", () => {
     // Remove the only thing referencing it, and the same button now works.
     await navigateToActivities(page);
     await stopRunningActivity(page);
-    await deleteActivity(page, activityName);
+    await deleteActivityTracked(page, activityName);
     await expectToast(page, /Activity has been deleted/);
 
     await page.goto("/dashboard/admin?tab=activity-types");

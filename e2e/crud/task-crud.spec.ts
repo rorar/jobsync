@@ -6,6 +6,11 @@ import {
   selectOrCreateComboboxOption,
   uniqueId,
 } from "../helpers";
+import {
+  activityRows,
+  deleteActivity as deleteActivityFlow,
+  purgeActivity,
+} from "../helpers/activity-fixture";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -135,11 +140,6 @@ function taskRows(page: Page, title: string) {
   return rowsByText(page, title);
 }
 
-/** Every row in the activities table whose text contains `activityName`. */
-function activityRows(page: Page, activityName: string) {
-  return rowsByText(page, activityName);
-}
-
 async function deleteTask(page: Page, title: string) {
   // Wait for the task row to be visible before interacting
   await expect(taskRows(page, title).first()).toBeVisible({ timeout: 10000 });
@@ -188,38 +188,27 @@ async function deleteTask(page: Page, title: string) {
 }
 
 /**
- * Delete the activity named `activityName` from the activities table.
+ * Delete the activity named `activityName` loudly, then de-register it.
  *
  * Used inline (loudly) because on the green path the task deletion that follows
- * DEPENDS on it having worked — see `startedActivityNames`.
+ * DEPENDS on it having worked — an activity delete left in flight surfaces later
+ * as `tasks.cannotDeleteWithActivity` on a different line. See
+ * `startedActivityNames`.
+ *
+ * The click flow and its two proofs moved to `../helpers/activity-fixture` on
+ * 2026-09-14: `activity-crud` needs the identical sequence, and the two private
+ * copies had drifted over each other's gaps — this file's copy had the
+ * running-activity pre-assert that one lacked, that one had the E2E-B40
+ * rationale this file lacked, although E2E-B40 was measured here. See that
+ * file's header.
+ *
+ * De-registering stays local: `startedActivityNames` is this spec's own array.
+ * Anything that throws inside `deleteActivityFlow` skips the line below and
+ * stays tracked, which is the case the teardown net exists for.
  */
-async function deleteActivity(page: Page, activityName: string) {
-  const row = activityRows(page, activityName).first();
-  // getAllActivities filters on `endTime: { not: null }`
-  // (activity.actions.ts:69-72), so a still-RUNNING activity is not in this
-  // table at all. Assert the row first: without it the failure surfaces as a
-  // missing "Toggle menu" button and reads like a markup problem rather than
-  // "the stop never landed".
-  await expect(row).toBeVisible({ timeout: 15000 });
-  // The ActivitiesTable dropdown trigger has sr-only text "Toggle menu"
-  await row.getByRole("button", { name: "Toggle menu" }).click({ force: true });
-  await page.getByRole("menuitem", { name: /Delete/ }).click({ force: true });
-  // DeleteAlertDialog's confirm button is t("common.delete") = "Delete"
-  await page.getByRole("button", { name: "Delete" }).click({ force: true });
-
-  // Same two proofs as `deleteTask`, and needed here more: the task deletion
-  // that follows DEPENDS on this one having landed, so an activity delete left
-  // in flight surfaces later as `tasks.cannotDeleteWithActivity` on a different
-  // line. `ActivitiesTable` (:64) toasts `activities.deletedSuccess` after the
-  // action resolves.
-  await expectToast(page, /Activity has been deleted/);
-  await expect(activityRows(page, activityName)).toHaveCount(0, {
-    timeout: 15000,
-  });
-
-  startedActivityNames = startedActivityNames.filter(
-    (n) => n !== activityName,
-  );
+async function deleteActivityTracked(page: Page, activityName: string) {
+  await deleteActivityFlow(page, activityName);
+  startedActivityNames = startedActivityNames.filter((n) => n !== activityName);
 }
 
 /**
@@ -285,9 +274,13 @@ async function revealAllTaskStatuses(page: Page): Promise<boolean> {
 /**
  * Teardown-only deleters: same clicks, no assertions, never throw.
  *
- * Deliberately NOT `deleteTask` / `deleteActivity`: those are used inline where
- * a failed step must fail the test, whereas teardown must stay silent so it
- * cannot turn one failed test into a failed run.
+ * Deliberately NOT `deleteTask` / `deleteActivityTracked`: those are used inline
+ * where a failed step must fail the test, whereas teardown must stay silent so
+ * it cannot turn one failed test into a failed run.
+ *
+ * The activity half of this pair now lives in `../helpers/activity-fixture` as
+ * `purgeActivity`; only `purgeTask` is still local, because Task is this spec's
+ * own aggregate and no other spec deletes one.
  */
 async function purgeTask(page: Page, title: string) {
   try {
@@ -309,23 +302,6 @@ async function purgeTask(page: Page, title: string) {
     // swallow-ok: cleanup net — the task may already be gone, and a throwing
     // hook would replace the real test failure with its own. The afterEach
     // re-checks and warns, so a failure here is not silent.
-  }
-}
-
-async function purgeActivity(page: Page, activityName: string) {
-  try {
-    const row = activityRows(page, activityName).first();
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row
-      .getByRole("button", { name: "Toggle menu" })
-      .click({ force: true });
-    await page.getByRole("menuitem", { name: /Delete/ }).click({ force: true });
-    await page.getByRole("button", { name: "Delete" }).click({ force: true });
-    await expect(activityRows(page, activityName)).toHaveCount(0, {
-      timeout: 15000,
-    });
-  } catch {
-    // swallow-ok: cleanup net — as purgeTask above.
   }
 }
 
@@ -663,7 +639,7 @@ test.describe("Task CRUD", () => {
     // task first therefore achieved neither: the destructive toast went
     // unread, and BOTH rows survived the run. That is E2E-B24's `Activity +1`
     // and one of its `Task +6`.
-    await deleteActivity(page, taskTitle);
+    await deleteActivityTracked(page, taskTitle);
 
     // Cleanup task
     await navigateToTasks(page);
