@@ -182,7 +182,14 @@ test.afterEach(async ({ page }, testInfo) => {
   // the union of the four admin tab slugs, and a widened `string` here would
   // not assign to it. Inference off `ADMIN_TAB` keeps the literal types.
   const referenceGroups = [
-    // JobTitle is deliberately NOT swept here — see E2E-B39.
+    // SUPERSEDED 2026-09-08 — JobTitle IS swept today, see line 225. This block is
+    // a chronological log kept on purpose (its own closing note asks for that), so
+    // read it to the end before acting: the decision below was reversed at
+    // "RE-ENABLED 2026-09-08". The original heading — "JobTitle is deliberately NOT
+    // swept here, see E2E-B39" — stood as this block's first line until 2026-09-14
+    // and was copied, as current, into docs/handoff-2026-09-14-post-job-teardown-
+    // migration.md §3.3 and into scripts/check-e2e-residue.sh's reasoning. A stale
+    // headline over a reversed decision is read by everyone who skims.
     //
     // "edit experience dialog opens and cancels" (:498) reaches the Job Title
     // combobox expecting to SELECT a value an earlier test in this file created.
