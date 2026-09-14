@@ -489,6 +489,10 @@
 - **i18n:** 16 hardcoded English strings in automation detail page (A9)
 - **ux:** Run Now tooltip explains all disabled states — running, paused, resume missing (B6)
 - **a11y:** BaseCombobox trigger now has `aria-expanded` and `type="button"` (WEED-1)
+  — *corrected 2026-09-14: this shipped no user-visible change. `src/components/ui/base-combobox.tsx`
+  has no importer and never had one, and the live trigger (`src/components/ComboBox.tsx`) already
+  carried both attributes since 2026-03-26. Kept in place as a record of what was released rather
+  than deleted; see the WEED-1 row in `docs/BUGS.md`.*
 - **a11y:** TagInput clears input on popover close by click-outside (WEED-2)
 - **test:** company/job action tests aligned with IDOR security fixes (WEED-6)
 - **test:** Jest config excludes `.tracks/` worktree files (WEED-7)
