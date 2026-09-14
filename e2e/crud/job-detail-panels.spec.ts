@@ -1,4 +1,5 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { testWithCleanup } from "../helpers/cleanup-fixture";
 import {
   ensureEnglishLocale,
   uniqueId,
@@ -74,74 +75,67 @@ let createdResumes: string[] = [];
 // in this one `auto: true` fixture instead. See `e2e/helpers/job-fixture.ts`
 // for the full reasoning and why Job deletion itself moved to
 // `DELETE /api/v1/jobs/:id`.
-const test = base.extend<{ cleanup: void }>({
-  cleanup: [
-    async ({ page }, use, testInfo) => {
-      await use();
+const test = testWithCleanup(async (page, testInfo) => {
+  // The after-hooks run on their OWN fresh budget — `max(project, test)`,
+  // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+  // corrected 2026-09-09, this comment used to claim the opposite) and this
+  // one can visit the profile page and three admin tables on top of bodies
+  // that already build a resume and a job. Buy the extra time explicitly
+  // rather than let a green test start failing on its teardown; keep it
+  // small enough that a body which has itself become slow still surfaces.
+  testInfo.setTimeout(testInfo.timeout + 60_000);
 
-      // The after-hooks run on their OWN fresh budget — `max(project, test)`,
-      // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
-      // corrected 2026-09-09, this comment used to claim the opposite) and this
-      // one can visit the profile page and three admin tables on top of bodies
-      // that already build a resume and a job. Buy the extra time explicitly
-      // rather than let a green test start failing on its teardown; keep it
-      // small enough that a body which has itself become slow still surfaces.
-      testInfo.setTimeout(testInfo.timeout + 60_000);
+  // Swap the registries out BEFORE the first await: clearing afterwards
+  // would keep entries alive into the next test if a delete throws, and
+  // clearing in a beforeEach would not run at all under test.skip.
+  const groups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  const jobs = createdJobs;
+  const resumes = createdResumes;
+  createdJobs = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+  createdResumes = [];
 
-      // Swap the registries out BEFORE the first await: clearing afterwards
-      // would keep entries alive into the next test if a delete throws, and
-      // clearing in a beforeEach would not run at all under test.skip.
-      const groups = [
-        { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
-        { tab: ADMIN_TAB.company, names: createdCompanies },
-        { tab: ADMIN_TAB.location, names: createdLocations },
-      ];
-      const jobs = createdJobs;
-      const resumes = createdResumes;
-      createdJobs = [];
-      createdJobTitles = [];
-      createdCompanies = [];
-      createdLocations = [];
-      createdResumes = [];
+  // JOBS FIRST, and that ORDER is required rather than tidy:
+  // `deleteJobTitleById` (jobtitle.actions.ts:110-145) and
+  // `deleteCompanyById` (company.actions.ts:337-375) both count the
+  // referencing Jobs and refuse while one remains.
+  for (const title of jobs) {
+    try {
+      await deleteJobViaApi(page, title);
+    } catch (error) {
+      // swallow-ok: cleanup net — a hook that throws replaces the real
+      // test failure with its own. Caught per-title so one anomaly does
+      // not abandon the rest of the loop (`deleteJobViaApi` throws a
+      // specific, named error for every anomaly; see its doc comment).
+      console.warn(
+        `[job-detail-panels] leaked job survived cleanup: ${title} (${String(error)})`,
+      );
+    }
+  }
 
-      // JOBS FIRST, and that ORDER is required rather than tidy:
-      // `deleteJobTitleById` (jobtitle.actions.ts:110-145) and
-      // `deleteCompanyById` (company.actions.ts:337-375) both count the
-      // referencing Jobs and refuse while one remains.
-      for (const title of jobs) {
-        try {
-          await deleteJobViaApi(page, title);
-        } catch (error) {
-          // swallow-ok: cleanup net — a hook that throws replaces the real
-          // test failure with its own. Caught per-title so one anomaly does
-          // not abandon the rest of the loop (`deleteJobViaApi` throws a
-          // specific, named error for every anomaly; see its doc comment).
-          console.warn(
-            `[job-detail-panels] leaked job survived cleanup: ${title} (${String(error)})`,
-          );
-        }
-      }
+  // Resume second. NOT for a dependency reason — that claim was here until
+  // 2026-09-08 and was wrong. `Job.resumeId` is an OPTIONAL relation with no
+  // `onDelete` (`prisma/schema.prisma:436-437`), and `deleteResumeById` guards
+  // only against Automations, never against Jobs
+  // (`src/actions/profile.actions.ts:389-398`), so a resume CAN go while its
+  // job is still there. It sits here because this is where the bodies put it
+  // relative to the job delete, and moving it would change behaviour for no
+  // reason; only the sweep genuinely depends on an ordering.
+  // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts), so
+  // on a red run this costs one navigation and reports nothing — it cannot turn
+  // a failing test into a differently-failing one.
+  for (const title of resumes) {
+    await deleteResume(page, title);
+  }
 
-      // Resume second. NOT for a dependency reason — that claim was here until
-      // 2026-09-08 and was wrong. `Job.resumeId` is an OPTIONAL relation with no
-      // `onDelete` (`prisma/schema.prisma:436-437`), and `deleteResumeById` guards
-      // only against Automations, never against Jobs
-      // (`src/actions/profile.actions.ts:389-398`), so a resume CAN go while its
-      // job is still there. It sits here because this is where the bodies put it
-      // relative to the job delete, and moving it would change behaviour for no
-      // reason; only the sweep genuinely depends on an ordering.
-      // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts), so
-      // on a red run this costs one navigation and reports nothing — it cannot turn
-      // a failing test into a differently-failing one.
-      for (const title of resumes) {
-        await deleteResume(page, title);
-      }
-
-      // Reference rows last, for the reason given above the job loop.
-      await sweepReferenceGroups(page, groups, "job-detail-panels");
-    },
-    { auto: true },
-  ],
+  // Reference rows last, for the reason given above the job loop.
+  await sweepReferenceGroups(page, groups, "job-detail-panels");
 });
 
 // ---------------------------------------------------------------------------

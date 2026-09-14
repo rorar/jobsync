@@ -1,4 +1,5 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { testWithCleanup } from "../helpers/cleanup-fixture";
 import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
 import {
   ADMIN_TAB,
@@ -171,41 +172,34 @@ async function switchToTableView(page: Page) {
 // stayed in `afterEach` would silently break the required order (Job first,
 // because `deleteJobTitleById`/`deleteCompanyById` refuse while a Job still
 // references them). See `e2e/helpers/job-fixture.ts` for the full rationale.
-const test = base.extend<{ cleanup: void }>({
-  cleanup: [
-    async ({ page }, use, testInfo) => {
-      await use();
+const test = testWithCleanup(async (page, testInfo) => {
+  testInfo.setTimeout(testInfo.timeout + 60_000);
 
-      testInfo.setTimeout(testInfo.timeout + 60_000);
+  const jobs = createdJobs;
+  const referenceGroups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdJobs = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
 
-      const jobs = createdJobs;
-      const referenceGroups = [
-        { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
-        { tab: ADMIN_TAB.company, names: createdCompanies },
-        { tab: ADMIN_TAB.location, names: createdLocations },
-      ];
-      createdJobs = [];
-      createdJobTitles = [];
-      createdCompanies = [];
-      createdLocations = [];
+  // ORDER IS A REQUIREMENT, not tidiness: `deleteJobTitleById` /
+  // `deleteCompanyById` count referencing Jobs and refuse while one exists,
+  // so the job goes first or the reference sweep reports failures of the
+  // wrong deleter.
+  for (const title of jobs) {
+    try {
+      await deleteJobViaApi(page, title);
+    } catch (error) {
+      console.warn(`[kanban] cleanup failed for "${title}": ${String(error)}`);
+    }
+  }
 
-      // ORDER IS A REQUIREMENT, not tidiness: `deleteJobTitleById` /
-      // `deleteCompanyById` count referencing Jobs and refuse while one exists,
-      // so the job goes first or the reference sweep reports failures of the
-      // wrong deleter.
-      for (const title of jobs) {
-        try {
-          await deleteJobViaApi(page, title);
-        } catch (error) {
-          console.warn(`[kanban] cleanup failed for "${title}": ${String(error)}`);
-        }
-      }
-
-      // Navigates itself and never throws.
-      await sweepReferenceGroups(page, referenceGroups, "kanban");
-    },
-    { auto: true },
-  ],
+  // Navigates itself and never throws.
+  await sweepReferenceGroups(page, referenceGroups, "kanban");
 });
 
 test.describe("Kanban Board", () => {

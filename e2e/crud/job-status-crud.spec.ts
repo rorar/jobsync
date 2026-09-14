@@ -1,4 +1,5 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { testWithCleanup } from "../helpers/cleanup-fixture";
 import {
   selectOrCreateComboboxOption,
   expectToast,
@@ -233,75 +234,68 @@ async function deleteStatusTracked(page: Page, label: string): Promise<boolean> 
 // `afterEach` always runs before fixture teardown, so splitting the Job step
 // into its own fixture while the rest stayed in `afterEach` would silently
 // break the required Job-before-status-before-references order every run.
-const test = base.extend<{ cleanup: void }>({
-  cleanup: [
-    async ({ page }, use, testInfo) => {
-      await use();
+const test = testWithCleanup(async (page, testInfo) => {
+  // Teardown runs on its OWN fresh budget — `max(project, test)`, not
+  // what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+  // corrected 2026-09-09, this comment used to claim the opposite) and this
+  // one deletes a job, a status and three admin-table rows across four
+  // navigations. Buy the extra time explicitly rather than let a green test
+  // start failing on its teardown; keep it small enough that a body which
+  // has itself become slow still surfaces. `testInfo.setTimeout`, not
+  // `test.setTimeout`: `test` is still being assigned by this very
+  // `extend()` call, so referencing it inside this callback would be a
+  // self-referential initializer (TS7022) — `TestInfo.setTimeout()` is the
+  // same operation on the same currently-running test.
+  testInfo.setTimeout(testInfo.timeout + 60_000);
 
-      // Teardown runs on its OWN fresh budget — `max(project, test)`, not
-      // what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
-      // corrected 2026-09-09, this comment used to claim the opposite) and this
-      // one deletes a job, a status and three admin-table rows across four
-      // navigations. Buy the extra time explicitly rather than let a green test
-      // start failing on its teardown; keep it small enough that a body which
-      // has itself become slow still surfaces. `testInfo.setTimeout`, not
-      // `test.setTimeout`: `test` is still being assigned by this very
-      // `extend()` call, so referencing it inside this callback would be a
-      // self-referential initializer (TS7022) — `TestInfo.setTimeout()` is the
-      // same operation on the same currently-running test.
-      testInfo.setTimeout(testInfo.timeout + 60_000);
+  // Swap the registries out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const jobs = createdJobs;
+  const statuses = createdStatuses;
+  const referenceGroups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdJobs = [];
+  createdStatuses = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
 
-      // Swap the registries out BEFORE the first await: clearing afterwards would
-      // keep entries alive into the next test if a delete throws, and clearing in a
-      // beforeEach would not run at all under test.skip.
-      const jobs = createdJobs;
-      const statuses = createdStatuses;
-      const referenceGroups = [
-        { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
-        { tab: ADMIN_TAB.company, names: createdCompanies },
-        { tab: ADMIN_TAB.location, names: createdLocations },
-      ];
-      createdJobs = [];
-      createdStatuses = [];
-      createdJobTitles = [];
-      createdCompanies = [];
-      createdLocations = [];
-
+  try {
+    // ORDER IS A REQUIREMENT, not tidiness. Jobs first: `deleteJobStatus`
+    // refuses while a Job or a JobStatusHistory row points at the status, and
+    // `deleteJobTitleById` / `deleteCompanyById` each count referencing Jobs
+    // and refuse the same way. Sweeping in any other order leaves rows behind
+    // and reports them as failures of the wrong deleter.
+    for (const title of jobs) {
       try {
-        // ORDER IS A REQUIREMENT, not tidiness. Jobs first: `deleteJobStatus`
-        // refuses while a Job or a JobStatusHistory row points at the status, and
-        // `deleteJobTitleById` / `deleteCompanyById` each count referencing Jobs
-        // and refuse the same way. Sweeping in any other order leaves rows behind
-        // and reports them as failures of the wrong deleter.
-        for (const title of jobs) {
-          try {
-            await deleteJobViaApi(page, title);
-          } catch (error) {
-            console.warn(
-              `[job-status-crud] leaked job survived cleanup: ${title} (${String(error)})`,
-            );
-          }
-        }
-        for (const label of statuses) {
-          if (!(await deleteStatusTracked(page, label))) {
-            console.warn(
-              `[job-status-crud] leaked job status survived cleanup: ${label}`,
-            );
-          }
-        }
+        await deleteJobViaApi(page, title);
       } catch (error) {
-        // swallow-ok: cleanup net — teardown that throws replaces the real test
-        // failure with its own. Both deleters above already swallow and re-check,
-        // so reaching here means something outside them broke; say so rather than
-        // let it surface as a mystery failure of the test that just passed.
-        console.warn(`[job-status-crud] cleanup fixture failed: ${String(error)}`);
+        console.warn(
+          `[job-status-crud] leaked job survived cleanup: ${title} (${String(error)})`,
+        );
       }
+    }
+    for (const label of statuses) {
+      if (!(await deleteStatusTracked(page, label))) {
+        console.warn(
+          `[job-status-crud] leaked job status survived cleanup: ${label}`,
+        );
+      }
+    }
+  } catch (error) {
+    // swallow-ok: cleanup net — teardown that throws replaces the real test
+    // failure with its own. Both deleters above already swallow and re-check,
+    // so reaching here means something outside them broke; say so rather than
+    // let it surface as a mystery failure of the test that just passed.
+    console.warn(`[job-status-crud] cleanup fixture failed: ${String(error)}`);
+  }
 
-      // Navigates itself and never throws.
-      await sweepReferenceGroups(page, referenceGroups, "job-status-crud");
-    },
-    { auto: true },
-  ],
+  // Navigates itself and never throws.
+  await sweepReferenceGroups(page, referenceGroups, "job-status-crud");
 });
 
 // ---------------------------------------------------------------------------

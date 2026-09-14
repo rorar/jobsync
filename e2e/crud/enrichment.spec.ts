@@ -1,4 +1,5 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { testWithCleanup } from "../helpers/cleanup-fixture";
 import { ensureEnglishLocale, uniqueId, selectOrCreateComboboxOption } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 import {
@@ -102,83 +103,76 @@ let createdResumes: string[] = [];
 // because `deleteJobTitleById`/`deleteCompanyById`/`deleteJobSourceById`
 // refuse while a Job still references them). See `e2e/helpers/job-fixture.ts`
 // for the full rationale.
-const test = base.extend<{ cleanup: void }>({
-  cleanup: [
-    async ({ page }, use, testInfo) => {
-      await use();
+const test = testWithCleanup(async (page, testInfo) => {
+  // The fixture runs on its OWN fresh budget — `max(project, test)`, not
+  // what the body left over (`playwright/lib/worker/workerMain.js:328-329`)
+  // — and this one can visit My Jobs, the profile page and four admin
+  // tables on top of a body that already builds a resume and a job. Buy
+  // the extra time explicitly rather than let a green test start failing
+  // on its teardown; keep it small enough that a body which has itself
+  // become slow still surfaces.
+  //
+  // 60_000 is UNCHANGED by the job drain. The body that creates a job
+  // raises its own timeout by 60 s, so for THAT test the fixture's fresh
+  // slot is max(60 s, 120 s) and this call makes 180 s, against typical
+  // teardown work of ~2 s (one job, two API round trips) + ~8 s (one
+  // resume) + ~40 s (four admin tabs). The other two tests create no job
+  // and no resume, so both loops are empty and `sweepReferenceGroups`
+  // skips every group without navigating — their teardown cost is
+  // unchanged at one array read.
+  testInfo.setTimeout(testInfo.timeout + 60_000);
 
-      // The fixture runs on its OWN fresh budget — `max(project, test)`, not
-      // what the body left over (`playwright/lib/worker/workerMain.js:328-329`)
-      // — and this one can visit My Jobs, the profile page and four admin
-      // tables on top of a body that already builds a resume and a job. Buy
-      // the extra time explicitly rather than let a green test start failing
-      // on its teardown; keep it small enough that a body which has itself
-      // become slow still surfaces.
-      //
-      // 60_000 is UNCHANGED by the job drain. The body that creates a job
-      // raises its own timeout by 60 s, so for THAT test the fixture's fresh
-      // slot is max(60 s, 120 s) and this call makes 180 s, against typical
-      // teardown work of ~2 s (one job, two API round trips) + ~8 s (one
-      // resume) + ~40 s (four admin tabs). The other two tests create no job
-      // and no resume, so both loops are empty and `sweepReferenceGroups`
-      // skips every group without navigating — their teardown cost is
-      // unchanged at one array read.
-      testInfo.setTimeout(testInfo.timeout + 60_000);
+  // Swap the registries out BEFORE the first cleanup await: clearing
+  // afterwards would keep entries alive into the next test if a delete
+  // throws, and clearing in a beforeEach would not run at all under
+  // test.skip.
+  const groups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+    { tab: ADMIN_TAB.source, names: createdJobSources },
+  ];
+  const jobs = createdJobs;
+  const resumes = createdResumes;
+  createdJobs = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+  createdJobSources = [];
+  createdResumes = [];
 
-      // Swap the registries out BEFORE the first cleanup await: clearing
-      // afterwards would keep entries alive into the next test if a delete
-      // throws, and clearing in a beforeEach would not run at all under
-      // test.skip.
-      const groups = [
-        { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
-        { tab: ADMIN_TAB.company, names: createdCompanies },
-        { tab: ADMIN_TAB.location, names: createdLocations },
-        { tab: ADMIN_TAB.source, names: createdJobSources },
-      ];
-      const jobs = createdJobs;
-      const resumes = createdResumes;
-      createdJobs = [];
-      createdJobTitles = [];
-      createdCompanies = [];
-      createdLocations = [];
-      createdJobSources = [];
-      createdResumes = [];
+  // JOBS FIRST, and that ORDER is required rather than tidy:
+  // `deleteJobTitleById` (jobtitle.actions.ts:110-145), `deleteCompanyById`
+  // (company.actions.ts:337-375) and `deleteJobSourceById`
+  // (jobSource.actions.ts:77-89) each count the referencing Jobs first and
+  // refuse while one remains. `deleteJobViaApi` throws a named error for
+  // every anomaly (0 matches, 2+ matches, non-2xx/non-204); caught and
+  // logged per title so one leaked job doesn't abort cleanup of the rest.
+  for (const title of jobs) {
+    try {
+      await deleteJobViaApi(page, title);
+    } catch (error) {
+      console.warn(`[enrichment] cleanup failed for "${title}": ${String(error)}`);
+    }
+  }
 
-      // JOBS FIRST, and that ORDER is required rather than tidy:
-      // `deleteJobTitleById` (jobtitle.actions.ts:110-145), `deleteCompanyById`
-      // (company.actions.ts:337-375) and `deleteJobSourceById`
-      // (jobSource.actions.ts:77-89) each count the referencing Jobs first and
-      // refuse while one remains. `deleteJobViaApi` throws a named error for
-      // every anomaly (0 matches, 2+ matches, non-2xx/non-204); caught and
-      // logged per title so one leaked job doesn't abort cleanup of the rest.
-      for (const title of jobs) {
-        try {
-          await deleteJobViaApi(page, title);
-        } catch (error) {
-          console.warn(`[enrichment] cleanup failed for "${title}": ${String(error)}`);
-        }
-      }
+  // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts),
+  // so on a red run this costs one navigation and reports nothing — it
+  // cannot turn a failing test into a differently-failing one. It CAN
+  // still be refused for a reason of its own: `deleteResumeById`
+  // (profile.actions.ts:389-398) returns `profile.resumeHasAutomations`
+  // while an Automation points at the resume. Nothing in this file creates
+  // one, so that path is not expected here; it is named because the same
+  // helper is shared with specs where it is.
+  for (const title of resumes) {
+    await deleteResume(page, title);
+  }
 
-      // `deleteResume` TOLERATES absence by contract (helpers/resume-fixture.ts),
-      // so on a red run this costs one navigation and reports nothing — it
-      // cannot turn a failing test into a differently-failing one. It CAN
-      // still be refused for a reason of its own: `deleteResumeById`
-      // (profile.actions.ts:389-398) returns `profile.resumeHasAutomations`
-      // while an Automation points at the resume. Nothing in this file creates
-      // one, so that path is not expected here; it is named because the same
-      // helper is shared with specs where it is.
-      for (const title of resumes) {
-        await deleteResume(page, title);
-      }
-
-      // Reference rows last, for the reason given above the job loop. If a job
-      // DOES survive its own drain, the sweep still warns about four rows
-      // rather than silently leaving them — the honest outcome, not a second
-      // bug. Navigates itself and never throws.
-      await sweepReferenceGroups(page, groups, "enrichment");
-    },
-    { auto: true },
-  ],
+  // Reference rows last, for the reason given above the job loop. If a job
+  // DOES survive its own drain, the sweep still warns about four rows
+  // rather than silently leaving them — the honest outcome, not a second
+  // bug. Navigates itself and never throws.
+  await sweepReferenceGroups(page, groups, "enrichment");
 });
 
 // ---------------------------------------------------------------------------
