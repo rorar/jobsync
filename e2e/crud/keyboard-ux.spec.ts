@@ -327,10 +327,15 @@ function getSourceCombobox(page: Page) {
 }
 
 // ---------------------------------------------------------------------------
-// Tests: 1. BaseCombobox (AddJob modal — Title, Company, Location, Source)
+// Tests: 1. Combobox (AddJob modal — Title, Company, Location, Source)
+//
+// Named `BaseCombobox` until 2026-09-14, which named the wrong file. AddJob
+// renders `Combobox` from `src/components/ComboBox.tsx` (AddJob.tsx:55);
+// `src/components/ui/base-combobox.tsx` has no importer and cannot appear in
+// this dialog. See docs/knip-unused-ui-primitives.md section 5.
 // ---------------------------------------------------------------------------
 
-test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
+test.describe("Keyboard UX: Combobox (AddJob modal)", () => {
   test.beforeEach(async ({ page }) => {
     await ensureEnglishLocale(page);
   });
