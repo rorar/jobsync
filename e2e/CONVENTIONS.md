@@ -171,6 +171,26 @@ several others need as a precondition — gets its own file next to it and is im
 | Fixture | Import from | Used by |
 |---|---|---|
 | `ensureResumeExists(page, title, { confirmWith? })` / `deleteResume(page, title)` | `../helpers/resume-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `automation-crud`, `automation-wizard-modules`, `keyboard-ux` |
+| `sweepReferenceGroups(page, groups, specName)` / `ADMIN_TAB` / `loadUntilAdminRowVisible` | `../helpers/admin-reference-cleanup` | eleven specs — every one that mints a JobTitle, Company, Location, Tag or ActivityType |
+| `deleteJobViaApi(page, title)` | `../helpers/job-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `kanban`, `job-status-crud` (ADR-046) |
+| `E2E_JOB_TEARDOWN_API_KEY` | `../helpers/api-key-fixture` | `job-fixture` and `prisma/seed-e2e.ts` — the one plaintext both sides must agree on; that file's header says why it is a constant and not an env var |
+| `activityRows(page, name)` / `deleteActivity(page, name)` / `purgeActivity(page, name)` | `../helpers/activity-fixture` | `activity-crud`, `task-crud` |
+
+Two of these are not page flows and sit here for findability rather than by the
+definition above: `api-key-fixture` is a shared constant, and `cleanup-fixture`
+(below) is a mechanism.
+
+| Mechanism | Import from | Used by |
+|---|---|---|
+| `testWithCleanup(cleanup)` — returns a `test` whose every test runs `cleanup` afterwards | `../helpers/cleanup-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `kanban`, `job-status-crud` |
+
+`testWithCleanup` replaces the `base.extend<{ cleanup: void }>({ cleanup: [...,
+{ auto: true }] })` boilerplate that the five Job specs each carried a verbatim
+copy of after ADR-046. It takes the whole teardown body and gives a caller no way
+to pass half of one — see the ordering trap below for why that matters. Its
+header also records the scope boundary: it is internal E2E infrastructure, not
+Module SDK surface, and `playwright.config.ts:47-54` pins `testDir` such that a
+connector module could not import it even if someone wanted to.
 
 There is one file in `helpers/` that is NOT there to be shared: `helpers/console-oracle.ts` has a
 single caller (`crud/keyboard-ux.spec.ts`) and lives outside the spec so that **Jest** can import
