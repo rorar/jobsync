@@ -64,7 +64,7 @@ Gate to run, each judged by its own `EXIT=` line, never through a pipe: `./scrip
 | M6 | **Correction of a claim made on 2026-09-28:** `docs/BACKLOG.md:241` is **not** a phantom citation. Its revisit trigger names "the BaseCombobox consolidation (§G) introducing server-side company search". The false claim came from a search that was *meant* to be case-insensitive and silently was not: the `grep` shell function had failed (see D4 (F)), so the fallback was `awk 'BEGIN{IGNORECASE=1} /combobox/'` — and `awk` here is `mawk` 1.3.4, which ignores the gawk-only `IGNORECASE` without a warning (1 hit; `tolower($0) ~` gives 7). The line itself had been in view minutes earlier, in an `awk 'NR>=238 && NR<=245'` read whose output was cut off after line 239. It was corrected in issue #2 on 2026-09-28; it survives uncorrected in the immutable session-handoff record named above. `docs/knip-unused-ui-primitives.md:309-311` needs no change. | `awk 'tolower($0) ~ /combobox/' docs/BACKLOG.md` |
 | M7 | No test pins Radix's injection of `type="button"` / `aria-expanded` (`@radix-ui/react-popover` 1.1.15, `dist/index.mjs:89,91,94`). If it stopped, three triggers inside real `<form onSubmit>` would become submit buttons silently. Pin the dependency behaviour, not a call site. | `docs/knip-unused-ui-primitives.md` § 5.5 |
 | M8 | A fact-only header note on `specs/base-combobox.allium`: which file implements the rules today (`src/components/ComboBox.tsx`) and that `base-combobox.tsx` implements only the shell. The fact is unblocked; any SDK / connector framing waits for D2. Must go through `allium:tend`. | |
-| M9 | `docs/BUGS.md` small drift: header says "Updated 2026-09-13" but the file changed on 2026-09-14 (`c027690c`, `518ddd98`); `:39-40` says "the three remaining open items are the two …"; `PRE-1` (`:1357`) still reads "Open — investigate in S3", is not among the header's 2 open (`FL-1`, `FL-2`, `:1135-1136`), and its two tests (`__tests__/ActivityForm.spec.tsx:154,183`) exist and pass in the green suite. | |
+| M9 | `docs/BUGS.md` small drift: header says "Updated 2026-09-13" but the file changed on 2026-09-14 (`c027690c`, `518ddd98`); `:39-40` says "the three remaining open items are the two …"; `PRE-1` (`:1357`) still reads "Open — investigate in S3", is not among the header's 2 open (`FL-1`, `FL-2`, `:1135-1136`), and its two tests (`__tests__/ActivityForm.spec.tsx:154,183`) exist and pass in the green suite. Five section headings still announce open work their rows no longer hold: `:72` "(21 found, 20 fixed, 1 open)" and `:95` "Open — 1 item" (the block table says 21 / 21 / 0; `E2E-B11` was fixed 2026-09-08), `:119` "13 fixed, 7 open" (block table: 17 fixed, 0 open, 5 other), `:1584` and `:1620` "## Open — Reported 2026-03-25/26" (every row below them is marked fixed). `PRE-1` is the only row-level discrepancy; the header's "2 open" otherwise holds. | |
 
 ---
 
@@ -93,3 +93,19 @@ Gate to run, each judged by its own `EXIT=` line, never through a pipe: `./scrip
 - The manual check ADR-046's plan asked for (break the seeded key, confirm the warnings distinguish 401 / 0 matches / 2+ matches / non-204) is not recorded anywhere.
 - Whether `bun knip` currently reports `base-combobox.tsx` (not run since 2026-09-13).
 - `UI-B1..UI-B17` were not re-checked item by item; the closure rests on `docs/BUGS.md`.
+- The Sprint 2/4/5 "open follow-ups" bullet lists in `docs/BUGS.md` (`:486`, `:600`, `:752`, `:875`, `:923`) were not audited item by item. They belong to the pre-E2E block the file itself carries forward without a recount, and `CLAUDE.md` § Deferred Sprint Work is their index.
+
+---
+
+## 7. Re-scan after the search-tool finding (2026-09-28)
+
+When the `grep` function was found broken in the tmux session, every Bash call since 2026-09-15 that used the function or `awk IGNORECASE` was pulled from the session transcript: **13 calls**. All affected ones fall in one window, 2026-09-27 21:08–21:24 UTC, during the combobox discovery. The Grep and Glob tools were not used in that window. The discovery for this register used `command grep`, `git grep` and `tolower()` throughout and is not affected. What the window produced, re-checked:
+
+| Claim from that window | Re-check | Result |
+|---|---|---|
+| `docs/BACKLOG.md` mentions combobox once | case-insensitive | **Wrong** — 7; see M6 |
+| Vocabulary table in issue #2 (5 documents) | case-insensitive | One count changed (debt file connector 2 → 3, Communication Connector); conclusion holds |
+| "The connector/module intent appears nowhere" | the repo-wide pass that had failed, run properly: 24 tracked files mentioning `base-combobox`, ±4-line window for seam vocabulary | **Holds** — only documents written after the discovery, a Welle-4 design note and spec-filename lists |
+| `widget-registry.tsx:42,46-55`, `manifest.ts:112-115,125,155-159,164-166,171,188-189` | re-read with `awk` | **Hold** |
+
+A case-insensitive re-run of this register's own scans for open markers in `docs/BUGS.md` and `docs/ROADMAP.md` added the five stale headings now listed under M9 and nothing else.
