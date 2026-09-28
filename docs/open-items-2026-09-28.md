@@ -1,8 +1,10 @@
 # Open items register — as of 2026-09-28
 
-**State this describes:** branch `fix/e2e-elysium` at `efcd2570`, working tree clean, 6 commits ahead of
-`origin/fix/e2e-elysium` (`cb136619` … `efcd2570`, unpushed). Every statement below is true *as of that
-commit and this date*; none is a standing claim. Each item was re-checked against the file, the git
+**State this describes:** branch `fix/e2e-elysium` as it stood before this register was written —
+`efcd2570`, working tree clean, 6 commits ahead of `origin/fix/e2e-elysium` (`cb136619` … `efcd2570`,
+unpushed). The register's own commits come after that and are not counted in it; `git rev-list --count
+origin/fix/e2e-elysium..HEAD` gives the live number. Every statement below is true *as of that commit and
+this date*; none is a standing claim. Each item was re-checked against the file, the git
 history or GitHub on 2026-09-28 — not copied from an earlier document. Where something could not be
 checked, it says so.
 
