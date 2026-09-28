@@ -116,7 +116,7 @@ Gate to run, each judged by its own `EXIT=` line, never through a pipe: `./scrip
 
 ## 6. Not verified
 
-- Whether `next lint` reaches the five `.mjs` files with empty `catch` blocks — i.e. whether CI would fail after a merge — and whether the `ci.yml` hunks merge cleanly (D1a). Whether the `WH-B2` flake still occurs cannot be settled without running the suite.
+- Whether `next lint` reaches the five `.mjs` files with empty `catch` blocks on this branch (the `main` CI log says it does there, V4). *Settled 2026-09-28:* a read-only `git merge-tree --write-tree fix/e2e-elysium feat/quick-capture-and-referral-events` auto-merges `ci.yml` and conflicts in exactly three files: `CLAUDE.md`, `docs/BUGS.md`, `package.json`. The sibling's `WH-B1` is the same five `catch` blocks as V4 / M17 here — one finding, which must not get a second ID on this branch. Whether the `WH-B2` flake still occurs cannot be settled without running the suite.
 - knip's actual unused-files output: issue #1 says 21 → 16 for the LinguiJS group, `CLAUDE.md:1106-1110` says six files. One is wrong; only a `bun knip` run tells which.
 - The manual check ADR-046's plan asked for (break the seeded key, confirm the warnings distinguish 401 / 0 matches / 2+ matches / non-204) is not recorded anywhere.
 - Whether `bun knip` currently reports `base-combobox.tsx` (not run since 2026-09-13).
