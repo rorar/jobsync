@@ -141,7 +141,7 @@ echo ""
 
 # Step 7: Commit, tag, and push
 echo -e "${GREEN}[7/10]${NC} Committing and tagging..."
-git add package.json package-lock.json CHANGELOG.md
+git add package.json CHANGELOG.md
 git commit -m "chore(release): ${VERSION_NUMBER}"
 git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
 git push origin main
