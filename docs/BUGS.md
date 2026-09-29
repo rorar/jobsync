@@ -1,6 +1,6 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-09-29
 
-**Total: 752 bugs found, 677 fixed, 69 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
+**Total: 756 bugs found, 681 fixed, 69 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
 
 > **"Closed as decided" is a fourth disposition, added 2026-09-08 and deliberately not folded into
 > "fixed".** `E2E-B22`, `E2E-B23` and `E2E-B24` are rows the application cannot fix — `Person`,
@@ -31,10 +31,11 @@
 > | Session 2026-09-09 (heading outline across all 20 routes, `UI-B18`) | 1 | 1 | 0 | — |
 > | Session 2026-09-09 (job teardown reporting success it could not see, `E2E-B47`) | 1 | 1 | 0 | — |
 > | Session 2026-09-13 (Public API v1's first real caller, `E2E-B48`, `E2E-B49`) | 2 | 2 | 0 | — |
-> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B7`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B69`, `INF-B1..B5`) | 68 | 1 | 67 | — |
-> | **Total** | **752** | **677** | **69** | **6** |
+> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B7`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B69`, `INF-B1..B5`) | 68 | 2 | 66 | — |
+> | Session 2026-08-25 (W-H1 spec flip, filed on `feat/quick-capture-and-referral-events`, merged 2026-09-29; `WH-B1..B4`) | 4 | 3 | 1 | — |
+> | **Total** | **756** | **681** | **69** | **6** |
 >
-> 677 + 69 + 6 = 752. **Added 2026-09-29:** the sweep block (68 rows: 1 fixed, 67 open) — see § Session 2026-09-29. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
+> 681 + 69 + 6 = 756. **Added 2026-09-29:** the sweep block (68 rows: 2 fixed, 66 open) — see § Session 2026-09-29 — and, by the merge of `feat/quick-capture-and-referral-events`, its `WH-B1..B4` block (3 fixed, `WH-B2` open); `API-B1` was fixed by the same merge. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
 > `E2E-B36` and `E2E-B38` open → fixed; `E2E-B22`, `E2E-B23`, `E2E-B24` and `E2E-B42` open →
 > closed as decided; `E2E-B44` filed, split out of `E2E-B24` so a product gap is not settled as a
 > side effect of a test-residue pass. The three remaining open items are the two inherited
@@ -68,9 +69,147 @@
 > corrected assumption. `E2E-B38` still has no row of its own — see the recount note at the end of
 > § Session 2026-09-02.
 
-### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+### Status: ✅ WH-B1, WH-B3, WH-B4 fixed, WH-B2 open (test flake, not a product defect) — see Session 2026-08-25 (merged from `feat/quick-capture-and-referral-events` 2026-09-29) · OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
-## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (68 found, 1 fixed, 67 open)
+## Session 2026-08-25 — W-H1 spec dependency flip + orphan-prune leftovers (4 found, 2 fixed)
+
+Both were found incidentally while verifying the session's own work, not by looking for them.
+Neither was caused by this session's changes; both pre-date it.
+
+### WH-B1 — `bun run lint` fails repo-wide, and CI runs it — FIXED
+
+**Severity:** Medium (blocks CI on merge to `main`/`dev`; harmless on feature branches)
+**Files:** `src/lib/connector/arbeitsagentur-account/cdp-scripts/cdp-auto-complete.mjs:51`,
+`cdp-keep-alive.mjs:457`, `cdp-login-bundid.mjs:61,117,128`
+
+Five `no-empty` ESLint **errors** (not warnings), all landing **2026-05-17** across three commits —
+`e2f740fd` (`cdp-auto-complete.mjs`), `a06cf528` (`cdp-login-bundid.mjs`, 3 of the 5) and
+`d7bf3af1` (`cdp-keep-alive.mjs`) — and unnoticed since. An earlier revision of this entry
+attributed all five to `d7bf3af1`, which only accounts for one. `.github/workflows/ci.yml` runs `bun run lint` on push to `main`/`dev` and on PRs
+to them, so this is red the moment any branch carrying it merges. It went unnoticed because feature
+branches do not trigger that workflow.
+
+Note this **contradicts the "eslint clean" line** in `docs/handoff-2026-08-24-orphan-prune.md` and in
+`.full-review/05-final-report-wd3-orphan-prune.md`. Those claims were wrong — evidently a scoped or
+warnings-only check was run, not `bun run lint`. Corrected here rather than quietly.
+
+**Fix:** all five are deliberate best-effort swallows in CDP teardown and polling loops. Each empty
+block now carries a comment stating why it is empty. **Zero behaviour change** — the alternative
+(actually handling the errors) would change how the browser-automation scripts behave, which is not
+a lint fix.
+
+### WH-B4 — API doc claimed tags cascade on job delete — FIXED
+
+**Severity:** Low (documentation; would mislead an API consumer)
+**File:** `docs/architecture/public-api-v1.md` § `DELETE /api/v1/jobs/:id`
+
+Introduced by commit `010c9008` **in this same session**, while fixing a different error in the
+same paragraph (the doc claimed `200` + body where the route returns `204`). The replacement text
+said the delete cascades to "its `Note`s, tags and status history". `Note` and `JobStatusHistory`
+do cascade; **tags do not** — `Tag` is a many-to-many with `Job` (`jobs Job[]` / `tags Tag[]`,
+implicit join table), so the delete drops the association and the `Tag` survives as a user-level
+lookup shared across jobs. A consumer would expect their tag vocabulary to shrink when they delete
+a job.
+
+Fixed in `8dd32004` by listing the rows that actually carry `onDelete: Cascade` on `jobId`, each
+verified against `prisma/schema.prisma`, and calling out the tag exception explicitly.
+
+Worth noting for its own sake: this is a doc error introduced *while correcting a doc error*, and
+it was caught only because the review re-verified the replacement text against the schema instead
+of trusting it. Correcting a claim is not the same as verifying the correction.
+
+### WH-B3 — retention expiry archives but never erases; archived PII is kept forever — OPEN
+
+> **Closed on `fix/e2e-elysium` by `72f4138f`** (2026-08-26, "user-configurable retention — erase on expiry"), recorded at the merge of this branch on 2026-09-29. Re-verified 2026-09-28 at `fbf44fc4`: the sweep matches `status: { not: "anonymized" }` (`src/lib/scheduler/crm-cron.ts:72-74`), erases through `anonymizePersonCascade` (`:127-132`) and no longer copies the name (`:80`). The deliberate exception — retention switched off keeps the PII (`:104`, ADR-042 § 2) — and its fail-open read path are `GDPR-B2`. The text below is the finding as filed on 2026-08-25.
+
+**Severity:** Medium (GDPR Art. 5(1)(e) storage limitation; low real-world exposure — see below)
+**Files:** `specs/crm.allium` `rule ExpireAutoCreatedPersons` (`requires: person.status = active`),
+`src/lib/scheduler/crm-cron.ts:71` (`data: { status: "archived" }`)
+
+`ExpireAutoCreatedPersons` moves an auto-created Person `active -> archived` when
+`retentionExpiresAt` passes. **Nothing runs after that.** `crm-cron.ts` only performs that one
+transition and `retention-cron.ts` never touches `Person`, so an archived, retention-expired
+contact keeps `firstName`, `lastName`, `emails` and `phones` indefinitely. `archived` is a status
+flag, not de-identification — the row remains "kept in a form which permits identification"
+(Art. 5(1)(e)).
+
+**LATENCY QUALIFIER — read before citing this as live (added 2026-08-26).** The defect below
+is real in the code as written, but it **cannot currently fire**. No production code writes
+`Person.retentionExpiresAt` (the only occurrences are a read filter at
+`src/lib/scheduler/crm-cron.ts:57` and a select at `src/lib/export/collect-user-data.ts:308`),
+and none writes `dataSource: "auto_created"` (`src/actions/person.actions.ts:168` hardcodes
+`"manual"`). The expiry cron filters on **both**, so it matches nothing until auto-creation
+ships — which depends on the deferred email-sync connector.
+
+Severity is largely retained rather than reduced: this is the last moment the fix is free, and
+the design defect is in the spec regardless. But the escalation immediately below was written
+in the present tense and overstates live exposure. That is the same live-exposure check the
+orphan-prune work applied to `CrmNote` (see the qualifier on the 2026-08-21/23 section) and it
+was not repeated here.
+
+**ESCALATED 2026-08-26 — retention expiry would EXTEND the name's lifetime.** The rest of this
+entry describes archived rows *passively* keeping PII. It is worse, and active, once the path
+is reachable: in the
+**same transaction** that archives the Person for retention expiry,
+`src/lib/scheduler/crm-cron.ts:73-81` creates a `CrmActivityLog` row carrying
+`targetPersonId: person.id` **and**
+`linkedRecordName: [person.firstName, person.lastName].filter(Boolean).join(" ")`.
+
+`CrmActivityLog.happenedAt` defaults to `now`, and that table runs on a *different* clock —
+`crm_activity_log_retention` (1095 days, `gdpr-data-rights.allium:209`), swept by
+`retention-cron.ts:201`. So at the moment the Person's retention period ends, their full name
+is **copied into an immutable timeline row with a fresh three-year clock**, started by the very
+event meant to end retention.
+
+Retention expiry would therefore *lengthen* the identifier's practical lifetime rather than
+ending it — a far more concrete Art. 5(1)(e) failure than a status flag that fails to de-identify, and
+it means **any fix that does not also address the log copy is incomplete**. Note
+`crm/AnonymizePerson` already scrubs `linked_record_name` on the erasure path: the capability
+exists, the retention path simply does not use it.
+
+Full verification log: `docs/wh-b3-retention-analysis.md`.
+
+**Corrected 2026-08-25 (security review).** An earlier draft of this entry claimed as a second,
+independent defect that "a Person archived MANUALLY before its retention date can never be expired
+at all, because the expiry rule requires `status = active`". That is literally true but **inert
+today**: the rule's only effect on the Person is `ensures: person.status = archived`
+(`crm.allium`), so a record already archived has already reached the post-state and skipping it
+changes nothing observable. It becomes a real gap **only if** this bug is fixed by making expiry do
+something stronger than archiving — at which point the `status = active` guard would let
+manually-archived records escape the stronger treatment. Whoever fixes the main issue must widen
+that guard in the same change; it is not a separate defect to track.
+
+**Not caused by W-H1.** `crm.allium` has always had that guard and the code always matched. What
+W-H1 changed is that `crm-gdpr.allium`'s `ExpireAutoCreatedContacts` — which claimed expiry raises
+an *erasure* request — was deleted as contradictory. That rule was never implemented, so no
+behaviour changed; the spec merely stopped overstating the guarantee, which made this visible.
+
+**Why exposure is low, not zero:** JobSync is self-hosted and single-user on a legitimate-interest
+basis, and `crm-gdpr.allium` already carries an open question about whether the household exemption
+(Art. 2(2)(c)) applies at all. So this is a design decision to make deliberately, not an incident.
+
+**Deliberately NOT fixed here.** The options differ in kind — anonymise on expiry (mirrors
+`crm/AnonymizePerson`, terminal and irreversible), a second longer-dated sweep archived -> anonymized,
+or an explicit documented decision that archived retention is indefinite by design. Picking one is a
+product/legal judgement, and this session's whole thesis is that such judgements belong to @rorar
+rather than to a silent commit.
+
+### WH-B2 — `TasksPageClient.spec.tsx` flakes under full-suite load — OPEN
+
+**Severity:** Low (test-only; no product defect)
+**File:** `__tests__/TasksPageClient.spec.tsx:524` — *"should handle switching between multiple
+filters"*
+
+Fails with `Exceeded timeout of 5000 ms for a test` in a full 311-suite run (216 s, single worker,
+8 GB VM), and **passes 16/16 in isolation**. Unrelated to anything this session touched.
+
+Deliberately NOT fixed by raising the timeout: that would mask whichever of the two causes is real —
+genuine slowness in `TasksContainer` (the suite also emits many `not wrapped in act(...)` warnings
+from its `useEffect` fetch chain, which is a real smell) versus pure resource starvation on this VM.
+Raising a timeout to make a symptom disappear is the same move as W-E6's "kept for reference only"
+comment, and this session spent its afternoon undoing one of those. Diagnose before suppressing.
+
+## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (68 found, 2 fixed, 66 open)
 
 **Where these come from.** On 2026-09-29, a read-only sweep compared everything said, found, deferred or promised in every jobsync Claude session between 2026-08-20 and 2026-09-28 against the code at `fbf44fc4`. That covers 10 dialogue sessions, 114 sub-agent transcripts and 176 automatic security reviews. The rows below are the **defects**: behaviour that is wrong, or a claim in a shipped artefact (code, spec, test) that is false. Almost none of them is new code. Most had already been found once and then lost, for three reasons:
 
@@ -83,7 +222,7 @@
 - **Stale internal documentation and citations.** These go to `docs/open-items-2026-09-28.md` as M items.
 - **Spec `open question`s.** These stay in the specs. The full list is in the sweep evidence.
 - **Maintainer decisions.** These go to the register as D items.
-- **Findings already carrying a sibling-branch ID** (`WH-B1` = the `no-empty` lint, `WH-B2` = the `TasksPageClient` flake, `WH-B3`, `WH-B4`, all on `feat/quick-capture-and-referral-events`). They get no second ID here.
+- **Findings already carrying a sibling-branch ID** (`WH-B1` = the `no-empty` lint, `WH-B2` = the `TasksPageClient` flake, `WH-B3`, `WH-B4`, filed on `feat/quick-capture-and-referral-events` and merged here on 2026-09-29). They get no second ID here.
 
 **Anchors and severity.**
 
@@ -118,7 +257,7 @@
 
 | ID | Severity | Summary | Fix |
 |----|----------|---------|-----|
-| API-B1 | LOW | **The public contract documents the wrong DELETE response.** `docs/architecture/public-api-v1.md:500-504` documents `DELETE /api/v1/jobs/:id` as **200 with a body**. The route returns 204 (`src/app/api/v1/jobs/[id]/route.ts:144`), and the tests pin 204 (`__tests__/api-v1-jobs.spec.ts:983,998`). *Register:* M14. | Fixed on `feat/quick-capture-and-referral-events` (`010c9008`, final wording `02e10d0f`, context in that branch's `WH-B4`). Closes when that branch is merged. |
+| API-B1 | LOW ✅ FIXED 2026-09-29 | **The public contract documents the wrong DELETE response.** `docs/architecture/public-api-v1.md:500-504` documents `DELETE /api/v1/jobs/:id` as **200 with a body**. The route returns 204 (`src/app/api/v1/jobs/[id]/route.ts:144`), and the tests pin 204 (`__tests__/api-v1-jobs.spec.ts:983,998`). *Register:* M14. | Fixed by merging `feat/quick-capture-and-referral-events` (`010c9008`, final wording `02e10d0f`; see `WH-B4`) on 2026-09-29. |
 | API-B2 | LOW | **`?search=` treats `%` and `_` as wildcards.** `GET /api/v1/jobs` passes the value unescaped into Prisma `contains` (`src/app/api/v1/jobs/route.ts:54-57`). The sibling `getPersons` escapes them (`person.actions.ts:256-261`). Own rows only: correctness, not security. *Sweep:* H-O2. | Open. |
 
 ### Application code
@@ -166,7 +305,7 @@
 | UT-B4 | LOW | **`getReferralDetail`'s `targetJobId` seam is untested.** Mapped at `src/actions/referral.actions.ts:488`; no test mentions `getReferralDetail`. *Sweep:* A55. | Open. |
 | UT-B5 | LOW | **A recurring flake was never recorded.** `ProfilePreferencesCard.spec.tsx` failed in two full-suite runs (2026-08-21, 08-23) and passed alone. Recorded only in `docs/handoff-2026-08-24-orphan-prune.md:197-198`. May be moot after the host move. *Sweep:* A82. | Open (observe). |
 | UT-B6 | LOW | **A fixture puts a `DataSource` value on an `ActorSource` field.** `mockPersonAutoCreated.createdBySource: "auto_created"` (`src/lib/data/testFixtures.ts:1444`). `ActorSource` has no such member; tsc cannot see it because the fixture field is typed `string`. Noted twice on 2026-08-19 as "not filed". *Sweep:* H9-10. | Open. |
-| UT-B7 | LOW | **A vacuous `status` assertion in the W-D2 database test.** At `__tests__/crm-orphan-prune.integration.spec.ts:152`, which exists only on `feat/quick-capture-and-referral-events` (`d6f41879`). *Sweep:* A52. | Open; applies once that branch is merged. |
+| UT-B7 | LOW | **A vacuous `status` assertion in the W-D2 database test.** At `__tests__/crm-orphan-prune.integration.spec.ts:152`, which exists only on `feat/quick-capture-and-referral-events` (`d6f41879`). *Sweep:* A52. | Open; the test is on this branch since the 2026-09-29 merge. |
 | UT-B8 | LOW | **A mocked helper hides the real error remaps.** `__tests__/module.actions.spec.ts:72-74` mocks `handleError`, so the key assertion at `:1379` cannot see the real P2002/P2025 remaps. *Sweep:* F-04-11, inherited. | Open. |
 | UT-B9 | LOW | **A stale mock return shape.** The `health-monitor` mock at `__tests__/health-monitor.spec.ts:36` lacks the `escalated` field the real function returns. *Sweep:* F-04-10, inherited. | Open. |
 

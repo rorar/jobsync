@@ -84,6 +84,28 @@ jobs:
       - name: Type check
         run: bunx tsc --noEmit
 
+      # The database-backed test tier (ADR-040) builds a SQLite schema by
+      # replaying prisma/migrations through the sqlite3 CLI. Checked here so a
+      # missing binary fails in one obvious line instead of inside a 300-suite
+      # run. The suite itself also refuses to skip when CI is set, so this is a
+      # second line of defence, not the only one.
+      - name: Verify sqlite3 (database-backed test tier)
+        run: |
+          sqlite3 -version || {
+            echo "::error::sqlite3 CLI missing. Required by the database-backed test tier (docs/adr/040-database-backed-integration-tests.md)."
+            exit 1
+          }
+
+      # `allium check` does NOT resolve qualified cross-spec references — verified
+      # empirically against allium 3.2.3, a bogus `crm/Nope.field` yields 0 errors.
+      # W-H1 replaced hand-copied entity stubs with `crm/...` references. Stubs were
+      # UNCHECKABLE (no resolvable link existed, and name-matching would be unsound);
+      # qualified references are checkable, and this step is what checks them.
+      # See the header of scripts/check-spec-refs.mjs for why the earlier
+      # "traded loud for silent" framing was wrong.
+      - name: Check cross-spec references (qualified alias/Sym.member)
+        run: bun run check:spec-qualified-refs
+
       - name: Unit tests
         run: bun run test
 

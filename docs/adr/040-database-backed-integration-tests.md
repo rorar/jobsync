@@ -66,7 +66,9 @@ deployment breaks this test first.
 The tier needs the `sqlite3` CLI (present in devenv and on the CI image) and, outside the
 devenv shell, `PRISMA_QUERY_ENGINE_LIBRARY`. The suite guards on `sqlite3` and uses
 `describe.skip`, so a developer without it sees the tests reported as skipped rather than a
-wall of confusing failures. This is a deliberate trade: a silent skip is a real hazard, but a
+wall of confusing failures — **but only locally**: when `process.env.CI` is set it throws
+instead (added by `ce63e947`), because a skip nobody reads is the failure mode this tier exists
+to prevent. This is a deliberate trade: a silent skip is a real hazard, but a
 *visible* skip is better than the alternative failure mode, where the missing Prisma engine
 already produces ~15 unrelated-looking suite failures across the existing tier.
 
@@ -79,10 +81,28 @@ already produces ~15 unrelated-looking suite failures across the existing tier.
   for claims about database behaviour. Everything else stays mocked.
 - **Migration correctness is now partly under test.** A migration whose SQL does not apply
   cleanly on top of its predecessors fails this suite, which nothing checked before.
-- **Open:** the tier is not yet wired into a documented CI step, and the `sqlite3` /
-  `PRISMA_QUERY_ENGINE_LIBRARY` prerequisites are not stated anywhere outside this ADR and the
-  test file's header. Until that is done, a CI runner missing `sqlite3` would pass silently
-  with the tier skipped.
+- **Closed 2026-08-25, in two steps.** The original bullet — *"a CI runner missing `sqlite3` would
+  pass silently with the tier skipped"* — was **accurate when written**, and the risk was real.
+
+  1. `ce63e947` closed it in the suite: `__tests__/crm-orphan-prune.integration.spec.ts` now
+     **throws** instead of skipping when `sqlite3` is absent and `process.env.CI` is set. GitHub
+     Actions always sets `CI`, so silent-green stopped being reachable there. Locally it still
+     skips, which is the intended behaviour.
+  2. `.github/workflows/ci.yml` then added an up-front `sqlite3` check, so a missing binary fails
+     in one obvious line instead of surfacing as a throw partway through a 300-suite run.
+
+  **The in-suite throw is not redundant** and must not be deleted as belt-and-braces: the `ci.yml`
+  check only covers runners that go through that workflow, so the throw is the sole defence for any
+  other runner that sets `CI`.
+
+  > A previous revision of this bullet claimed the risk "was wrong when written". That was itself
+  > wrong, and is corrected here rather than silently rewritten. Git order: ADR created `47713c49`
+  > (2026-08-24 02:03, no throw in the suite), throw added `ce63e947` (2026-08-25 10:48), bullet
+  > rewritten `010c9008` (16:00). Erasing a fix's history is as corrosive as inventing a risk —
+  > it invites the next reader to delete the guard.
+
+  The `PRISMA_QUERY_ENGINE_LIBRARY` prerequisite applies only **outside** the devenv shell (see
+  `CLAUDE.md`); CI runs `bunx prisma generate` and does not need it.
 
 ## Reference
 

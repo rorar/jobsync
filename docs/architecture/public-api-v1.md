@@ -499,15 +499,27 @@ const UpdateJobApiSchema = z.object({
 
 ### `DELETE /api/v1/jobs/:id`
 
-Delete a job and all its associated notes (cascading).
+Delete a job and everything the Job aggregate owns. Rows whose Job foreign key carries
+`onDelete: Cascade` go with it — `Note`, `Interview`, `JobStatusHistory`, `CrmInterview`,
+`JobContact`, and the `CrmNoteTarget` / `CrmTaskTarget` join rows (the last two key on
+`targetJobId`, not `jobId`).
 
-**Response: 200**
-```json
-{
-  "success": true,
-  "data": { "deleted": true }
-}
-```
+`CrmActivityLog` is the exception: its `targetJobId` is `onDelete: SetNull`, so timeline entries
+**survive** the delete and lose only their job link.
+
+**Tags are not deleted.** `Tag` is a many-to-many with `Job` (`prisma/schema.prisma` `model Tag`,
+`jobs Job[]`), so the delete drops the *association* and the `Tag` itself survives — it is a
+user-level lookup shared across jobs.
+
+A `CrmNote` left with no targets at all is additionally pruned in the same transaction, since
+nothing could ever read it again — see `src/lib/crm/orphan-targets.ts`. A `CrmTask` in the same
+position is deliberately **not** pruned: the task board lists tasks unfiltered, so an orphaned
+task stays visible and actionable.
+
+**Response: 204 No Content** — no response body.
+
+Note this differs from every other endpoint in this API, which return the
+`{ success, data }` envelope. Clients must not wait for a body here.
 
 **Error: 404** — Job not found or belongs to another user.
 

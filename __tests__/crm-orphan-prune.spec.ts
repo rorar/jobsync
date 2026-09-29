@@ -14,6 +14,9 @@
  * one delete cannot reap residue left behind by an unrelated one.
  */
 
+// orphan-targets.ts is server-only; jest resolves the real package, which throws.
+jest.mock("server-only", () => ({}));
+
 import {
   collectOrphanCandidateNoteIds,
   pruneOrphanedCrmNotesByIds,
