@@ -1733,6 +1733,8 @@ Universelle Such- und Aktionsleiste im macOS-Spotlight-Stil. Öffnet per `Cmd+K`
 
 **Cross-Ref:** Keyboard Shortcuts (2.16), Analytics (2.18), CRM (5.3), Dokumenten-Generatoren (4.2), LLM AI-Provider
 
+**Recherche (Pre-Spec):** [`docs/design/spotlight-command-palette-2.20-research.md`](design/spotlight-command-palette-2.20-research.md) — Readiness, `cmdk` + Action-Registry, FTS5-Suche, AI-Bridge, Voice; offene Dokument-Fragen in [`docs/design/2026-08-05-f7-open-threads-reference.md`](design/2026-08-05-f7-open-threads-reference.md)
+
 ---
 
 ### 2.21 CompanyDetail Page
@@ -2189,6 +2191,8 @@ Dynamische Dateipfade und Dateinamen für generierte/exportierte Dokumente (CV, 
 
 ## 5. CRM
 
+**Referenz:** Umsetzungsmuster aus Twenty CRM → [`docs/twenty-crm-implementation-patterns.md`](twenty-crm-implementation-patterns.md)
+
 ### 5.1 Kommunikation (→ Communication Connector 1.12)
 - Nutzt den Communication Connector mit Modulen E-Mail und PBX
 - CRM-spezifische Features: Kontakt-Zuordnung, Gesprächsnotizen, Follow-Up-Tracking
@@ -2539,6 +2543,8 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 **Cross-Ref:** Allium Specs (→ propagate für Test-Generierung), CLAUDE.md Testing Requirements, e2e/CONVENTIONS.md, CI/CD Pipeline
 
 ### 8.1 Automatische Screenshot/GIF/Video-Dokumentation
+**Design Spec:** [`docs/superpowers/specs/2026-06-09-doc-media-generator-design.md`](superpowers/specs/2026-06-09-doc-media-generator-design.md) — Entwurf, nicht begonnen
+
 - Playwright-basiertes Capture-Script (`tools/capture-docs/`) für automatische Erstellung von Screenshots, GIFs und Videos der wichtigsten UI-Flows
 - **Ziel:** README.md und Docs bleiben bei UI-Änderungen automatisch aktuell
 

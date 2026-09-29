@@ -1,5 +1,22 @@
 # Design: Doc-Media Generator (ROADMAP 8.1)
 
+> **Note, 2026-09-29 (imported from `spec/gdpr-data-rights-person-stub`, `fa9b2a25`, by
+> `377428d4`).** Not started: `tools/` holds only `allium-refcheck` and `next-heap`, and there is
+> no `data-capture` attribute in `src/`, no `reactRemoveProperties` in `next.config.mjs`, no
+> `driver.js` dependency and no `docs/media/`. The design itself is unchanged. Three passages
+> describe the E2E setup as it was on 2026-06-09 and no longer hold:
+> - § 6.2 "Auth/data reuse": `scripts/test-e2e.sh` now defaults to a production server
+>   (`E2E_PROD=1`), where `E2E_AUTH_RATE_LIMIT_BYPASS` is unset (`scripts/prod-e2e.sh`), and
+>   `e2e/global-setup.ts` mints the session cookie instead of signing in. The dev path with
+>   `scripts/dev-e2e.sh` is the `E2E_PROD=0` opt-in. The NixOS Chromium path is one case of the
+>   wrapper's Chromium selection, not the rule (`CLAUDE.md` § E2E Test Infrastructure, "Which
+>   Chromium runs").
+> - § 9 "Resource discipline": `test-e2e.sh` starts a fresh server on every run and reuses one
+>   only under `E2E_REUSE_SERVER=1`, so a capture run cannot rely on `reuseExistingServer`.
+>   Heavy commands go through the wrappers (`CLAUDE.md` § Using these scripts).
+> - § 4.1: the selector counts (547 `getByRole`, 72 `data-testid`) are from 2026-06-09 and were
+>   not re-counted.
+
 **Date:** 2026-06-09
 **Status:** Design — awaiting review
 **Author:** @rorar (brainstormed with Claude)

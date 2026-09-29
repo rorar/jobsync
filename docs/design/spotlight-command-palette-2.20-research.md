@@ -1,5 +1,27 @@
 # Spotlight / Command Palette (ROADMAP 2.20) — Design Research
 
+> **Note, 2026-09-29 (imported from `docs-spotlight-research`, `e1f686bc` and `048e1fc1`).** Still
+> pre-spec: there is no `spotlight.allium`, `CommandDialog` is still unused, and there is no FTS5
+> index. Five points below have changed or need care:
+> 1. **Quick-capture provenance is decided.** It was decided on 2026-08-17: a `quick_capture`
+>    `DataSource` value (`specs/crm.allium`, "DECIDED (tend, 2026-08-17)"; ADR-039). "Spec scope"
+>    item 5 and "Recommended sequencing" item 5 no longer gate on it. The contact quick-create UI
+>    itself is still unbuilt.
+> 2. **The combobox consolidation direction is open.** § 5's "Aligned" bullet assumes
+>    consolidation onto `base-combobox.tsx`. That is undecided: register D2 in
+>    `docs/open-items-2026-09-28.md`, GitHub issue #2, and `docs/ROADMAP.md` § 8.7 "Discovery:
+>    Combobox-Konsolidierung".
+> 3. **Line anchor:** `cmdk` is now at `package.json:67`, not `:65`.
+> 4. **The `speech` ConnectorType (§ 3, F.4) is a proposal, not a decision.** The project adds a
+>    new Connector only when no existing Connector interface fits (`CLAUDE.md` § Connector
+>    Architecture). This document does not make that case. For example, a cloud Whisper module
+>    may fit the AI-Provider Connector. Check this before the spec.
+> 5. **Local-only references.** The clone paths under `/home/pascal/projekte/` and the subagent
+>    transcripts cited in F.6 exist only on the author's machine, and the transcripts are gone.
+>
+> The document questions from the follow-up session (F.7,
+> `docs/design/2026-08-05-f7-open-threads-reference.md`) are register row D45.
+
 **Date:** 2026-06-20 · **Status:** Research complete, pre-spec (no code, no `spotlight.allium` yet)
 **Scope:** ROADMAP 2.20 Spotlight (Cmd+K palette) + its children (navigation / search / actions / AI-bridge / voice / inline-create) + references
 **Method:** Understand-Anything graph (HEAD-current for this question) + code grep + 3 parallel deep-review subagents over cloned reference repos

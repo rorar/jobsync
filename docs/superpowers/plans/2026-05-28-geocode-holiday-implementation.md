@@ -1,5 +1,7 @@
 # GeoCode + Holiday Reference Module Implementation Plan
 
+> **Completed 2026-05-28** by `48be8c20` (GeoCode), `6de7560a` (Holiday), `a18ba1d5` (weed alignment) and `30f28aa2` (weekend fix); ROADMAP 1.21 and 1.22 are marked done. Kept as history (imported 2026-09-29 by `377428d4`); the code, not this plan, is current.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement ROADMAP 1.21 (GeoCode Reference Module) + 1.22 (Holiday Reference Module) as Reference Data Modules under the existing Reference Data Connector (1.20).

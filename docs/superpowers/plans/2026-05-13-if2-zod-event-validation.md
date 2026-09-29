@@ -1,5 +1,7 @@
 # IF-2: Zod Runtime Validation for Event Payloads
 
+> **Completed 2026-05-13** by `aa485c2b`, `66941419`, `ad9bece1` and the review fixes in `9532b965`. Kept as history (imported 2026-09-29 by `377428d4`); the current rule is `CLAUDE.md` § Domain Events. The bare `npx tsc` and `bun run build` commands below are now refused; use `bash scripts/typecheck-safe.sh` and `bash scripts/build-safe.sh`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add Zod runtime validation to all 19 event consumer payload casts and fix 7 untyped emit sites, so payload shape mismatches are caught at runtime instead of silently reading `undefined`.

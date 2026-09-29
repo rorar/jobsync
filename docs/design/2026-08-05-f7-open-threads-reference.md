@@ -1,5 +1,21 @@
 # §F.7 — Open Threads Reference (Dokument-Story + CRM Company-Link)
 
+> **Note, 2026-09-29 (imported from `docs-spotlight-research`, `32f5fece`; that commit's
+> `.remember/remember.md` change was not taken).**
+> - **§ 2's three open questions are now register row D45** in `docs/open-items-2026-09-28.md`.
+>   Before this import they were tracked nowhere.
+> - **§ 3's gap is fixed.** `0335938e` wired `CompanyPicker` into `PersonForm` with inline
+>   create, `682a9118` fixed its accessibility, and `9a74e4d8` merged both on 2026-08-06. The
+>   `PersonForm.tsx` lines cited in § 3 describe the code before that fix.
+> - **Company inline create needs no provenance seam** (`specs/crm.allium`, the note that ends
+>   "Company is a lookup value with no data subject behind it").
+> - **Contact quick-capture provenance is decided** (2026-08-17: `specs/crm.allium`, "DECIDED
+>   (tend, 2026-08-17)"; ADR-039). The open question § 3 cites at `specs/crm.allium:1416-1433`
+>   no longer exists.
+> - **The BaseCombobox consolidation direction is still open:** register D2 and GitHub issue #2.
+> - **ROADMAP anchors are now** 1.6 `:600`, 1.18 `:1106`, 2.8 `:1397`, 2.20 `:1712` and
+>   4.2 `:1924`.
+
 **Status:** Reference only. Nothing here is decided. Collected 2026-08-05.
 **Extends:** `docs/design/spotlight-command-palette-2.20-research.md` (§F.1–F.6 there; this file is the F.7 companion).
 
