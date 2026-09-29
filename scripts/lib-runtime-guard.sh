@@ -37,8 +37,9 @@
 # The thresholds are fractions of the allowance, and they are deliberately WELL
 # BELOW 1.0. The sample is taken BEFORE the heavy work starts, so it measures
 # what is ALREADY running — resident subagents, a forgotten dev server, another
-# suite. Usage cannot exceed the allowance (that is what an allowance is), so a
-# threshold at or above 1.0 can never fire: the first version aborted at 1.20
+# suite. Under a cpu.max quota, usage cannot exceed the allowance, so a
+# threshold at or above 1.0 can never fire (with no quota the denominator is
+# this shell's affinity mask, and that bound is not guaranteed): the first version aborted at 1.20
 # and was therefore unreachable, a guard that looked like it protected and could
 # not. 0.60 means "more than half this container is spoken for before I begin",
 # which is the situation that produced 14-minute unit tests.

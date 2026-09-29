@@ -2,7 +2,9 @@
 # Flush the Next.js / Turbopack build + dev cache (.next/).
 #
 # Pure cache flush — does NOT stop or start the dev server. For the full
-# stop -> flush -> restart cycle use scripts/restart.sh (which calls this script).
+# stop -> flush -> restart cycle, run scripts/stop.sh, this script, then
+# scripts/dev.sh. scripts/restart.sh also does it but still kills EVERY
+# worktree's dev server (docs/BUGS.md INF-B2).
 # Fixes "Internal Server Error" caused by corrupted .next/ manifests.
 #
 # Usage:

@@ -23,7 +23,7 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 
 ```bash
 ./scripts/dev.sh      # Start dev server (port 3737 in the main checkout; derived per worktree)
-./scripts/restart.sh  # Stop, flush .next cache, then restart dev server
+./scripts/restart.sh  # Stop, flush .next cache, then restart dev server — kills EVERY worktree's server, see below
 ./scripts/build.sh    # Production build
 ./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
 ./scripts/test.sh     # Run Jest tests (uses system Node.js)
@@ -34,6 +34,11 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ./scripts/prisma-generate.sh  # Generate Prisma client
 ./scripts/prisma-migrate.sh   # Run migrations
 ```
+
+**`restart.sh` is not worktree-scoped yet.** It still runs machine-wide `pkill -f "next dev"` and
+`pkill -9 -f "next-server"` (`scripts/restart.sh:10,13,14`), so it takes a sibling worktree's
+server with it (`docs/BUGS.md` `INF-B2`, open). Until it is fixed, run `stop.sh` (scoped to this
+worktree by `/proc/<pid>/cwd`), then `clean.sh`, then `dev.sh`.
 
 All scripts source `scripts/env.sh`, which auto-downloads and patches Prisma engines **for
 NixOS hosts**. On a glibc host (Ubuntu et al.) `bunx prisma generate` works unpatched and the
@@ -72,8 +77,13 @@ Tunables if you need them: `JEST_MEM_MAX` (8G), `JEST_NODE_HEAP` (6144), `JEST_T
 `scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** three times for a second each and takes the MAX (three seconds of wall clock before every wrapper; the max biases toward aborting, deliberately, because resident agents are bursty). It aborts with exit
 **75** when more than **60%** of our CPU allowance is already in use. The sample is taken BEFORE
 the heavy work starts, so it measures what is already running — resident subagents, a forgotten
-dev server. Thresholds must stay well under 1.0: usage cannot exceed the allowance, so the first
-version's 1.2× abort could never fire. It exists because a Playwright run was
+dev server. The ratio is the WHOLE container's usage (`cpu.stat` at the cgroup-namespace root, not
+this shell's own cgroup) over the root `cpu.max` quota; only when no quota is set does the
+denominator fall back to the CPU count in this shell's own affinity mask (`Cpus_allowed_list`) —
+`scripts/lib-runtime-guard.sh:52-80`. Under a quota, usage cannot exceed the allowance, so
+thresholds must stay well under 1.0: the first version's 1.2× abort could never fire. Under the
+fallback that bound is not guaranteed, because processes in one container need not share one
+affinity mask. The guard exists because a Playwright run was
 once started while six subagents were still resident: the suite returned 11 failures with durations
 like 14.9 minutes for a single test — numbers that measured contention, not the tree.
 
@@ -265,7 +275,9 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 **Degradation Rules:** `degradation.ts` implements 3 escalation rules:
 - `handleAuthFailure()` — immediate pause on 401/403
 - `checkConsecutiveRunFailures()` — pause after 5 failed runs
-- `handleCircuitBreakerTrip()` — pause after 3 CB opens
+- `handleCircuitBreakerTrip()` — pause after 3 CB opens. **Not live:** the function exists
+  (`degradation.ts:339`) and is unit-tested, but nothing in `src/` calls it, so this rule never
+  fires (`docs/BUGS.md` `MOD-B2`, open; wiring it or removing the rule is an undecided choice).
 
 **Allium Spec:** `specs/module-lifecycle.allium` — authoritative specification for all lifecycle rules.
 
@@ -598,9 +610,9 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 2. **Deaktivierung:** `deactivateModule()` pauses all active automations using it (`pauseReason: "module_deactivated"`)
 3. **Reaktivierung:** Paused automations are NOT auto-restarted — user must manually reactivate
 4. **Deaktivierte Module** are hidden from Automation Wizard module selector (`getActiveModules()`)
-5. **Automation Degradation:** Auth failure → immediate pause. 5 consecutive failed runs → pause. 3 CB opens → pause.
+5. **Automation Degradation:** Auth failure → immediate pause. 5 consecutive failed runs → pause. 3 CB opens → pause (not live: `handleCircuitBreakerTrip()` has no caller in `src/`, `MOD-B2`).
 
-**Cross-User Degradation:** `handleAuthFailure()` and `handleCircuitBreakerTrip()` intentionally affect ALL users' automations for the failing module. This is by design — module-level failures (invalid API key, circuit breaker) affect the shared external service, not individual users. Notifications are per-user.
+**Cross-User Degradation:** `handleAuthFailure()` and `handleCircuitBreakerTrip()` intentionally affect ALL users' automations for the failing module. This is by design — module-level failures (invalid API key, circuit breaker) affect the shared external service, not individual users. Notifications are per-user. (The circuit-breaker half describes the function's behaviour; nothing in `src/` calls it yet — `MOD-B2`.)
 
 ## EURES/ESCO Integration
 
@@ -931,6 +943,8 @@ TestCases:` instead of `for t in TestCases:`) produces parse errors pointing *at
 line*, which reads like the resolver caught it. It did not — that is a false negative on the
 investigation, not on the tool.
 
+**Reference checkers (both in CI):** `bun run check:spec-refs` → `scripts/check-spec-refs.sh` (drives `tools/allium-refcheck/refcheck.py`; also in `scripts/hooks/pre-push`) and `bun run check:spec-qualified-refs` → `scripts/check-spec-refs.mjs` (qualified `alias/Symbol[.member]`); green means the names resolve, not that the claims are true.
+
 ## Testing Requirements
 
 **CRITICAL: Every feature, bugfix, and refactoring MUST include tests.** No code ships without test coverage.
@@ -972,7 +986,8 @@ investigation, not on the tool.
 **Directory structure:**
 - `e2e/smoke/` — Auth-free tests (signin, locale-switching). No storageState.
 - `e2e/crud/` — CRUD tests (job, task, activity, automation, question, profile). Uses storageState.
-- `e2e/helpers/index.ts` — Shared utilities (`login`, `expectToast`, `selectOrCreateComboboxOption`, `uniqueId`)
+- `e2e/helpers/index.ts` — Shared primitives (`uniqueId`, `ensureEnglishLocale`, `expectToast`, `rowsByText`, `safeWait`, `selectOrCreateComboboxOption`). There is no shared `login()`: `ec823595` deleted it because no spec imported it; the smoke specs and `global-setup.ts` (fallback path) each inline their own sign-in steps.
+- `e2e/helpers/*-fixture.ts`, `admin-reference-cleanup.ts`, `console-oracle.ts` — fixtures and teardown, see "Shared fixtures and teardown" below
 - `e2e/global-setup.ts` — One-time auth setup, saves session to `e2e/.auth/user.json`
 
 **Pipeline:** `globalSetup` → smoke project → crud project. Smoke tests verify auth works; CRUD tests skip login via storageState.
@@ -1004,6 +1019,17 @@ Consequences worth knowing before you debug something:
 remove the previous run's residue from a database that should never have held it. ADR-043 records
 the decision it implemented; that decision is superseded, not wrong.
 
+**Shared fixtures and teardown** (ADR-045: the suite owns nothing that outlives the run; ADR-046:
+Job teardown moves to a fixture and to the Public API). One line each; which spec uses which, and
+the rules for adding one, are in `e2e/CONVENTIONS.md` § "Shared Fixtures":
+- `e2e/helpers/job-fixture.ts` — `deleteJobViaApi(page, title)`: exact-title lookup via `GET /api/v1/jobs?search=`, then `DELETE /api/v1/jobs/:id`; no DOM state involved.
+- `e2e/helpers/api-key-fixture.ts` — `E2E_JOB_TEARDOWN_API_KEY`, the one plaintext `prisma/seed-e2e.ts` and `job-fixture.ts` must agree on (a constant, not an env var; the header says why).
+- `e2e/helpers/cleanup-fixture.ts` — `testWithCleanup(body)`: returns a `test` whose every test runs `body` afterwards as ONE `auto: true` fixture. Used by the five Job specs only (ADR-046); ADR-045 deferred fixtures suite-wide.
+- `e2e/helpers/activity-fixture.ts` — `activityRows` / `deleteActivity` (asserting) / `purgeActivity` (teardown, never throws).
+- `e2e/helpers/resume-fixture.ts` — `ensureResumeExists` / `deleteResume`: the resume a Job or Automation form needs before it can submit.
+- `e2e/helpers/admin-reference-cleanup.ts` — `sweepReferenceGroups` and helpers: delete the reference rows (JobTitle, Company, Location, Tag, …) that combobox creates leave behind.
+- `e2e/helpers/console-oracle.ts` — the console-error classifier, outside the spec so Jest can test it; it must not import `@playwright/test`.
+
 **Running E2E tests:**
 ```bash
 # Resource-tight — one command: env + warm server + single worker:
@@ -1019,7 +1045,7 @@ E2E_WORKERS=4 ./scripts/test-e2e.sh
 # The DEFAULT is a PRODUCTION build (`next build` + `next start`). Against the dev server instead:
 E2E_PROD=0 ./scripts/test-e2e.sh e2e/crud/<one>.spec.ts   # spec iteration while editing app code (HMR beats a rebuild)
 ```
-On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
+**Which Chromium runs** is decided by `scripts/test-e2e.sh`, in this order: an explicit `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`; else `/run/current-system/sw/bin/chromium` if it is executable (NixOS) (`:80-87`); else the build pinned by the installed `playwright-core`. If that pinned build is not in the Playwright cache, the wrapper falls back to the newest cached `chromium-*` build and prints a WARNING naming both builds; with no cached build at all it exits 1 (`:119-148`). On a host where Playwright cannot install its pinned build, the fallback is the normal path, and the fix for the skew is upgrading `@playwright/test`, not re-running `playwright install`. Read the startup banner (`chromium=`) before blaming a browser-shaped failure on the app.
 
 **Full reference: `docs/e2e-run-modes.md`** — every difference with the file:line it came from, what each mode has actually found, and the traps (`.next-e2e`, the standalone warning, mock data being dev-only). The summary below is the part worth carrying in every session.
 
@@ -1049,7 +1075,8 @@ exist there.
 
 The build is the recurring cost. `e2e-prod-build.sh` builds only when `BUILD_ID` is missing or
 a source file is newer (`E2E_PROD_BUILD=always|never` overrides), and it builds through
-`build-safe.sh`, so the 7 G cgroup still applies. The output directory is **not** `.next`:
+`build-safe.sh`, so its memory cgroup still applies (`BUILD_MEM_MAX`, default at
+`scripts/build-safe.sh:29`). The output directory is **not** `.next`:
 Turbopack's dev cache and a production build write the same manifest filenames, so sharing one
 directory makes every mode switch silently invalidate the other's work.
 
@@ -1074,11 +1101,11 @@ signins — the smoke tests that exercise the auth flow itself. It verifies the 
 **Dev server:** Subagents must not stop it; the orchestrator and the wrappers may (see § Dev server). `test-e2e.sh` restarts it itself on every run, on this worktree's own port. `reuseExistingServer: true` ensures Playwright reuses a running server.
 
 **E2E conventions:**
-- CRUD tests must be **self-contained** (create → assert → cleanup in one test body)
+- CRUD tests must be **self-contained** (create → assert → cleanup, guaranteed per test): cleanup runs inline, in `test.afterEach`, or — for the Job specs — in a `testWithCleanup` fixture (ADR-045/046). Never split ORDERED cleanup between an `afterEach` and a fixture: hooks always run before fixture teardown, so move the whole body at once (`e2e/CONVENTIONS.md` § "Converting `afterEach` to a Playwright fixture")
 - Use `uniqueId()` from `e2e/helpers/` for test data names (prevents parallel collision)
 - **No `test.describe.serial`** — all tests must be independently runnable
 - One spec file per domain aggregate (DDD: single source of truth)
-- System Chromium at `/run/current-system/sw/bin/chromium`
+- Chromium is chosen by the wrapper, not by the spec (see "Which Chromium runs" above)
 
 ## Code Conventions
 
@@ -1101,7 +1128,7 @@ count alone — check it against tsc or a run first:**
 1. **Ambient `.d.ts` declarations** — `src/types/iso3166-2-db.d.ts` has no importer by path; it is
    picked up through `tsconfig.include` and consumed by `geo-codes/subdivisions.ts:17`. Deleting it
    fails the typecheck.
-2. **Dynamic template imports** — `src/i18n/lingui.ts:8` resolves `./messages/${locale}.ts` at
+2. **Dynamic template imports** — `src/i18n/lingui.ts:7` resolves `./messages/${locale}.ts` at
    runtime, which no static analyser follows, so all four catalogs look orphaned.
    **The whole LinguiJS block is staged, not dead, and must not be deleted.** knip reports six
    files and two dependencies for it — `src/i18n/lingui.ts`, `src/i18n/messages/{de,en,es,fr}.ts`,
@@ -1157,6 +1184,7 @@ start at all.
 - **After architecture changes:** Run the `/architecture-decision-records` skill to document the decision in `docs/adr/`, unless an ADR was already written by a team agent in the same session OR it is outdated.
 - **After UI changes:** Must have consulted the ui-design agents before implementation (design-review, create-component, accessibility-audit) and for mobile responsiveness `/responsive-design`. Wait for findings, if needed share with other agents,  then implement.
 - **After feature implementation:** Check `docs/documentation-agents.md` for which documentation agent/skill to run. Docs grow WITH features — update README, write User Guide sections, generate API docs as features ship.
+- **When delegating to sub-agents:** a sub-agent's report reaches the lead only truncated — idle notifications cut it at about 4,000 characters, and under Claude Code 2.1.246 they carried nothing (`docs/BUGS.md` § "Session 2026-09-29 — sweep…"). So every brief requires a report FILE, written as the work goes, and the lead reads that file, never the notification. Count "done" against the list of findings, not against what you saw.
 
 ## Deferred Sprint Work — Handoff to Future Sessions
 

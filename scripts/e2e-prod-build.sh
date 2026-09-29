@@ -111,7 +111,7 @@ fi
 echo "[e2e-prod-build] building into ${NEXT_DIST_DIR}/ — ${REASON}"
 
 # build-safe.sh, never a bare `bun run build`: the wrapper puts the build in a
-# 7 G memory cgroup so an over-large build is OOM-killed inside its own scope
+# memory cgroup (BUILD_MEM_MAX, default in build-safe.sh) so an over-large build is OOM-killed inside its own scope
 # instead of taking the host with it (CLAUDE.md, resource discipline). It also
 # runs the load guard and stops this worktree's server first, which a build must
 # do anyway — `next build` and a live `next start` would otherwise be writing and

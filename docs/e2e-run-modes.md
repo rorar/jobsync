@@ -91,7 +91,8 @@ hides defects that exist only in what IS shipped.
 `scripts/e2e-prod-build.sh` builds only when `.next-e2e/BUILD_ID` is missing or a source file is
 newer than it (`src`, `public`, `prisma/schema.prisma`, `next.config.mjs`, `package.json`,
 `tsconfig.json`). `E2E_PROD_BUILD=always|never` overrides. It builds through `build-safe.sh`, so
-the 7 G cgroup applies, and it verifies the artefact rather than trusting the exit status — a
+that wrapper's memory cgroup applies (`BUILD_MEM_MAX`, default at `scripts/build-safe.sh:29`), and
+it verifies the artefact rather than trusting the exit status — a
 wrapper that exits 0 without producing a `BUILD_ID` has not built anything.
 
 Measured: 1 min 54 s wall, of which 49 s compilation, 1.3 GB output.
