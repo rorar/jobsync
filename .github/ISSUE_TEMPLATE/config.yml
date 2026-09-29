@@ -1,0 +1,20 @@
+# Issue template chooser. GitHub reads this file, and the forms next to it,
+# from the default branch (`main`) only.
+#
+# Blank issues are off: every issue is a Defect, a Work package or a Maintainer
+# decision, each tied to a row in docs/BUGS.md or the open-items register.
+# Users with write access still see a "Blank issue" option (GitHub behaviour).
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/rorar/jobsync/blob/main/SECURITY.md
+    about: Do not open a public issue for an unfixed, exploitable vulnerability. SECURITY.md says how to report it.
+  - name: Defect tracker (docs/BUGS.md)
+    url: https://github.com/rorar/jobsync/blob/main/docs/BUGS.md
+    about: Every defect has a row here before it gets an issue. Search for an existing ID first.
+  - name: Open-items register (V, D and M items)
+    url: https://github.com/rorar/jobsync/blob/main/docs/open-items-2026-09-28.md
+    about: Verification gates, maintainer decisions and mechanical work. Search for an existing item first.
+  - name: Upstream project (Gsync/jobsync)
+    url: https://github.com/Gsync/jobsync/issues
+    about: This repository is a fork. A problem that also affects the original project belongs there as well.

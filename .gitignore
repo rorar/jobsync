@@ -79,6 +79,11 @@ data/files/resumes
 data/logos
 .github/*
 !.github/workflows
+# Issue forms, PR template and label definitions (2026-09-29). Upstream ignored
+# .github wholesale and re-included only workflows (6fd8247f); these are ours.
+!.github/ISSUE_TEMPLATE/
+!.github/pull_request_template.md
+!.github/labels.yml
 .claude/settings.local.json
 # headroom wrap writes per-run markers next to the settings it borrows
 .claude/.headroom_wrap_*

@@ -1,0 +1,135 @@
+name: Maintainer decision
+description: A question only the maintainer can settle, tracked as a D item in the open-items register. Work that depends on it waits.
+title: "[D<n>] <the question, short>"
+labels: ["type:decision", "needs-decision", "owner:maintainer"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **The register row comes first.** Maintainer decisions are `D#` rows in the open-items register, currently `docs/open-items-2026-09-28.md` § 2. This issue is where the decision is discussed and recorded; the row stays the index. Link to evidence; do not copy it.
+
+        **Nobody implements a contested option before the decision.** Work that depends on this issue carries `status:blocked` and names it under *Depends on*.
+
+        An agent may prepare this issue — options, evidence, a recommendation. The decision itself is the maintainer's.
+
+  - type: input
+    id: register-id
+    attributes:
+      label: Register ID
+      description: "The `D#` row in the open-items register."
+      placeholder: "D8"
+    validations:
+      required: true
+
+  - type: input
+    id: register-link
+    attributes:
+      label: Link to the register row
+      description: "A permalink at a PUSHED commit. A commit that exists only locally returns 404."
+      placeholder: "https://github.com/rorar/jobsync/blob/<pushed-sha>/docs/open-items-2026-09-28.md#L<line>"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: One sentence that is answered by choosing one of the options below.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: "Links to the evidence: docs/BUGS.md IDs, register rows, specs, ADRs, issues, `path:line@<sha>`. Links, not copies."
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and trade-offs
+      description: "At least two real options, plus what waiting costs. Fill every line of each option; write \"unknown\" rather than leave a line out."
+      value: |
+        ### Option A — <name>
+        - What it means:
+        - Flexibility, and how long it stays right:
+        - GDPR impact (lawful basis, retention, erasure, Art. 15 export, data leaving the host):
+        - Effort, and how hard it is to reverse:
+        - Evidence:
+
+        ### Option B — <name>
+        - What it means:
+        - Flexibility, and how long it stays right:
+        - GDPR impact (lawful basis, retention, erasure, Art. 15 export, data leaving the host):
+        - Effort, and how hard it is to reverse:
+        - Evidence:
+
+        ### Not deciding now
+        - What waiting costs, and what stays blocked:
+    validations:
+      required: true
+
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Decision criteria
+      description: "The maintainer's standing criterion is pre-filled. Keep it; add criteria specific to this question below it."
+      value: |
+        Standing criterion (maintainer): "most flexible and long-lasting BUT completely GDPR compliant".
+
+        Read as: complete GDPR compliance is a precondition, not one weight among others. An option that is not completely compliant is out, however flexible it is. Among the compliant options, prefer the one that stays right longest and keeps the most later choices open.
+
+        Specific to this question:
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation (not binding)
+      description: "If an agent or contributor prepared this issue: the option it recommends, the criterion that decides it, and the evidence. Optional."
+
+  - type: textarea
+    id: unblocks
+    attributes:
+      label: What this unblocks
+      description: "Issues, docs/BUGS.md IDs and register items that wait on this decision. Each of those issues gets `status:blocked` and links back here."
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: input
+    id: trigger
+    attributes:
+      label: Deadline or trigger
+      description: "A date, or the event that forces the decision."
+      placeholder: "before fix/e2e-elysium merges to main"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: decider
+    attributes:
+      label: Who decides
+      options:
+        - "Maintainer"
+        - "Maintainer, after external advice (legal or data protection)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: closing-steps
+    attributes:
+      label: When decided
+      description: "Kept in the issue as a task list. Leave it unticked when filing."
+      value: |
+        - [ ] The decision is a comment on this issue: chosen option, the reason, the date.
+        - [ ] The register row is updated with the decision and a link to that comment, and moved to the settled section.
+        - [ ] An ADR in `docs/adr/` records it, if the decision is architectural.
+        - [ ] Spec changes that follow from it are made through `allium:tend`.
+        - [ ] The follow-up work is filed as *Work package* issues.
+        - [ ] `needs-decision` is removed here, and `status:blocked` from every issue under "What this unblocks".
+    validations:
+      required: true

@@ -1,0 +1,146 @@
+name: Work package
+description: An agent-ready package that bundles docs/BUGS.md IDs and register items, with where, how, who and when it is done.
+title: "[WP] <outcome in a few words>"
+labels: ["type:work-package"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Written for the implementer.** Assume it is an AI agent that reads only this issue and the files it links. Each field answers one question: **what** (Summary, Tracker IDs), **where** (Where), **how** (Approach, Constraints, Gates), **who** (Owner) and **when it is done** (Acceptance criteria).
+
+        **Evidence lives in the trackers, not here.** Defects are rows in `docs/BUGS.md` (IDs such as `W4-B2`, `GDPR-B1`, `E2E-B50`). Verification gates, maintainer decisions and mechanical items are rows in the open-items register, currently `docs/open-items-2026-09-28.md` (IDs `V#`, `D#`, `M#`). Link to the rows; copies drift. An item without a row gets a row first.
+
+        **Security.** If the package touches an unfixed, exploitable vulnerability, stop and follow [SECURITY.md](https://github.com/rorar/jobsync/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: security
+    attributes:
+      label: Security sensitivity
+      description: "If the package includes an unfixed, exploitable vulnerability, do not file it here: use SECURITY.md. A public issue may name only the class of a security defect, never how to trigger it."
+      options:
+        - "Not security-relevant"
+        - "Security-relevant; this issue names the class only, detail is in docs/BUGS.md or a private advisory"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What changes and why, in two to five sentences. Say what the package does not decide.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tracker-ids
+    attributes:
+      label: Tracker IDs
+      description: "One per line, each with a link to its row at a pushed commit (a local-only sha returns 404). This is the scope: the package is done when every ID here is closed or explicitly handed on."
+      value: |
+        - `<ID>` — <link to the row> — <one-line gist>
+    validations:
+      required: true
+
+  - type: textarea
+    id: where
+    attributes:
+      label: Where
+      description: "Files, symbols, specs and tests to touch, as `path:line@<sha>` or `path` plus symbol name. When data changes, name the aggregate's action file (CLAUDE.md § Domain-Driven Design (DDD) Principles, Aggregate Boundaries)."
+      value: |
+        - `path:line@<sha>` — `symbol` — what changes there
+    validations:
+      required: true
+
+  - type: textarea
+    id: approach
+    attributes:
+      label: Approach
+      description: "Suggested order of steps and known traps. Optional. The implementer may take another route if it meets the acceptance criteria and the constraints."
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: "Observable outcomes, as a task list. Leave it unticked when filing; the implementer ticks each line when it is true. The first line is not optional."
+      value: |
+        - [ ] A test that fails before the fix and passes after it, for each defect in Tracker IDs: <test file and test name per ID>
+        - [ ] <observable outcome>
+        - [ ] <observable outcome>
+        - [ ] Nothing listed under "Out of scope" was changed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: gates
+    attributes:
+      label: Gates to run
+      description: "Delete the lines that do not apply to this package; tick nothing when filing. The orchestrator runs the gates one after another and ticks a line only after reading that gate's own final line. The pull request records each line."
+      value: |
+        - [ ] `bash scripts/typecheck-safe.sh` → `[typecheck-safe] EXIT=0`
+        - [ ] `bash scripts/test.sh` → `[test.sh] EXIT=0`
+        - [ ] `bash scripts/build-safe.sh` → `[build-safe] EXIT=0`
+        - [ ] `./scripts/test-e2e.sh <specs, or nothing for the full suite>` → `[test-e2e] EXIT=0`
+        - [ ] Specs: edits made through `allium:tend`; `bash scripts/check-spec-refs.sh` and `node scripts/check-spec-refs.mjs` exit 0 (`check-spec-refs.sh` exit 2 means it could not run)
+        - [ ] i18n: every new or changed UI string in en, de, fr and es; the dictionary suites (`__tests__/dictionaries.spec.ts`, `__tests__/dictionary-completeness.spec.ts`) pass inside `bash scripts/test.sh`; `e2e/` searched for selectors on changed strings
+        - [ ] `bash scripts/check-notification-writers.sh` exits 0 (only if notification code changed)
+        - [ ] `docs/BUGS.md`: each fixed row marked with its commit; the header totals reconcile with the block table
+        - [ ] Open-items register: each closed `V#` / `D#` / `M#` row updated
+        - [ ] ADR in `docs/adr/` (only if the architecture changed)
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: "Project rules that bind every package. Keep them; add package-specific ones at the end. The source of each rule is given in brackets."
+      value: |
+        1. Heavy tools only through their wrappers: `bash scripts/typecheck-safe.sh`, `bash scripts/test.sh`, `bash scripts/build-safe.sh`, `./scripts/test-e2e.sh`. Never bare `npx tsc`, `npx jest`, `npx playwright`, `bun test` or `bun run build`. [CLAUDE.md § Using these scripts (resource discipline)]
+        2. Judge each run by its own `[<name>] EXIT=<rc>` line, never by `$?` after a pipe (`cmd | tail; echo $?` reports `tail`). Exit 75 = busy, nothing ran (the CPU guard, or another server holding this worktree's port lock): not a failure, rerun later. No `EXIT=` line = the run failed before it started; the reason is the last thing printed. Exit 124 = timeout, which proves nothing either way. [same section]
+        3. Sub-agents do not run tests, builds, type checks, E2E or dev servers. The orchestrator runs the gates, one after another. [maintainer rule; CLAUDE.md § Using these scripts is looser on one point: it lets a sub-agent start a dev server, never stop one]
+        4. Edit `specs/*.allium` only through `allium:tend`. A green `allium check` proves the file parses, not that its references exist. [maintainer rule; second sentence: CLAUDE.md § Specification Pattern (Allium)]
+        5. Every user-visible string in all four locales: en, de, fr, es. Import only from `@/i18n` or `@/i18n/server`. [CLAUDE.md § i18n — Internationalization]
+        6. UI changes go through the ui-design agents (design-review, create-component, accessibility-audit) and `/responsive-design` before implementation. [CLAUDE.md § Post-Work Checklist]
+        7. A bug fix starts with a regression test that fails on the unfixed code. [CLAUDE.md § Testing Requirements, Rules]
+        8. Update `docs/BUGS.md` for every fixed row, and keep the header totals in step with the block table, which is the derivation. [CLAUDE.md § Post-Work Checklist; docs/BUGS.md header]
+        9. After an architecture change, add an ADR in `docs/adr/`. [CLAUDE.md § Post-Work Checklist]
+        10. Every Prisma read and write includes `userId` in its where clause. [CLAUDE.md § Security Rules, IDOR Ownership Enforcement (ADR-015)]
+        11. Conventional commits (`feat(scope):`, `fix(scope):`, `refactor(scope):`), grouped logically. Agent commits end with a `Co-Authored-By:` trailer. Push only when the maintainer asks. [CLAUDE.md § Code Conventions and § Git Workflow; trailer: maintainer rule]
+        12. Cite code as `path:line@<sha>` at a pushed commit, and verify every claim against the file at that sha instead of copying it from another document. [maintainer rule]
+        13. Incidental findings: fix a defect found on the way if it lies in the files this package touches, and report each such fix separately in the pull request with `path:line` and evidence. Outside those files, add a row to `docs/BUGS.md` or the register instead. A choice between two defensible designs, or a change to what a test asserts, is the maintainer's call. [maintainer rule]
+
+        Package-specific:
+        -
+    validations:
+      required: true
+
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner
+      description: "Triage turns this into `owner:agent` or `owner:maintainer`; a decision-first package also gets `needs-decision` and `status:blocked`."
+      options:
+        - "Agent — can start now"
+        - "Maintainer — needs credentials, repository settings, a push or a judgement call"
+        - "Needs a decision first — the decision issue is named under Depends on"
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Depends on / blocks
+      description: Issues, register decisions (`D#`) and other packages. Write "none" if there are none.
+      value: |
+        - Depends on:
+        - Blocks:
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: "What the implementer must not change or decide in this package, even if it looks wrong: files owned by other work, open decisions, behaviour a test pins on purpose. Incidental findings follow Constraints rule 13."
+    validations:
+      required: true
