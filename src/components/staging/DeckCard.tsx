@@ -115,9 +115,9 @@ function DeckCardInner({
 
       {/* Title + Employer */}
       <div className="px-5 pt-3">
-        <h3 className="text-lg font-semibold leading-tight line-clamp-2 text-card-foreground">
+        <h2 className="text-lg font-semibold leading-tight line-clamp-2 text-card-foreground">
           {vacancy.title}
-        </h3>
+        </h2>
         {vacancy.employerName && (
           <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
             <CompanyLogo size="sm" companyName={vacancy.employerName} />

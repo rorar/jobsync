@@ -185,7 +185,7 @@ When any channel is degraded:
 Notifications [amber dot] Email delivery failing | 3 missed (SMTP error)
 ```
 
-The widget links to the Notifications settings section. It requires only the data that already exists (failureCount, configured status) plus a daily delivery count which could be added to the `Notification` model as a simple count query. This widget follows the same pattern as the `NumberCard` component already in the dashboard.
+The widget links to the Notifications settings section. It requires only the data that already exists (failureCount, configured status) plus a daily delivery count which could be added to the `Notification` model as a simple count query. This widget follows the same pattern as the `NumberCardToggle` component already in the dashboard.
 
 **Priority: P2** — High visibility for a low-cost addition. The data already exists in the schema.
 
@@ -294,7 +294,7 @@ These are all nullable additions and introduce no breaking changes to existing q
 The dashboard already demonstrates good data storytelling patterns:
 
 - `StatusFunnelWidget` shows a pipeline with quantified drop-offs — the right mental model for channel delivery rates
-- The `NumberCard` component with percentage change indicators is the right building block for per-channel delivery metrics
+- The `NumberCardToggle` component with percentage change indicators is the right building block for per-channel delivery metrics
 - The error-log sidebar badge is the right pattern for surfacing channel health without adding visual noise
 
 The notification system should adopt these patterns rather than invent new ones. The existing visual language — badges, colored status dots, compact single-row cards — is sufficient for the P0/P1 recommendations without introducing new UI dependencies.

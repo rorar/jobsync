@@ -22,12 +22,12 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ### Option B: Helper scripts (for read-only Nix store / VMs)
 
 ```bash
-./scripts/dev.sh      # Start dev server (port 3737)
-./scripts/restart.sh  # Stop, flush .next cache, then restart dev server
+./scripts/dev.sh      # Start dev server (port 3737 in the main checkout; derived per worktree)
+./scripts/restart.sh  # Stop, flush .next cache, then restart dev server — kills EVERY worktree's server, see below
 ./scripts/build.sh    # Production build
 ./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
 ./scripts/test.sh     # Run Jest tests (uses system Node.js)
-./scripts/test-e2e.sh # Run Playwright E2E (env + warm server + single worker; low-RAM hosts)
+./scripts/test-e2e.sh # Run Playwright E2E (env + FRESH server per run + single worker)
 ./scripts/typecheck-safe.sh  # tsc --noEmit in a systemd memory cgroup (low-RAM hosts; NEVER run bare `npx tsc`)
 ./scripts/stop.sh     # Stop dev server
 ./scripts/clean.sh    # Flush .next/ build cache (no restart; --all also clears node_modules/.cache)
@@ -35,26 +35,80 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ./scripts/prisma-migrate.sh   # Run migrations
 ```
 
-All scripts source `scripts/env.sh` which auto-downloads and patches Prisma engines for NixOS.
+**`restart.sh` is not worktree-scoped yet.** It still runs machine-wide `pkill -f "next dev"` and
+`pkill -9 -f "next-server"` (`scripts/restart.sh:10,13,14`), so it takes a sibling worktree's
+server with it (`docs/BUGS.md` `INF-B2`, open). Until it is fixed, run `stop.sh` (scoped to this
+worktree by `/proc/<pid>/cwd`), then `clean.sh`, then `dev.sh`.
 
-### Using these scripts (resource discipline — 8 GB no-swap VM)
+All scripts source `scripts/env.sh`, which auto-downloads and patches Prisma engines **for
+NixOS hosts**. On a glibc host (Ubuntu et al.) `bunx prisma generate` works unpatched and the
+override is unnecessary; the script is a no-op cost, not a requirement.
+
+### Using these scripts (resource discipline)
+
+**The host is not fixed.** This project has run on an 8 GB no-swap NixOS VM, a 16 GB / 4 GB-swap
+one, and a 31 GB no-swap Ubuntu container — the numbers written into this file were wrong after
+two of those three moves. So no host figures are stated here. Read them when you need them:
+
+    nproc && free -h && df -h / /tmp && swapon --show
+
+What does **not** change with the host, and is the actual rule:
 
 **Never invoke the underlying tool directly when a wrapper exists.** The wrappers are not
 convenience aliases; each exists because the bare command has taken this host down.
 
 | Instead of | Run | Why |
 |---|---|---|
-| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. **Empty output means clean** — it prints only its own banner on success. |
+| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (8G) + `nice -n 19` + `ionice -c3` + 600 s timeout. It prints its banner, the scope line and a final `EXIT=0`; anything else is a real error. |
 | `npx jest` / `bun test` | `bash scripts/test.sh` | Defaults to `--maxWorkers=1`; `jest.config.ts` enforces it again for callers that bypass the script. Also translates the common `--workers=N` typo, which Jest silently ignores. Coverage is opt-in via `--coverage`. |
-| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it starts a **correctly configured** dev server if none is running (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
-| `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
+| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it **replaces** any server on :3737 with a fresh, correctly configured one (a production server from `.next-e2e/` by default; `E2E_PROD=0` gives the dev server with `env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). It also aborts a run that is measuring the machine (exit 124, see § E2E Test Infrastructure). |
+| `bun run build` | `bash scripts/build-safe.sh` | 12G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
 
-**For the full Jest suite** (~6 min, 300+ suites) add outer limits, since `test.sh` itself sets
-neither priority nor a heap cap:
+**For the full Jest suite** (~6 min, 300+ suites) just run the wrapper — it now applies its own
+`nice`/`ionice`, heap cap, memory cgroup and timeout, so nothing needs prepending:
 
 ```bash
-nice -n 19 ionice -c3 env NODE_OPTIONS=--max-old-space-size=3072 bash scripts/test.sh
+bash scripts/test.sh
 ```
+
+Tunables if you need them: `JEST_MEM_MAX` (8G), `JEST_NODE_HEAP` (6144), `JEST_TIMEOUT` (1800).
+
+**All four heavy wrappers refuse to start when this container is already busy.**
+`scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** three times for a second each and takes the MAX (three seconds of wall clock before every wrapper; the max biases toward aborting, deliberately, because resident agents are bursty). It aborts with exit
+**75** when more than **60%** of our CPU allowance is already in use. The sample is taken BEFORE
+the heavy work starts, so it measures what is already running — resident subagents, a forgotten
+dev server. The ratio is the WHOLE container's usage (`cpu.stat` at the cgroup-namespace root, not
+this shell's own cgroup) over the root `cpu.max` quota; only when no quota is set does the
+denominator fall back to the CPU count in this shell's own affinity mask (`Cpus_allowed_list`) —
+`scripts/lib-runtime-guard.sh:52-80`. Under a quota, usage cannot exceed the allowance, so
+thresholds must stay well under 1.0: the first version's 1.2× abort could never fire. Under the
+fallback that bound is not guaranteed, because processes in one container need not share one
+affinity mask. The guard exists because a Playwright run was
+once started while six subagents were still resident: the suite returned 11 failures with durations
+like 14.9 minutes for a single test — numbers that measured contention, not the tree.
+
+**It deliberately does not use `/proc/loadavg`.** This project runs in an **LXC container**, where
+loadavg is not namespaced: it reports the whole HOST's load while `nproc` reports our affinity, so
+dividing one by the other compares unrelated numbers. The first version did exactly that and
+blocked a legitimate run at "5.37 over 3 cores" while this cgroup was using **0.04** cores and the
+host was at ~20%.
+
+Known limitation, worth remembering: this cannot see contention from OTHER containers on the same
+host. If a run is inexplicably slow while the guard stays quiet, look outside the container.
+Override with `ALLOW_BUSY_HOST=1`; `GUARD_CPU_WARN` (0.35) / `GUARD_CPU_ABORT` (0.60) /
+`GUARD_SAMPLE_SECS` (1) tune it.
+
+**Every wrapper prints `[<name>] EXIT=<rc>` as its last line** once it reaches the tool, and
+explains exit **124** as a timeout rather than a failure of the thing under test. The early exits
+do NOT print it — guard abort (**75**), no systemd scope (**86**), bad arguments (**2**), dev
+server not ready (**1**) — so a run that ends without an `EXIT=` line failed before it started,
+and the reason is the last thing printed. Read that line, not the shell's — `cmd; echo
+$?` and a trailing `| tail` both report the WRONG command's status.
+
+**A `PreToolUse` hook enforces the table above** (`scripts/guard-heavy-commands.sh`, wired in
+`.claude/settings.json`). Bare `npx tsc|jest|playwright`, `bun test`, `bun run build|dev` and
+`next build|dev` are refused with the wrapper named. It judges the command position only, so
+`grep -n "npx tsc" …` and heredoc bodies that merely mention a tool keep working.
 
 **Long runs:** start them with `run_in_background` and wait on the output file. A foreground full
 suite or E2E run will hit the tool timeout and get orphaned.
@@ -63,9 +117,39 @@ suite or E2E run will hit the tool timeout and get orphaned.
 it will happily print `0` above a list of errors. Use `${PIPESTATUS[0]}`, `set -o pipefail`, or
 judge by the output itself.
 
-**Dev server:** agents may **start** one, never **stop** one (see `e2e/CONVENTIONS.md`). Beware the
-reuse trap: `test-e2e.sh` reuses anything answering on :3737, including a server started by
-`dev.sh`, which lacks the E2E env — the failure then surfaces far from its cause as a hanging login.
+**Dev server — one port per worktree, a lock per port, and a kill that checks whose.**
+`scripts/lib-devserver.sh` (sourced by `dev.sh`, `dev-e2e.sh`, `test-e2e.sh`, `stop.sh`,
+`build-safe.sh`, `clean.sh`, `dev-and-check.sh`) resolves all three:
+
+| | |
+|---|---|
+| `devserver_port` | Main checkout keeps **3737**; a linked worktree gets a slot from `cksum(root) % 200`, with collisions resolved by walking `git worktree list` in path order so the earlier worktree keeps the contested slot. A pure function of the path AND the worktree set — a counter or a random port would leave two tools in the same worktree looking in different places. Adding a worktree can move a later one's port; the wrapper prints the port it bound. `JOBSYNC_PORT` overrides. `package.json`'s `dev` script honours `PORT`; `playwright.config.ts` reads `E2E_BASE_URL`. |
+| `devserver_lock_acquire` | `flock -n` on fd 9 over `/tmp/jobsync-dev-<port>.lock`, taken BEFORE the server starts. The descriptor survives `exec`, so the lock belongs to the **server process** and frees when it dies — killed or not, with no cleanup path to forget. A second `dev-e2e.sh` exits **75** naming the holder's pid, cwd and start time. |
+| `devserver_stop` | Refuses unless `/proc/<pid>/cwd` matches this worktree, then walks **up to the supervisor**: `next dev` respawns `next-server` within seconds, so killing the listener alone looks like it worked and is not. `stop.sh` is scoped the same way; `STOP_ALL_WORKTREES=1` restores the machine-wide sweep. |
+
+**Do not replace the lock with a message handshake between agents.** "May I kill this?" answered
+over a channel is not atomic: between the answer and the kill, the answer can stop being true.
+Exclusive access to a resource is a lock problem.
+
+**The rule this replaces was about CONCURRENT workers, not about anyone touching the server.**
+**SUBAGENTS** may start one and must not stop one: the rule exists because parallel subagents
+killed each other's server mid-run, and a worker cannot know whether the process on the port
+belongs to a sibling that is three minutes into a suite. The **orchestrator** (main thread) and the
+wrappers may stop it deliberately, through `devserver_stop`, because they are the only parties that
+know nothing else is running.
+
+Read as a blanket prohibition it produces the opposite of its purpose: on 2026-09-02 it argued
+against killing an **orphaned** `bun run dev` tree (PPID 1, its systemd scope already dead) holding
+4.3 GB and port 3737, which no run owned and which nothing would have reclaimed.
+
+The wrappers used to run `pkill -f "next dev"`, which is path- and port-blind and took a sibling
+worktree's server with it. That is what `devserver_stop` replaced.
+
+Since `47369e15` `test-e2e.sh` **always starts a fresh server**, because module activation lives in
+the process behind a `dbSynced` latch and reuse silently carried state across runs. The old warning
+about a "reuse trap" is inverted: today's surprise is that YOUR dev server gets replaced.
+`E2E_REUSE_SERVER=1` opts out, and then the original trap returns — a server from `dev.sh` lacks
+the E2E env and the failure surfaces far from its cause as a hanging login.
 `scripts/dev-e2e.sh` runs in the FOREGROUND (`exec bun run dev`), so starting it from a shell that
 exits kills it; let `test-e2e.sh` start it instead.
 
@@ -191,7 +275,9 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 **Degradation Rules:** `degradation.ts` implements 3 escalation rules:
 - `handleAuthFailure()` — immediate pause on 401/403
 - `checkConsecutiveRunFailures()` — pause after 5 failed runs
-- `handleCircuitBreakerTrip()` — pause after 3 CB opens
+- `handleCircuitBreakerTrip()` — pause after 3 CB opens. **Not live:** the function exists
+  (`degradation.ts:339`) and is unit-tested, but nothing in `src/` calls it, so this rule never
+  fires (`docs/BUGS.md` `MOD-B2`, open; wiring it or removing the rule is an undecided choice).
 
 **Allium Spec:** `specs/module-lifecycle.allium` — authoritative specification for all lifecycle rules.
 
@@ -203,8 +289,8 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Current structure:** `src/lib/connector/data-enrichment/`:
 - **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
-- **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`
-- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules.
+- **(no registry.ts facade)** — deleted 2026-09-13: zero importers since creation (verified by `git log --all -S` over the full history — `getActiveEnrichmentModules()`/`getEnrichmentModuleByDimension()` each appeared only in their own defining commit), and `orchestrator.ts` bypassed it for `moduleRegistry` directly from the same commit that introduced the facade. `reference-data/registry.ts` was unused the same way and deleted alongside it; the `job-discovery/` and `ai-provider/` facades ARE consumed and were kept. `orchestrator.ts.execute()` now reads `manifest.supportedDimensions` directly (the field `getEnrichmentModuleByDimension()` used to be the only reader of) as a chain-entry guard — see below.
+- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules. Skips a chain entry whose manifest does not declare `supportedDimensions` for the dimension being executed (catches a `DEFAULT_CHAINS` entry naming the wrong module before it fails inside the module itself).
   - Cache keys include `userId` to prevent cross-user data leakage (ADR-029).
   - Per-module timeout uses `Promise.race` (not AbortSignal propagation). Chain-level timeout at `CHAIN_TIMEOUT_MS`.
   - Enrichment log writes (`logAttempt`) are fire-and-forget (void return, `.catch(() => {})`) — best-effort, non-blocking.
@@ -217,7 +303,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Current structure:** `src/lib/connector/reference-data/`:
 - **types.ts** — `ReferenceDataConnector` interface (health-only, no lookup yet)
-- **registry.ts** — Facade over `moduleRegistry` for `reference_data` modules
+- **(no registry.ts facade)** — deleted 2026-09-13, see the data-enrichment note above; had zero consumers since it was copied from that pattern five days later.
 - **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/`, `modules/geo-codes/`, `modules/public-holidays/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
 
 ### GeoCode Reference Module (ROADMAP 1.21)
@@ -524,9 +610,9 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 2. **Deaktivierung:** `deactivateModule()` pauses all active automations using it (`pauseReason: "module_deactivated"`)
 3. **Reaktivierung:** Paused automations are NOT auto-restarted — user must manually reactivate
 4. **Deaktivierte Module** are hidden from Automation Wizard module selector (`getActiveModules()`)
-5. **Automation Degradation:** Auth failure → immediate pause. 5 consecutive failed runs → pause. 3 CB opens → pause.
+5. **Automation Degradation:** Auth failure → immediate pause. 5 consecutive failed runs → pause. 3 CB opens → pause (not live: `handleCircuitBreakerTrip()` has no caller in `src/`, `MOD-B2`).
 
-**Cross-User Degradation:** `handleAuthFailure()` and `handleCircuitBreakerTrip()` intentionally affect ALL users' automations for the failing module. This is by design — module-level failures (invalid API key, circuit breaker) affect the shared external service, not individual users. Notifications are per-user.
+**Cross-User Degradation:** `handleAuthFailure()` and `handleCircuitBreakerTrip()` intentionally affect ALL users' automations for the failing module. This is by design — module-level failures (invalid API key, circuit breaker) affect the shared external service, not individual users. Notifications are per-user. (The circuit-breaker half describes the function's behaviour; nothing in `src/` calls it yet — `MOD-B2`.)
 
 ## EURES/ESCO Integration
 
@@ -711,24 +797,26 @@ Any new notification-creating code path MUST populate the structured fields.
 **Polymorphic Targeting (Twenty CRM Pattern):** `CrmTaskTarget` and `CrmNoteTarget` use nullable FK columns: exactly one of `targetPersonId`/`targetCompanyId`/`targetJobId` must be set. Enforced at app level by `validateExactlyOneTarget()`.
 
 **State Machines:**
-- Person: active → archived ↔ active, active → anonymized (terminal)
+- Person: active → archived ↔ active, active|archived → anonymized (terminal). Retention expiry takes the `archived → anonymized` edge (ADR-042).
 - Interview: scheduled → completed|cancelled|rescheduled, rescheduled → completed|cancelled
 - Task: pending → in_progress|done|cancelled, in_progress → done|cancelled
 
 **CRM Domain Events (9):** ContactCreated, ContactUpdated, ContactDeleted, InterviewScheduled, InterviewCompleted, ReminderTriggered, CrmTaskCreated, CrmTaskCompleted, CrmNoteCreated — all published via TypedEventBus.
 
-**CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — declarative event projections via `registerProjection<T>()`. 10 domain events projected into CrmActivityLog (immutable, append-only read model per TimelineProjection contract). **For new CRM timeline entries:** Add a `registerProjection()` call (5-8 lines) — no boilerplate. See `docs/event-consumer-analysis.md` for the full consumer inventory and 10 unconsumed event types awaiting future projections.
+**CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — declarative event projections via `registerProjection<T>()`. 13 domain events projected into CrmActivityLog (immutable, append-only read model per TimelineProjection contract). **For new CRM timeline entries:** Add a `registerProjection()` call (5-8 lines) — no boilerplate. See `docs/event-consumer-analysis.md` for the full consumer inventory and 10 unconsumed event types awaiting future projections.
 
-**GDPR on Person:** `dataSource` (manual|auto_created|imported), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. AnonymizePerson cascades to NoteTargets, TaskTargets, JobContacts, ActivityLog references, and clears `createdByName`/`updatedByName` (actor PII).
+**GDPR on Person:** `dataSource` (manual|auto_created|imported|quick_capture), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. The AnonymizePerson cascade lives in `src/lib/crm/anonymize-person.ts` (one `$transaction`, `server-only`, takes `userId` explicitly) — **read that file, do not trust a list here.** It reaches ~10 model groups, not the four this line used to name: CrmNote/CrmTask free-text scrub, NoteTargets, TaskTargets, JobContacts, CrmInterview (detach + scrub), ActivityLog references, CrmBlocklist handles, PersonConnection edges, Referral links, and the Person row itself (14 PII fields, incl. `createdByName`/`updatedByName`, plus `updatedBySource: "system"`). Adding a model that references Person means adding an arm here — nothing catches the omission.
+
+**Retention last-activity clock:** **Any new server action that creates a durable association with a Person (link, note, task, interview, connection, referral role) or refreshes the Person record MUST call `touchPersonRetention`/`touchPersonsRetention` from `@/lib/crm/retention-policy` after its write.** Nothing catches the omission — no lint, no test. Lifecycle transitions, removals, archiving and read-only views deliberately do NOT touch. Principle and the rejected sites: ADR-042 §3.
 
 **Person Fields (Kette B):** `headline` (free-form professional identity, replaces old `jobTitle`), `socialProfiles` (List of `{platform, url}`, replaces old `linkedinUrl`). Platforms: linkedin, xing, github, twitter, other. URLs validated server-side (https/http only, ADR-019 runtime membership check on platform enum).
 
-**CRM Temporal Rules (CRM Cron):** `src/lib/scheduler/crm-cron.ts` — separate cron job (every 15 min) for time-based CRM rules, independent from the automation scheduler (bounded context separation). Three rules:
-- `ExpireAutoCreatedPersons` — archives auto-created persons past `retentionExpiresAt`
+**CRM Temporal Rules (CRM Cron):** `src/lib/scheduler/crm-cron.ts` — separate cron job (every 15 min) for time-based CRM rules, independent from the automation scheduler (bounded context separation). Three CRM rules; the job's `Promise.allSettled` runs **six**, the other three belonging to GDPR account deletion and inside-track:
+- `ExpireAutoCreatedPersons` — **ERASES** auto-created persons past `retentionExpiresAt` via the AnonymizePerson cascade (NOT "archives" — that was the pre-`72f4138f` behaviour and it restricted nothing). Guards on `status: { not: "anonymized" }`, so manually-archived records cannot escape. Gated per user by `PrivacySettings.crmRetentionEnabled`; when off, the deadline is still written, advanced and displayed — only the unattended erasure stops. Period is a bounded `180|365|730|1095`, default 730. See ADR-042.
 - `InterviewReminder` — fires `ReminderTriggered` event for interviews within 24h
 - `TaskOverdueReminder` — fires `ReminderTriggered` event for overdue tasks
 
-Idempotency via activity log check (no duplicate reminders within 24h window). Started in `src/instrumentation.ts` alongside the automation scheduler.
+Reminder idempotency via activity log check (no duplicate reminders within 24h window); `ExpireAutoCreatedPersons` needs no guard row — `anonymized` is terminal and the query excludes it, so idempotency is structural. Started in `src/instrumentation.ts` alongside the automation scheduler.
 
 **CrmActivityLog Relations:** `targetCompanyId` and `targetJobId` have proper Prisma `@relation` FKs to Company and Job (migration `20260510193831`). Timeline queries include `targetCompany` and `targetJob` for rich display.
 
@@ -816,7 +904,7 @@ Server actions (`src/actions/*.ts`) serve as Repositories:
 
 ### Domain Events
 
-The TypedEventBus (`src/lib/events/event-bus.ts`) publishes 29 event types with typed payloads. All event consumers MUST validate payloads at runtime using `safeParsePayload()` from `src/lib/events/event-schemas.ts`:
+The TypedEventBus (`src/lib/events/event-bus.ts`) publishes 30 event types with typed payloads. All event consumers MUST validate payloads at runtime using `safeParsePayload()` from `src/lib/events/event-schemas.ts`:
 
 ```typescript
 import { XPayloadSchema, safeParsePayload } from "@/lib/events/event-schemas";
@@ -834,6 +922,28 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 - Specs are the single source of truth for domain rules
 - Use `allium:elicit` to build specs through conversation
 - Use `allium:distill` to extract specs from existing code
+
+**`allium check` proves syntax, NOT reference integrity — do not quote "0 errors" as evidence that
+an invariant holds.** Verified twice independently against `allium 3.2.3` on 2026-09-02: appending
+an invariant that reads a field which does not exist on a real entity, and one that iterates an
+entity type that was never declared, leaves `check` at **0 errors** with the warning and info
+counters completely unmoved, and `analyse` reports nothing naming either. The probes are recorded
+in `specs/e2e-test-infrastructure.allium` (Invariants section header) so nobody has to re-derive
+them. Two consequences:
+
+1. A green `allium check` in a handoff or commit message means the file parses. It does not mean
+   the file refers to anything that exists. Say which you mean.
+2. ADR-044's lesson needs qualifying. That five-month drift happened to a **prose** invariant, and
+   the obvious remedy is "write it formally" — but formal clauses here are unresolved too. Moving
+   a claim into braces narrows the gap and does not close it. What the formal form buys is a
+   named, greppable, precisely shaped claim a **human reviewer** can check.
+
+Repeating the experiment has its own trap: a probe written with invalid syntax (e.g. `all t in
+TestCases:` instead of `for t in TestCases:`) produces parse errors pointing *at the bogus field's
+line*, which reads like the resolver caught it. It did not — that is a false negative on the
+investigation, not on the tool.
+
+**Reference checkers (both in CI):** `bun run check:spec-refs` → `scripts/check-spec-refs.sh` (drives `tools/allium-refcheck/refcheck.py`; also in `scripts/hooks/pre-push`) and `bun run check:spec-qualified-refs` → `scripts/check-spec-refs.mjs` (qualified `alias/Symbol[.member]`); green means the names resolve, not that the claims are true.
 
 ## Testing Requirements
 
@@ -857,7 +967,7 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 - **New Connector Module** → unit tests for translator, integration test for search/getDetails
 - **i18n changes** → dictionary consistency validation
 - Run `bash scripts/test.sh` before every commit — all tests must pass (coverage collection is OFF by default for speed; pass `--coverage` to opt in)
-- Run `source scripts/env.sh && bun run build` — zero type errors
+- Run `bash scripts/build-safe.sh` — zero type errors
 
 ### Test Infrastructure
 
@@ -876,33 +986,126 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 **Directory structure:**
 - `e2e/smoke/` — Auth-free tests (signin, locale-switching). No storageState.
 - `e2e/crud/` — CRUD tests (job, task, activity, automation, question, profile). Uses storageState.
-- `e2e/helpers/index.ts` — Shared utilities (`login`, `expectToast`, `selectOrCreateComboboxOption`, `uniqueId`)
+- `e2e/helpers/index.ts` — Shared primitives (`uniqueId`, `ensureEnglishLocale`, `expectToast`, `rowsByText`, `safeWait`, `selectOrCreateComboboxOption`). There is no shared `login()`: `ec823595` deleted it because no spec imported it; the smoke specs and `global-setup.ts` (fallback path) each inline their own sign-in steps.
+- `e2e/helpers/*-fixture.ts`, `admin-reference-cleanup.ts`, `console-oracle.ts` — fixtures and teardown, see "Shared fixtures and teardown" below
 - `e2e/global-setup.ts` — One-time auth setup, saves session to `e2e/.auth/user.json`
 
 **Pipeline:** `globalSetup` → smoke project → crud project. Smoke tests verify auth works; CRUD tests skip login via storageState.
 
+**Every run gets its own database.** `scripts/e2e-db.sh` builds a template from migrations +
+`prisma/seed.ts` + `prisma/seed-e2e.ts`, keyed by their combined hash, and copies it to
+`prisma/.e2e-run.db` for each run; `DATABASE_URL` points there for both the dev server and the
+Playwright process. **`prisma/dev.db` is never opened by the suite** — verified across three full
+runs by comparing its sha256 before and after (it changed on every run before this landed).
+
+Consequences worth knowing before you debug something:
+
+- **A spec that needs a row must declare it in `prisma/seed-e2e.ts`.** Three tests already depended
+  on data nobody seeded and passed only because the developer's database happened to hold it
+  (E2E-B30 staging, E2E-B31 jobs). On a fresh database they fail immediately, which is the correct
+  behaviour of an incorrect setup.
+- **Creating is now the common path.** `selectOrCreateComboboxOption` used to find most values
+  already present; it now creates them. That cost ~11 s per value until `2d58d135` short-circuited
+  the dead waits — if a helper looks slow on an empty database, measure before assuming flake.
+- **The run database is kept after the run**, discarded at the next provision. A red run stays
+  inspectable, and no live server is left holding an unlinked inode. `E2E_KEEP_RUN_DB=0` deletes at
+  exit.
+- **`E2E_REUSE_SERVER=1` keeps using `prisma/dev.db`** and says so: a reused server holds the
+  `DATABASE_URL` it started with, so provisioning under it would put app and runner on different
+  databases — a failure that names neither.
+
+`e2e/cleanup-stale-data.ts` is **gone** (330 lines of foreign-key-ordered deletes, plus the
+`E2E_ALLOW_DESTRUCTIVE` gate and the `"E2E "` name-prefix convention it matched on). It existed to
+remove the previous run's residue from a database that should never have held it. ADR-043 records
+the decision it implemented; that decision is superseded, not wrong.
+
+**Shared fixtures and teardown** (ADR-045: the suite owns nothing that outlives the run; ADR-046:
+Job teardown moves to a fixture and to the Public API). One line each; which spec uses which, and
+the rules for adding one, are in `e2e/CONVENTIONS.md` § "Shared Fixtures":
+- `e2e/helpers/job-fixture.ts` — `deleteJobViaApi(page, title)`: exact-title lookup via `GET /api/v1/jobs?search=`, then `DELETE /api/v1/jobs/:id`; no DOM state involved.
+- `e2e/helpers/api-key-fixture.ts` — `E2E_JOB_TEARDOWN_API_KEY`, the one plaintext `prisma/seed-e2e.ts` and `job-fixture.ts` must agree on (a constant, not an env var; the header says why).
+- `e2e/helpers/cleanup-fixture.ts` — `testWithCleanup(body)`: returns a `test` whose every test runs `body` afterwards as ONE `auto: true` fixture. Used by the five Job specs only (ADR-046); ADR-045 deferred fixtures suite-wide.
+- `e2e/helpers/activity-fixture.ts` — `activityRows` / `deleteActivity` (asserting) / `purgeActivity` (teardown, never throws).
+- `e2e/helpers/resume-fixture.ts` — `ensureResumeExists` / `deleteResume`: the resume a Job or Automation form needs before it can submit.
+- `e2e/helpers/admin-reference-cleanup.ts` — `sweepReferenceGroups` and helpers: delete the reference rows (JobTitle, Company, Location, Tag, …) that combobox creates leave behind.
+- `e2e/helpers/console-oracle.ts` — the console-error classifier, outside the spec so Jest can test it; it must not import `@playwright/test`.
+
 **Running E2E tests:**
 ```bash
-# Resource-tight (8 GB NixOS VM) — one command: env + warm server + single worker:
+# Resource-tight — one command: env + warm server + single worker:
 ./scripts/test-e2e.sh                                    # full suite (smoke -> crud)
 ./scripts/test-e2e.sh e2e/crud/inside-track-crud.spec.ts # one spec
 
 # Manual (dev server already started via scripts/dev-e2e.sh):
-nice -n 10 npx playwright test --workers=1               # projects are "smoke" + "crud" (there is NO "chromium" project)
+./scripts/test-e2e.sh --workers=1                        # projects are "smoke" + "crud" (there is NO "chromium" project)
 
 # Local development — parallel workers:
-npx playwright test --workers=4
-```
-Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on NixOS (`scripts/test-e2e.sh` sets it for you).
+E2E_WORKERS=4 ./scripts/test-e2e.sh
 
-**Dev server:** Agents may start the dev server but must **NEVER stop it**. `reuseExistingServer: true` ensures Playwright reuses a running server.
+# The DEFAULT is a PRODUCTION build (`next build` + `next start`). Against the dev server instead:
+E2E_PROD=0 ./scripts/test-e2e.sh e2e/crud/<one>.spec.ts   # spec iteration while editing app code (HMR beats a rebuild)
+```
+**Which Chromium runs** is decided by `scripts/test-e2e.sh`, in this order: an explicit `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`; else `/run/current-system/sw/bin/chromium` if it is executable (NixOS) (`:80-87`); else the build pinned by the installed `playwright-core`. If that pinned build is not in the Playwright cache, the wrapper falls back to the newest cached `chromium-*` build and prints a WARNING naming both builds; with no cached build at all it exits 1 (`:119-148`). On a host where Playwright cannot install its pinned build, the fallback is the normal path, and the fix for the skew is upgrading `@playwright/test`, not re-running `playwright install`. Read the startup banner (`chromium=`) before blaming a browser-shaped failure on the app.
+
+**Full reference: `docs/e2e-run-modes.md`** — every difference with the file:line it came from, what each mode has actually found, and the traps (`.next-e2e`, the standalone warning, mock data being dev-only). The summary below is the part worth carrying in every session.
+
+**Production is the default since 2026-09-08; `E2E_PROD=0` opts into the dev server.** The
+decision rests on measurements in `docs/BUGS.md` (E2E-B35, E2E-B42, E2E-B43): seven full dev runs
+on 2026-09-07 each paid one watchdog restart, which landed inside `job-detail-panels.spec.ts:440`
+every time and failed it in four; the production suite ran 112/112 in 12.6 min against dev's
+19-27; and E2E-B43 was a real product defect that dev hid (0 of 3) and production exposed (6 of 6).
+What dev still buys is HMR while you edit app code and iterate one spec, and dev-only warnings
+(hydration, E2E-B11) — neither is what the suite exists for. **What changes under each mode, and
+why the difference exists.** `next dev` loads React's development
+Flight bundle, which installs an unguarded process-wide `async_hooks` hook and retains
+~2,749 objects per request with no runtime opt-out (`E2E-B42`, measured from a heap-snapshot
+pair). Next's watchdog then restarts the server mid-run and every request in flight dies with
+no response, no error and no audit line. Neither bundler nor heap cap reaches that — both
+runtime bundles carry the hook — but a production server does: it loads no development Flight
+bundle, and the watchdog itself is inside `if (isDev)` (`start-server.js:233`), so it does not
+exist there.
+
+| | `E2E_PROD=0` (dev) | production (default) |
+|---|---|---|
+| server | `scripts/dev-e2e.sh` → `next dev` | `scripts/prod-e2e.sh` → `next start` |
+| build | compile on request | `scripts/e2e-prod-build.sh` first, into **`.next-e2e/`** |
+| budgets | 3072 MB heap, 8 G cgroup | 3072 MB heap, 6 G cgroup |
+| auth bypass | `E2E_AUTH_RATE_LIMIT_BYPASS=1` | **none** — inert under `NODE_ENV=production` by design, and `prod-e2e.sh` unsets it |
+| log | `/tmp/jobsync-e2e-dev.log` | `/tmp/jobsync-e2e-prod.log` |
+
+The build is the recurring cost. `e2e-prod-build.sh` builds only when `BUILD_ID` is missing or
+a source file is newer (`E2E_PROD_BUILD=always|never` overrides), and it builds through
+`build-safe.sh`, so its memory cgroup still applies (`BUILD_MEM_MAX`, default at
+`scripts/build-safe.sh:29`). The output directory is **not** `.next`:
+Turbopack's dev cache and a production build write the same manifest filenames, so sharing one
+directory makes every mode switch silently invalidate the other's work.
+
+Both modes share one port and one lock, deliberately — one server per worktree whichever mode
+it is in, so a stale dev server can never answer a production run.
+
+**The wrapper aborts a run that is measuring the machine.** Since 2026-09-08 it watches its own
+runner and stops it with SIGINT (reports still written, exit **124**) when the wall clock passes
+`E2E_MAX_MINUTES` (90) or `E2E_ABORT_CONSECUTIVE_TIMEOUTS` (3) failed results in a row each ran
+into a test timeout. It exists because a full dev run on 2026-09-07 ran for 608 minutes on a
+starved host before anyone could refuse it. The banner says the one thing the wrapper cannot
+decide: three timeouts in a row is also what a broken shared helper looks like, and only a
+single-spec run tells the two apart. Host metrics are deliberately not the signal — cgroup
+throttling read zero through five clean runs and was not being watched during the bad one.
+
+**Auth under a production build fits without the bypass.** Signin is capped at 5 per 15 min per
+IP. `e2e/global-setup.ts` MINTS the NextAuth session cookie instead of signing in (JWT sessions:
+no `Session` model, `src/auth.config.ts:13` augments `@auth/core/jwt`), so a run spends **two**
+signins — the smoke tests that exercise the auth flow itself. It verifies the cookie by loading
+`/dashboard` and falls back to a real sign-in, loudly, if minting is not possible.
+
+**Dev server:** Subagents must not stop it; the orchestrator and the wrappers may (see § Dev server). `test-e2e.sh` restarts it itself on every run, on this worktree's own port. `reuseExistingServer: true` ensures Playwright reuses a running server.
 
 **E2E conventions:**
-- CRUD tests must be **self-contained** (create → assert → cleanup in one test body)
+- CRUD tests must be **self-contained** (create → assert → cleanup, guaranteed per test): cleanup runs inline, in `test.afterEach`, or — for the Job specs — in a `testWithCleanup` fixture (ADR-045/046). Never split ORDERED cleanup between an `afterEach` and a fixture: hooks always run before fixture teardown, so move the whole body at once (`e2e/CONVENTIONS.md` § "Converting `afterEach` to a Playwright fixture")
 - Use `uniqueId()` from `e2e/helpers/` for test data names (prevents parallel collision)
 - **No `test.describe.serial`** — all tests must be independently runnable
 - One spec file per domain aggregate (DDD: single source of truth)
-- System Chromium at `/run/current-system/sw/bin/chromium`
+- Chromium is chosen by the wrapper, not by the spec (see "Which Chromium runs" above)
 
 ## Code Conventions
 
@@ -918,6 +1121,35 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 **Knip** (`bun knip`) detects unused files, dependencies, exports, and types. Config: `knip.ts`. Use the `/knip` skill for guidance.
 
 **When to run:** On user request — typically after refactorings, dependency changes, or feature deletions. Not automatically on every commit.
+
+**Three shapes make knip wrong in THIS repo. Never delete a candidate matching one on importer
+count alone — check it against tsc or a run first:**
+
+1. **Ambient `.d.ts` declarations** — `src/types/iso3166-2-db.d.ts` has no importer by path; it is
+   picked up through `tsconfig.include` and consumed by `geo-codes/subdivisions.ts:17`. Deleting it
+   fails the typecheck.
+2. **Dynamic template imports** — `src/i18n/lingui.ts:7` resolves `./messages/${locale}.ts` at
+   runtime, which no static analyser follows, so all four catalogs look orphaned.
+   **The whole LinguiJS block is staged, not dead, and must not be deleted.** knip reports six
+   files and two dependencies for it — `src/i18n/lingui.ts`, `src/i18n/messages/{de,en,es,fr}.ts`,
+   `src/i18n/provider.tsx` (which exports `LinguiClientProvider`; the *live* provider is
+   `LocaleProvider` from `locale-context.tsx`, wired at `src/app/layout.tsx:8`), plus
+   `@lingui/core` and `@lingui/react`. All of it is groundwork for the migration the i18n adapter
+   pattern was built for (see § i18n — Architecture), which is tracked as a GitHub issue and is
+   going to happen. It is genuinely unreferenced today and will stay that way until the switch;
+   that is the plan working, not a leak. Confirmed by the maintainer 2026-09-09.
+3. **Framework-convention entries** — `src/instrumentation.ts` starts the scheduler, the CRM cron,
+   the event consumers and the FATAL env validation. Deleting it breaks nothing at build time and
+   silently disables all of it at runtime.
+
+**Trust diagnostic:** knip's Next plugin lists `instrumentation.ts` as an entry point. If it ever
+appears in an "Unused files" report, the plugin did not activate and the whole list is
+untrustworthy. Verified absent on 2026-09-02, so that run's list was credible.
+
+Also load-bearing despite zero importers: `src/models/actionResult.type-test.ts`, a build-enforced
+type regression guard (its own header explains why it is deliberately unimported), and the
+`ts-node` devDependency, without which `jest-config` cannot load `jest.config.ts` and jest does not
+start at all.
 
 **Commands:**
 - `bun knip` — **primary**: full scan (files, dependencies, exports, types)
@@ -952,6 +1184,7 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 - **After architecture changes:** Run the `/architecture-decision-records` skill to document the decision in `docs/adr/`, unless an ADR was already written by a team agent in the same session OR it is outdated.
 - **After UI changes:** Must have consulted the ui-design agents before implementation (design-review, create-component, accessibility-audit) and for mobile responsiveness `/responsive-design`. Wait for findings, if needed share with other agents,  then implement.
 - **After feature implementation:** Check `docs/documentation-agents.md` for which documentation agent/skill to run. Docs grow WITH features — update README, write User Guide sections, generate API docs as features ship.
+- **When delegating to sub-agents:** a sub-agent's report reaches the lead only truncated — idle notifications cut it at about 4,000 characters, and under Claude Code 2.1.246 they carried nothing (`docs/BUGS.md` § "Session 2026-09-29 — sweep…"). So every brief requires a report FILE, written as the work goes, and the lead reads that file, never the notification. Count "done" against the list of findings, not against what you saw.
 
 ## Deferred Sprint Work — Handoff to Future Sessions
 

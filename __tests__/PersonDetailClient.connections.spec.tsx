@@ -99,7 +99,10 @@ describe("PersonDetailClient — Add connection (Inside Track)", () => {
     render(<PersonDetailClient personId="p1" />);
     const btn = await screen.findByRole("button", { name: "insideTrack.addConnection.title" });
     await userEvent.click(btn);
-    await waitFor(() => expect(getPersons).toHaveBeenCalled());
+    // IT-B1: the connection picker must request active persons only.
+    await waitFor(() =>
+      expect(getPersons).toHaveBeenCalledWith(expect.objectContaining({ status: "active" })),
+    );
     expect(screen.getByTestId("stub-add-conn")).toHaveAttribute("data-from", "p1");
   });
 

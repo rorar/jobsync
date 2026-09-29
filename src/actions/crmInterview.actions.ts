@@ -11,8 +11,10 @@ import {
   type InterviewStatus,
   type InterviewOutcome,
   isValidInterviewTransition,
+  isValidInterviewOutcome,
   isConsentBlocked,
 } from "@/models/person.model";
+import { touchPersonRetention } from "@/lib/crm/retention-policy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +90,14 @@ export async function scheduleInterview(
       },
     });
 
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // arranging a meeting with the contact is unambiguous evidence they are
+    // still needed. Conditional, mirroring the ownership + consent guards
+    // above — an interview with no Person attached touches nothing.
+    if (input.personId) {
+      await touchPersonRetention(user.id, input.personId);
+    }
+
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
     eventBus.publish(
       createEvent(DomainEventType.InterviewScheduled, {
@@ -120,6 +130,12 @@ export async function completeInterview(
     });
     if (!interview) return { success: false, message: "crm.errors.interviewNotFound" };
 
+    // ADR-019: outcome is a TS-erased union arriving from a browser-callable
+    // "use server" export — validate membership before it reaches Prisma (W-B2).
+    if (!isValidInterviewOutcome(outcome)) {
+      return { success: false, message: "crm.errors.invalidInterviewOutcome" };
+    }
+
     if (!isValidInterviewTransition(interview.status as InterviewStatus, "completed")) {
       return { success: false, message: "crm.errors.invalidTransition" };
     }
@@ -141,6 +157,9 @@ export async function completeInterview(
         interviewId,
         jobId: interview.jobId,
         userId: user.id,
+        // W-B1: carry the interviewee so completion reaches PersonTimeline,
+        // mirroring InterviewScheduled.
+        personId: interview.personId ?? undefined,
         outcome,
       }),
     );

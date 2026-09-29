@@ -190,7 +190,45 @@ export async function activateModule(
     }
 
     if (registered.status === ModuleStatus.ACTIVE) {
-      return { success: true, data: { moduleId, status: ModuleStatus.ACTIVE } };
+      // MOD-B1, second half — the symmetric twin of the check in
+      // `deactivateModule` below. The ordering fix further down closes the case
+      // where OUR write failed; it does not close the case where memory was
+      // never right to begin with.
+      //
+      // `syncRegistryFromDb` latches on `dbSynced` (`:477`) and therefore reads
+      // `ModuleRegistration` exactly ONCE per process, and that table is
+      // deployment-global — no `userId` column (`prisma/schema.prisma:602`). So
+      // any change made outside this process, by another instance or by hand,
+      // is invisible here for the rest of the process lifetime. Memory then
+      // says ACTIVE while the row says `inactive`, this short-circuit engages,
+      // and the caller is told `success: true` for a write that never happened
+      // — "silent success over a lost write", the exact shape MOD-B1 names,
+      // left standing in the twin function.
+      //
+      // An ABSENT row AGREES here, unlike in `deactivateModule`: the schema
+      // default is `active` (`prisma/schema.prisma:606`), so nothing needs
+      // writing. If this read throws we deliberately do not catch it — the
+      // outer handler returns `success: false` rather than guessing.
+      const persisted = await prisma.moduleRegistration.findUnique({
+        where: { moduleId },
+        select: { status: true },
+      });
+
+      if (!persisted || persisted.status === ModuleStatus.ACTIVE) {
+        return {
+          success: true,
+          data: { moduleId, status: ModuleStatus.ACTIVE },
+        };
+      }
+
+      // Memory-only ACTIVE — fall through and repair the record. The write path
+      // below is idempotent: the upsert asserts the same status in both
+      // branches and `setStatus` is a no-op for the value memory already holds.
+      console.warn(
+        `[activateModule] Module "${moduleId}" is ACTIVE in memory but ` +
+          `"${persisted.status}" in the database — re-running the activation ` +
+          `to repair the record.`,
+      );
     }
 
     // Guard: reject activation if credential is required but not configured
@@ -212,10 +250,19 @@ export async function activateModule(
       }
     }
 
-    // Update in-memory registry
-    moduleRegistry.setStatus(moduleId, ModuleStatus.ACTIVE);
-
-    // Persist to DB
+    // MOD-B1 (symmetric twin of the deactivateModule ordering below): persist
+    // FIRST, then mirror into the in-memory registry. With the old order a
+    // rejected write left memory asserting ACTIVE while the database still said
+    // inactive, and the `registered.status === ACTIVE` short-circuit above then
+    // returned success on every retry without writing. Persisting first leaves
+    // memory untouched on failure, so the short-circuit does not engage and the
+    // next call retries.
+    //
+    // That argument is sound for a write WE lost, and it was once given as the
+    // reason the activate path needs no DB read. It does not cover memory that
+    // was never right — a per-process registry against a deployment-global
+    // table — which is why the short-circuit above now confirms against the
+    // row. Two different ways to be wrong, two guards.
     await prisma.moduleRegistration.upsert({
       where: { moduleId },
       update: {
@@ -230,6 +277,9 @@ export async function activateModule(
         activatedAt: new Date(),
       },
     });
+
+    // Only now mirror the persisted state into the in-memory registry.
+    moduleRegistry.setStatus(moduleId, ModuleStatus.ACTIVE);
 
     // Emit ModuleReactivated domain event per distinct affected user
     // (Sprint 2 H-A-01: close the symmetric twin of Sprint 1 CRIT-A1 — the
@@ -335,52 +385,116 @@ export async function deactivateModule(
     }
 
     if (registered.status === ModuleStatus.INACTIVE) {
-      return {
-        success: true,
-        data: { moduleId, status: ModuleStatus.INACTIVE, pausedAutomations: 0 },
-      };
+      // MOD-B1: the in-memory registry is per-process and can disagree with the
+      // database. Short-circuiting on memory ALONE made that disagreement
+      // permanent: a call whose write failed left memory INACTIVE, and every
+      // retry then answered `success: true` without attempting the write again.
+      // The only recovery was activate-then-deactivate, which nobody would guess.
+      //
+      // So the short-circuit now requires the DATABASE to agree. An ABSENT row
+      // does NOT agree: per ADR-043/ADR-044 absence means the schema default
+      // `active`, so a missing row must fall through and be written. If this
+      // read itself throws we deliberately do not catch it — the outer handler
+      // returns `success: false` rather than guessing.
+      const persisted = await prisma.moduleRegistration.findUnique({
+        where: { moduleId },
+        select: { status: true },
+      });
+
+      if (persisted?.status === ModuleStatus.INACTIVE) {
+        return {
+          success: true,
+          data: { moduleId, status: ModuleStatus.INACTIVE, pausedAutomations: 0 },
+        };
+      }
+
+      // Memory-only INACTIVE — fall through and repair the record. The write
+      // path below is idempotent: `setStatus` is a no-op for the value memory
+      // already holds, the upsert asserts the same status in both branches, and
+      // the automation query filters on `status: "active"` so automations paused
+      // by the earlier attempt are not touched twice.
+      console.warn(
+        `[deactivateModule] Module "${moduleId}" is INACTIVE in memory but ` +
+          `${persisted ? `"${persisted.status}"` : "absent"} in the database — ` +
+          `re-running the deactivation to repair the record.`,
+      );
     }
 
-    // Update in-memory registry
-    moduleRegistry.setStatus(moduleId, ModuleStatus.INACTIVE);
-
-    // Persist module status to DB
-    await prisma.moduleRegistration.upsert({
-      where: { moduleId },
-      update: {
-        status: ModuleStatus.INACTIVE,
-        deactivatedAt: new Date(),
-      },
-      create: {
-        moduleId,
-        connectorType: registered.manifest.connectorType,
-        status: ModuleStatus.INACTIVE,
-        deactivatedAt: new Date(),
-      },
-    });
-
-    // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
-    // of automations that will be paused, before any concurrent changes.
-    // Global scope (all users) — consistent with degradation.ts handlers
-    // (handleAuthFailure, handleCircuitBreakerTrip) per Allium spec.
-    const affectedAutomations = await prisma.automation.findMany({
-      where: {
-        jobBoard: moduleId,
-        status: "active",
-      },
-      select: { id: true, name: true, userId: true },
-    });
-
-    if (affectedAutomations.length > 0) {
-      // Update by the specific IDs we captured (no TOCTOU)
-      await prisma.automation.updateMany({
-        where: { id: { in: affectedAutomations.map((a) => a.id) } },
-        data: {
-          status: "paused",
-          pauseReason: "module_deactivated",
+    // MOD-B1: persist FIRST, then mirror into the in-memory registry.
+    // The old order mutated memory here and persisted second, so a rejected
+    // write left this process asserting INACTIVE while the database still said
+    // active — and the early return above then reported success forever.
+    // Persisting first means a failed write throws to the outer catch, returns
+    // `success: false`, and leaves memory untouched, so the next call retries.
+    //
+    // MOD-B1 residual, closed 2026-09-05: ordering alone only ever covered a
+    // failure of the FIRST statement. The status write and the pause cascade now
+    // commit together or not at all, because the partial state was worse than
+    // either whole one AND was self-concealing: the row said inactive, memory
+    // said INACTIVE, the two agreed — so the short-circuit above took the
+    // agreement at face value and every retry returned `success: true` with
+    // `pausedAutomations: 0`, while the automations it claimed to have paused
+    // kept running. A rollback cannot produce that agreement: the row stays
+    // `active`, memory is never touched (the mirror is below the commit), and
+    // the next call re-runs the whole cascade.
+    //
+    // Cross-user by design (CLAUDE.md § Cross-User Degradation) — the cascade
+    // spans every tenant's automations for this module, which argues FOR
+    // all-or-nothing, not against it: a half-applied cascade pauses an arbitrary
+    // subset of tenants with nothing recording which. SQLite serializes writers
+    // at the database file, not per row or per tenant, so this is the same three
+    // statements under one write lock instead of two.
+    //
+    // Nothing that is not a database write belongs inside. The in-memory mirror
+    // and the ModuleDeactivated events are below, AFTER the commit — an event
+    // published from inside would announce a pause that may still roll back, and
+    // its consumers write through the non-transactional client into a database
+    // this transaction is still holding open.
+    const affectedAutomations = await prisma.$transaction(async (tx) => {
+      await tx.moduleRegistration.upsert({
+        where: { moduleId },
+        update: {
+          status: ModuleStatus.INACTIVE,
+          deactivatedAt: new Date(),
+        },
+        create: {
+          moduleId,
+          connectorType: registered.manifest.connectorType,
+          status: ModuleStatus.INACTIVE,
+          deactivatedAt: new Date(),
         },
       });
 
+      // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
+      // of automations that will be paused, before any concurrent changes.
+      // Global scope (all users) — consistent with degradation.ts handlers
+      // (handleAuthFailure, handleCircuitBreakerTrip) per Allium spec.
+      const affected = await tx.automation.findMany({
+        where: {
+          jobBoard: moduleId,
+          status: "active",
+        },
+        select: { id: true, name: true, userId: true },
+      });
+
+      if (affected.length > 0) {
+        // Update by the specific IDs we captured (no TOCTOU)
+        await tx.automation.updateMany({
+          where: { id: { in: affected.map((a) => a.id) } },
+          data: {
+            status: "paused",
+            pauseReason: "module_deactivated",
+          },
+        });
+      }
+
+      return affected;
+    });
+
+    // Committed. Only now mirror the persisted state into the in-memory registry.
+    moduleRegistry.setStatus(moduleId, ModuleStatus.INACTIVE);
+
+    if (affectedAutomations.length > 0) {
       // Emit ONE ModuleDeactivated domain event per distinct affected user.
       // The notification-dispatcher consumer (in-app + webhook + email + push
       // channels) is the single writer — see ADR-030 / specs/notification-dispatch.allium
@@ -475,6 +589,15 @@ async function syncRegistryFromDb(): Promise<void> {
  * 2. `prisma.moduleRegistration.upsert({ update: { healthStatus, updatedAt } })`
  *    — writes ONLY `healthStatus` and `updatedAt`. The `status` column
  *    (active/inactive) is never touched by the health-monitor path.
+ *
+ *    CORRECTION (2026-09-02, ADR-044): point 2 was ASPIRATIONAL until
+ *    `f56da9ff`. It quotes the `update` branch correctly and then generalises
+ *    to "the health-monitor path", but the upsert has two branches, and its
+ *    `create` branch wrote `status: registered.status` from `32426cca` until
+ *    `f56da9ff` — five months. It is true as written now. The Sprint 3
+ *    CONCLUSION was unaffected: the create branch fires only when no row
+ *    exists, so there was never a recorded lifecycle value for a non-admin
+ *    caller to overwrite.
  *
  * 3. Neither write cascades into pausing any user's automations.
  *    The automation-pause cascade is exclusively triggered by

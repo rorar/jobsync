@@ -8,6 +8,8 @@
  */
 
 import type { AutomationRunStatus } from "@/models/automation.model";
+import type { DataSource } from "@/models/person.model";
+import type { ReferralKind, ReferralStatus } from "@/models/insideTrack.model";
 
 /** Inline definition to avoid bidirectional dependency with scheduler/types */
 type RunSource = "scheduler" | "manual";
@@ -51,6 +53,9 @@ export const DomainEventType = {
   CrmTaskCreated: "CrmTaskCreated",
   CrmTaskCompleted: "CrmTaskCompleted",
   CrmNoteCreated: "CrmNoteCreated",
+  // Inside Track referrals (spec: inside-track.allium)
+  ReferralRecorded: "ReferralRecorded",
+  ReferralStatusChanged: "ReferralStatusChanged",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -220,7 +225,7 @@ export interface EnrichmentFailedPayload {
 export interface ContactCreatedPayload {
   personId: string;
   userId: string;
-  source: "manual" | "auto_created" | "imported";
+  source: DataSource;
 }
 
 export interface ContactUpdatedPayload {
@@ -238,7 +243,8 @@ export interface ContactUpdatedPayload {
 export interface ContactDeletedPayload {
   personId: string;
   userId: string;
-  reason: "anonymized" | "merged" | "deleted";
+  /** `retention_expired` = automatic expiry by the CRM retention cron (no human actor). */
+  reason: "anonymized" | "merged" | "deleted" | "retention_expired";
 }
 
 export interface InterviewScheduledPayload {
@@ -253,11 +259,36 @@ export interface InterviewCompletedPayload {
   interviewId: string;
   jobId: string;
   userId: string;
+  personId?: string;
   outcome: string;
 }
 
 export interface ReminderTriggeredPayload {
   userId: string;
+  /**
+   * Only `interview_upcoming` and `task_overdue` are emitted today
+   * (`src/lib/scheduler/crm-cron.ts`).
+   *
+   * `retention_expired` is RESERVED for the pre-expiry notice described in
+   * `docs/wh-b3-retention-analysis.md` §4.6 — a warning fired some days BEFORE
+   * `ExpireAutoCreatedPersons` erases an auto-created contact, so the operator
+   * can intervene. It had an emit site until W-B3 (2026-08-26) replaced
+   * archive-on-expiry with erasure; the notice itself was deliberately not
+   * built, because a `Notification` row lives 30 days and one fired 14 days
+   * before erasure would leave a NAMED residue ~16 days AFTER the erasure that
+   * existed to retire the name — unless it uses the late-binding pattern with
+   * `personId` in `titleParams`. The consumer half already assumes exactly that
+   * shape: `buildNotificationActions("retention_expired", { personId })` in
+   * `src/lib/notifications/deep-links.ts` is implemented and tested.
+   *
+   * NAMING CAVEAT for whoever builds §4.6: a PRE-expiry notice fires before
+   * expiry, so the honest member is `retention_expiring`. Rename or add rather
+   * than inheriting the mismatch.
+   *
+   * `follow_up_due` is likewise unemitted and reserved — see `crm.allium`
+   * `config.follow_up_default_delay` ("W-E6: reserved for a future
+   * follow-up-scheduling rule; no rule consumes it yet").
+   */
   reason: "interview_upcoming" | "task_overdue" | "retention_expired" | "follow_up_due";
   targetJobId?: string;
   targetPersonId?: string;
@@ -294,6 +325,32 @@ export interface CrmNoteCreatedPayload {
   targetCompanyId?: string;
 }
 
+// Inside Track referral payloads (spec: inside-track.allium, event-bus.allium).
+// Immutable snapshots: the optional person/company ids may be null once the GDPR
+// de-identification cascade has severed the tipster link. `kind`/status carry the
+// wire form (insider_relay | network_path — NOT the PascalCase variant names).
+
+export interface ReferralRecordedPayload {
+  referralId: string;
+  userId: string;
+  kind: ReferralKind;
+  tipsterPersonId?: string;
+  targetCompanyId?: string;
+}
+
+export interface ReferralStatusChangedPayload {
+  referralId: string;
+  userId: string;
+  previousStatus: ReferralStatus;
+  newStatus: ReferralStatus;
+  // True ONLY for the temporal stale sweep (ReferralGoesStale); false for every
+  // user-driven transition. Carried explicitly so the timeline projection decides
+  // whether to record an actor without string-matching newStatus.
+  systemInitiated: boolean;
+  tipsterPersonId?: string;
+  targetCompanyId?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Payload Map (type → payload shape)
 // ---------------------------------------------------------------------------
@@ -327,6 +384,8 @@ export interface EventPayloadMap {
   CrmTaskCreated: CrmTaskCreatedPayload;
   CrmTaskCompleted: CrmTaskCompletedPayload;
   CrmNoteCreated: CrmNoteCreatedPayload;
+  ReferralRecorded: ReferralRecordedPayload;
+  ReferralStatusChanged: ReferralStatusChangedPayload;
 }
 
 // ---------------------------------------------------------------------------

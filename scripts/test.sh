@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Run Jest tests using system Node.js (not bun — avoids readonly property bug).
 #
-# VM resource guard: jobsync runs on an 8GB NixOS VM and has been trashed in
-# the past when Jest used its default worker count (num_cpus - 1). This
-# wrapper defends the VM in two ways:
+# Resource guard: jobsync has been run on hosts from 8 GB upwards and has been
+# trashed on more than one of them when Jest used its default worker count
+# (num_cpus - 1). The guard is not sized to a particular host. This wrapper
+# defends it in two ways:
 #
 #   1. Translates the common typo `--workers=N` to `--maxWorkers=N`. Jest's
 #      actual flag is `--maxWorkers`; `--workers` is silently ignored, which
@@ -19,6 +20,7 @@
 # the `JEST_MAX_WORKERS` env var at the config level or by passing an
 # explicit `--maxWorkers=N` / `-w N` flag through this wrapper.
 source "$(dirname "$0")/env.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib-runtime-guard.sh"
 export PATH="/run/current-system/sw/bin:$PATH"
 
 echo "[test.sh] Using Node.js $(node --version)"
@@ -65,4 +67,42 @@ if [[ "$HAS_COVERAGE_FLAG" == "false" ]]; then
   echo "[test.sh] No --coverage flag supplied; running without coverage (fast default, see H-P-03)"
 fi
 
-exec npx jest "${ARGS[@]}"
+guard_host_load "test.sh" || exit 75
+
+# The limits CLAUDE.md used to ask every caller to prepend by hand. A wrapper
+# whose protection depends on being invoked correctly is not a wrapper: the full
+# suite is ~6 min over 300+ suites, and an unguarded run has starved this host.
+#
+# 2026-09-13: MEM_MAX/NODE_HEAP raised 4G/3072->8G/6144 after a MEASURED,
+# deliberate container resize (cgroupfs memory.max 16G->32G, memory.high
+# 14G->28G, live, no swap either side). `--maxWorkers=1` above is UNCHANGED —
+# that policy is about worker COUNT vs CPU affinity (still 5 threads for this
+# session per /proc/self/status Cpus_allowed_list), which the memory resize
+# does not touch. Verify current cgroup values with
+# `cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.high` before re-raising
+# either number -- `free -h` inside this LXC guest reports the HOST, not the
+# container's own cgroup.
+MEM_MAX="${JEST_MEM_MAX:-8G}"
+NODE_HEAP="${JEST_NODE_HEAP:-6144}"
+TIMEOUT="${JEST_TIMEOUT:-1800}"
+# --foreground: without it timeout puts jest in its own process group and Ctrl-C
+# no longer reaches it, which also breaks `--watch`.
+WRAP=(timeout --foreground "$TIMEOUT" nice -n 19 ionice -c3
+      env "NODE_OPTIONS=--max-old-space-size=${NODE_HEAP}"
+      npx jest "${ARGS[@]}")
+
+echo "[test.sh] mem=${MEM_MAX} heap=${NODE_HEAP}MB timeout=${TIMEOUT}s"
+# Probe with the SAME properties the real call uses. Probing a subset lets the
+# probe pass where the real invocation fails instantly, and that failure would
+# then be reported as a jest failure.
+if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 \
+   -p CPUWeight=50 true 2>/dev/null; then
+  systemd-run --user --scope -p Description=jobsync-jest \
+    -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 "${WRAP[@]}"
+else
+  echo "[test.sh] WARNING: no systemd transient scope - nice/ionice + heap cap only."
+  "${WRAP[@]}"
+fi
+RC=$?
+report_exit "test.sh" "$RC" "$TIMEOUT"
+exit "$RC"

@@ -786,7 +786,7 @@ OAuth providers are not currently configured but NextAuth.js supports adding the
 
 | Tool | Role |
 |---|---|
-| **Jest 29 + ts-jest** | Unit and component tests. Runs under system Node.js. |
+| **Jest 29 via `next/jest`** | Unit and component tests. Runs under system Node.js. TypeScript is compiled by Next's SWC Jest transformer (`jest.config.ts` wraps its config in `nextJest()` and sets no `preset`/`transform`); `ts-jest` is still a devDependency but no config or script references it. |
 | **Testing Library** | DOM assertions and React component testing |
 | **Playwright** | End-to-end browser tests (Chromium) |
 | **bun runtime** | Dictionary consistency validation (`test-dictionaries.ts`) |

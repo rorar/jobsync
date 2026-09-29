@@ -200,7 +200,16 @@ entity Referral {
 variant InsiderRelay : Referral {
     -- Use case A: the tipster works at the target company and relays the
     -- user's documents onward. The decision-maker is frequently UNKNOWN at
-    -- the start and filled in later when the tipster names them.
+    -- the start, so the field is optional.
+    --
+    -- W-G3 (2026-08-23): it is set at CREATION or not at all. RecordInsiderRelay
+    -- accepts it, and nothing else writes it — there is no rule, no action and no
+    -- UI field that fills it in afterwards, so a relay recorded before the tipster
+    -- names the decision-maker cannot be completed. The earlier wording here
+    -- ("filled in later when the tipster names them") described an intent the
+    -- system has never implemented; correcting the prose rather than leaving the
+    -- spec promising a capability that does not exist. Adding it is a feature —
+    -- an update action for the participant references — not a reconciliation.
     forwarded_to: crm/Person?
 }
 
@@ -275,6 +284,38 @@ rule TipReifiesToJob {
         -- Job early in `lead` and move it to `applied` on conversion. Rejected
         -- here: the Referral itself holds the pre-application opportunity so
         -- unmaterialized tips never pollute the Job list.
+        -- W-G1/W-G2: creating the Job also seeds its initial JobStatusHistory row
+        -- and emits JobStatusChanged, which projects a status_changed entry onto
+        -- the timeline (RecordReferralStatusChange guidance in crm.allium reasons
+        -- about that entry). last_activity_at is not refreshed here — the referral
+        -- is terminal (converted).
+        --
+        -- W-D2/W-D3 (2026-08-21) — where the "a converted referral has a Job"
+        -- guarantee lives. It is discharged HERE, by the `ensures: Job.created(...
+        -- source_referral: referral)` above: every conversion does produce a Job,
+        -- atomically. It is deliberately NOT a top-level invariant, for two
+        -- reasons.
+        --
+        -- First, it is not expressible as one. `converted` is a historical
+        -- outcome ("this warm path became an application"), true forever once
+        -- reached; the Job may later be deleted independently, which nulls the
+        -- target_job relationship WITHOUT un-converting the referral. Asserting
+        -- "a converted referral currently has a Job" compares two moments in
+        -- time, so it belongs in prose (see the language reference on
+        -- expressible invariants).
+        --
+        -- Second, the residue that IS true at all times — "any Job still linked
+        -- to a converted referral was created by that conversion" — is a
+        -- tautology: target_job is DEFINED as `Job with source_referral = this`,
+        -- so it cannot fail and would never surface drift. A construct the
+        -- checker cannot falsify is worse than none: it reads as a live guard.
+        --
+        -- Nor is the guarantee restored by cascading a referral status change on
+        -- Job deletion. That would make the delete a two-entity operation whose
+        -- undo compensation must revert both the Job AND the referral status,
+        -- reintroducing the undoStore split-brain hazard and risking an illegal
+        -- declined -> declined transition on re-delete. Job delete stays
+        -- single-entity (see ROADMAP "Undo-Erweiterung").
 }
 
 rule ReferralGoesStale {
@@ -321,7 +362,9 @@ rule ReferralGoesStale {
 rule RecordInsiderTip {
     -- A tip from a contact who works at the target company and will relay
     -- the user's documents onward (use case A).
-    when: RecordInsiderTip(user, tipster, target_company)
+    -- W-G9: target_company is optional (a pure market tip has none), matching
+    -- the surface signature, the ensures (target_company?.id) and the code.
+    when: RecordInsiderTip(user, tipster, target_company?)
     ensures:
         let referral = InsiderRelay.created(
             user_id: user.id,
@@ -343,13 +386,22 @@ rule RecordInsiderTip {
 rule RecordNetworkTip {
     -- A tip from a contact who knows an insider at the target company
     -- (use case B). `insider` and `via` may be supplied if already known.
-    when: RecordNetworkTip(user, tipster, insider, via, target_company)
+    -- W-G9: insider/via/target_company are optional, matching the surface + code.
+    when: RecordNetworkTip(user, tipster, insider?, via?, target_company?)
+    -- W-G4: when `via` is omitted the action adopts an existing tipster→insider
+    -- edge if one is already recorded, so a known NetworkPath auto-resolves its
+    -- route (the invariant NetworkPathViaConnectsTipsterToInsider then holds
+    -- without the user re-selecting the edge).
+    let resolved_via =
+        if via != null: via
+        else if insider != null: PersonConnection{user_id: user.id, from_person: tipster, to_person: insider}
+        else: null
     ensures:
         let referral = NetworkPath.created(
             user_id: user.id,
             tipster: tipster,
             insider: insider,
-            via: via,
+            via: resolved_via,
             target_company: target_company,
             status: open,
             received_at: now,
@@ -425,6 +477,9 @@ rule DeclineReferral {
     requires: referral.status in {open, engaged, relayed, in_review, stale}
     let previous_status = referral.status
     ensures: referral.status = declined
+    -- W-G2: refreshed on every transition, matching the other transition rules
+    -- and the code (harmless on a terminal status, but stated for consistency).
+    ensures: referral.last_activity_at = now
     ensures: ReferralStatusChanged(
         referral_id: referral.id,
         user_id: referral.user_id,
@@ -457,7 +512,9 @@ rule ReviveReferral {
 rule AddPersonConnection {
     -- Records a directed network edge (from_person knows to_person), bounded
     -- by the per-user network cap.
-    when: AddPersonConnection(user, from_person, to_person, kind, strength)
+    -- W-G9: notes is an optional free-text annotation the entity carries and the
+    -- code stores.
+    when: AddPersonConnection(user, from_person, to_person, kind, strength, notes?)
     requires: from_person != to_person
     requires: not exists PersonConnection{user_id: user.id, from_person: from_person, to_person: to_person}
     requires: (PersonConnection where user_id = user.id).count < config.max_connections_per_user
@@ -467,8 +524,20 @@ rule AddPersonConnection {
         to_person: to_person,
         kind: kind,
         strength: strength,
+        notes: notes,
         created_at: now
     )
+}
+
+rule RemovePersonConnection {
+    -- W-G8: hard-delete a network edge. Referral.via is severable (nulled on
+    -- delete), so any NetworkPath routed through this edge has its `via` cleared —
+    -- which makes NetworkPathViaConnectsTipsterToInsider hold vacuously for that
+    -- referral, silently dropping the recorded route. The read side
+    -- (list_person_connections) is a projection over the viewer's edges.
+    when: RemovePersonConnection(user, connection)
+    requires: connection.user_id = user.id
+    ensures: not exists connection
 }
 
 -- ---------------------------------------------------------------------------
@@ -613,7 +682,10 @@ surface WarmPathFinder {
         -- The discovered warm paths from the viewer to the target company.
         -- Past associations (end_date set) are INCLUDED — ex-employees are
         -- often the best door-openers.
-        find_warm_paths(viewer, company, config.max_warm_path_depth)
+        -- W-G6: the depth is a FIXED 2-hop structural cap (1-hop insiders +
+        -- 2-hop via one PersonConnection), not a parameter — the implementation
+        -- does not take a depth argument.
+        find_warm_paths(viewer, company)
 
     @guarantee ExcludesConsentBlockedPersons
         -- G-C (Art. 7(3)): find_warm_paths never surfaces a Person who is
@@ -627,8 +699,8 @@ surface WarmPathFinder {
         -- find_warm_paths is a black box over the viewer's CRM: it walks 1-hop
         -- insiders (Persons with a crm/CompanyAssociation at `company`) and
         -- 2-hop paths (a Person who, via PersonConnection, knows an insider),
-        -- capped at config.max_warm_path_depth, ranked by connection strength
-        -- and recency (active before former).
+        -- fixed at 2-hop depth, ranked by connection strength and recency
+        -- (active before former). config.max_warm_path_depth is not consumed.
 }
 
 surface TipCapture {
@@ -656,6 +728,8 @@ surface ReferralWorkspace {
         referral.status
         referral.received_at
         referral.last_activity_at
+        referral.created_at
+        referral.updated_at
 
     provides:
         ApplicantEngages(referral)        when referral.status = open
@@ -675,6 +749,13 @@ surface ReferralWorkspace {
         -- The displayed tipster is resolved live from the linked Person, so an
         -- anonymized tipster shows as de-identified rather than a stale name
         -- (consistent with TipsterReferenceResolvesLive).
+
+    @guarantee VariantPeopleShownLive
+        -- W-G7: for the applicable variant the workspace also surfaces live
+        -- Person references — the decision-maker (InsiderRelay.forwarded_to) and,
+        -- for a NetworkPath, the insider and the intermediary edge (via). These
+        -- are PII crossing the boundary; like the tipster they are resolved live
+        -- so anonymization de-identifies them rather than leaking a stale name.
 }
 
 -- ---------------------------------------------------------------------------
@@ -689,11 +770,13 @@ invariant TipsterReferenceResolvesLive {
         d.tipster_reference.person.status != anonymized
 }
 
-invariant ConvertedReferralHasJob {
-    for r in Referral where r.status = converted:
-        r.target_job != null
-}
-
+-- Note (2026-09-05, deliberately NOT changed): this invariant and its
+-- neighbours iterate type names in the singular -- `for r in NetworkPath`,
+-- `for r in Referral` -- where the language calls for the natural plural of the
+-- entity name. Both types exist and the intent is unambiguous, the file is
+-- consistent about it, and NetworkPath is a variant, so whether to write
+-- `NetworkPaths` or to narrow `Referrals` by `kind` is a modelling choice
+-- rather than a typo. Left alone rather than half-corrected.
 invariant NetworkPathViaConnectsTipsterToInsider {
     -- P-C: if a NetworkPath records its `via` edge, that edge must actually
     -- connect the tipster to the insider (from_person -> to_person). When the
@@ -701,6 +784,16 @@ invariant NetworkPathViaConnectsTipsterToInsider {
     -- holds vacuously, so de-identified rows never violate it.
     for r in NetworkPath where r.via != null:
         r.via.from_person = r.tipster and r.via.to_person = r.insider
+}
+
+invariant ActiveReferralHasTipster {
+    -- W-C2: a live (non-terminal) referral always has a tipster — the person who
+    -- opened the path. The GDPR cascade declines any working tip whose tipster is
+    -- de-identified (status not in {converted, declined} -> declined), so a null
+    -- tipster only ever coexists with a terminal status. Merge transfers the
+    -- tipster rather than orphaning it (MergeCascadesToInsideTrack).
+    for r in Referral where r.status not in {converted, declined}:
+        r.tipster != null
 }
 
 
@@ -736,3 +829,7 @@ open question "G-C Phase 2: the stale-referral follow-up reminder (when added) M
 open question "G-D (Art. 15/20): Referral + PersonConnection must be added to the DSAR export aggregator (collect-user-data currently gathers only crm entities — persons/jobContacts/interviews). Implementation/code scope, but the data-subject-access obligation is recorded here."
 
 open question "G-E (Art. 44/5): the tipster name is intentionally rendered into a generated cover letter ('über {tipster} ...'), which conflicts with cv-document's CloudAiAlwaysRedacted when generation/review runs on a cloud AI provider — that name is third-party PII egress. Design decision for the 4.2 / cv-document integration: redact-then-reinsert locally, gate on is_local, or require explicit per-tipster consent for the named reference?"
+
+open question "W-G3: InsiderRelay.forwarded_to (and a NetworkPath's insider) are documented as 'filled in later when the tipster names the decision-maker', but no rule or action sets them after creation — the record accepts them only at create time. Should there be an UpdateReferralParticipants action (spec rule + code), and if so is it gated on status (only while non-terminal)? An InsiderRelay recorded before the decision-maker is known can otherwise never be completed with one."
+open question "W-G3 sibling (2026-08-24): target_company has the same gap, and one delete can open it. Referral.targetCompanyId is onDelete:SetNull, so deleting a Company nulls it on every referral that pointed there. ConvertTip requires target_company != null, and no action can set it after creation, so an in_review tip is then permanently unconvertible. The UI does explain the blocked state, but only via an sr-only aria-describedby, so a sighted user sees a disabled button and no reason. Same fix shape as W-G3 (an update action for the participant/target references), plus a visible explanation."
+

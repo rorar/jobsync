@@ -15,6 +15,7 @@ import StatusFunnelWidget from "@/components/dashboard/StatusFunnelWidget";
 import TopActivitiesCard from "@/components/dashboard/TopActivitiesCard";
 import WeeklyBarChartToggle from "@/components/dashboard/WeeklyBarChartToggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getUserLocale, t } from "@/i18n/server";
 
 import { Metadata } from "next";
 
@@ -33,6 +34,7 @@ export default async function Dashboard() {
     activityCalendarData,
     topActivities7Days,
     topActivities30Days,
+    locale,
   ] = await Promise.all([
     getJobsAppliedForPeriod(7),
     getJobsAppliedForPeriod(30),
@@ -43,6 +45,7 @@ export default async function Dashboard() {
     getActivityCalendarData(),
     getTopActivityTypesByDuration(7),
     getTopActivityTypesByDuration(30),
+    getUserLocale(),
   ]);
   const trendFor7Days = rawTrendFor7Days ?? 0;
   const trendFor30Days = rawTrendFor30Days ?? 0;
@@ -57,6 +60,17 @@ export default async function Dashboard() {
     );
   return (
     <>
+      {/*
+        Visually hidden, deliberately. These dashboard pages render no visible
+        page title today, so adding one would be a design change rather than an
+        accessibility fix. Without it the heading outline starts at CardTitle,
+        which renders an h3 (src/components/ui/card.tsx:36), so a screen-reader
+        user navigating by headings finds nothing naming the page they are on
+        (WCAG 2.4.6, 1.3.1). `sr-only` gives the outline its root and moves
+        nothing on screen. The sibling dashboard pages carry the same h1 for
+        the same reason; this is the only copy of the explanation.
+      */}
+      <h1 className="sr-only">{t(locale, "nav.dashboard")}</h1>
       <div className="grid auto-rows-max items-start gap-2 md:gap-2 lg:col-span-2">
         <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
           <JobsApplied />

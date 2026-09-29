@@ -119,7 +119,7 @@ function DisplaySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.appearance")}</h3>
+          <h2 className="text-lg font-medium">{t("settings.appearance")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.appearanceDesc")}
           </p>
@@ -135,7 +135,7 @@ function DisplaySettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.appearance")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.appearance")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.appearanceDesc")}
         </p>

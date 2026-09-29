@@ -253,7 +253,7 @@ function TasksContainer({
     <>
       <Card x-chunk="dashboard-tasks-chunk-0" className="h-full">
         <CardHeader className="flex-row justify-between items-center">
-          <CardTitle>{t("tasks.title")}</CardTitle>
+          <CardTitle as="h1">{t("tasks.title")}</CardTitle>
           <div className="flex items-center">
             <div className="ml-auto flex items-center gap-2">
               <div className="relative">
@@ -379,21 +379,29 @@ function TasksContainer({
           )}
           {tasks.length < totalTasks && (
             <div className="flex justify-center p-4">
+              {/*
+                The label stays put: with aria-disabled the button no longer
+                vanishes from the focus model when it goes inert, and the
+                <Loading /> region above already announces the load.
+              */}
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
+                onClick={() => {
+                  // aria-disabled keeps the button focusable and in the tab
+                  // order, so refusing the activation is the handler's job.
+                  if (loading) return;
                   loadTasks(
                     page + 1,
                     filterKey,
                     statusFilter,
                     searchTerm || undefined,
-                  )
-                }
-                disabled={loading}
-                className="btn btn-primary"
+                  );
+                }}
+                aria-disabled={loading}
+                className="btn btn-primary aria-disabled:opacity-50"
               >
-                {loading ? t("common.loading") : t("tasks.loadMore")}
+                {t("tasks.loadMore")}
               </Button>
             </div>
           )}

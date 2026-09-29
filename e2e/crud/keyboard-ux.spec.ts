@@ -1,12 +1,166 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, safeWait } from "../helpers";
+import { ensureEnglishLocale, rowsByText, uniqueId } from "../helpers";
+import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
+// Imported from its own file rather than `../helpers` on purpose: the barrel
+// imports `@playwright/test`, and `__tests__/console-oracle.spec.ts` has to be
+// able to reach the classifier from Jest. See the header of that module.
+import { classifyConsoleErrors } from "../helpers/console-oracle";
 
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// Every Enter this spec presses in a combobox or the skills input writes a
+// REFERENCE row that outlives the dialog it was typed into — JobTitle, Company,
+// Location, Tag. No test here ever submits the AddJob form, so nothing points
+// at those rows afterwards and every one of them is pure residue: 3 job titles,
+// 1 company, 1 location and 6 tags per run.
+//
+// Six-part pattern, copied from `webhook-settings.spec.ts:212-245` and
+// `settings-api-keys.spec.ts:195-229`:
+//   1. ARRAYS, not scalars — one tag test creates three rows in one body.
+//   2. Registration sits where the row is WRITTEN and BEFORE the keystroke that
+//      writes it: an Enter that creates the row and then fails the assertion
+//      after it has still leaked one.
+//   3. De-registration only on a PROVEN delete (see `deleteResumeTracked`).
+//   4. The afterEach swaps the references out before its first await.
+//   5. It navigates itself, inside the try.
+//   6. Two tiers — the deleters swallow, the hook re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+//
+// The FOLLOW-UP that used to stand here — "`profile-crud.spec.ts` carries its
+// own copy of `loadUntilAdminRowVisible` / `deleteAdminReferenceRow`, and they
+// belong in `e2e/helpers/` as soon as a third caller appears" — has been
+// discharged. Callers three through six arrived at once, the pair moved to
+// `../helpers/admin-reference-cleanup`, `profile-crud` was migrated in
+// `45ba0653`, and this file was the LAST private copy. Its two functions were
+// byte-identical to the shared ones once comments and the `export` keyword are
+// set aside, so nothing was lost in the move; what the shared header adds is
+// the E2E-B40 argument spelled out in full, the `ADMIN_TAB.source` /
+// `ADMIN_TAB.activityType` entries this file never needed, and the note that
+// `name` is matched as a case-insensitive SUBSTRING.
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+let createdTags: string[] = [];
+let createdResumes: string[] = [];
+
+/**
+ * Delete a resume created by this spec and prove it is gone.
+ *
+ * The shared `deleteResume` fixture swallows every error by contract, so
+ * calling it proves nothing — look again, and de-register ONLY on proof.
+ * Anything that fails stays registered, which is exactly the case the afterEach
+ * net exists for.
+ */
+async function deleteResumeTracked(page: Page, title: string): Promise<boolean> {
+  await deleteResume(page, title);
+  // DOM locator (E2E-B40). This read is the one that MUST NOT be blinded: its
+  // result does not merely gate a warning, it decides whether the title is
+  // dropped from `createdResumes` below — the only registry the afterEach
+  // drains. `deleteResume` swallows every error by contract, so on the path
+  // that leaves the AlertDialog open a role locator matched nothing, `detached`
+  // resolved on its first poll, and a resume that still exists was
+  // de-registered: the leak became invisible AND permanent.
+  const gone = await rowsByText(page, title)
+    .first()
+    .waitFor({ state: "detached", timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  if (gone) createdResumes = createdResumes.filter((t) => t !== title);
+  return gone;
 }
+
+// Safety net for every row this spec writes. Unlike `webhook-settings` there is
+// no inline delete to pair it with for the reference models — nothing in this
+// file removes a JobTitle/Company/Location/Tag — so on a GREEN run this hook
+// does the whole job and is expected to be busy. Resumes are the exception: the
+// four EURES tests delete their own and de-register on proof, so a WARNING
+// about a resume means a real leak.
+test.afterEach(async ({ page }, testInfo) => {
+  // This hook can navigate to four admin tables, so buy it extra time.
+  //
+  // CORRECTED 2026-09-09 — the previous version of this comment said a hook
+  // "shares the test's 60 s budget" and that the extension therefore lets a slow
+  // BODY off with 105 s. Both halves are wrong, and the source says so:
+  // Playwright gives the after-hooks a fresh slot, `afterHooksSlot = { timeout:
+  // calculateMaxTimeout(project.timeout, testInfo.timeout), elapsed: 0 }`
+  // (`playwright/lib/worker/workerMain.js:328-329`), so teardown never inherits
+  // what the body spent, and a body that overran has already timed out before
+  // this line is reached. The call raises the DIFFERENCE above that fresh
+  // maximum, taking effect immediately because `timeoutManager.setTimeout`
+  // writes to the running slot and re-arms its deadline
+  // (`timeoutManager.js:105-110`). Keep the number small enough that a real
+  // teardown slowdown still surfaces.
+  test.setTimeout(testInfo.timeout + 45_000);
+
+  // Swap the references out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const resumes = createdResumes;
+  // No explicit annotation: `sweepReferenceGroups` takes `AdminReferenceTab`,
+  // the union of the admin tab slugs, and the widened `Array<{ tab: string }>`
+  // this line used to carry would not assign to it. Inference off `ADMIN_TAB`
+  // keeps the literal types.
+  const referenceGroups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+    { tab: ADMIN_TAB.tag, names: createdTags },
+  ];
+  createdResumes = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+  createdTags = [];
+
+  if (resumes.length === 0 && referenceGroups.every((g) => !g.names.length)) {
+    return;
+  }
+
+  try {
+    // The "Mobile Viewport" describe pins 375x667 for its whole test, teardown
+    // included, and the admin tables hide columns and scroll horizontally at
+    // that width. The test is over by now, so widening cannot affect anything
+    // it asserted — it only stops teardown from inheriting a layout it was
+    // never written for.
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // Resumes FIRST. `deleteJobTitleById` (jobtitle.actions.ts:120-131),
+    // `deleteJobLocationById` and `deleteCompanyById` all refuse while a
+    // WorkExperience or Education still references the row, and a leaked resume
+    // is what holds one. Deleting the resume also removes its ContactInfo,
+    // Summary, WorkExperience, Education and ResumeSection rows — that cascade
+    // lives in `deleteResumeById`'s transaction (profile.actions.ts:403-455),
+    // not in the Prisma schema.
+    for (const title of resumes) {
+      if (!(await deleteResumeTracked(page, title))) {
+        console.warn(
+          `[keyboard-ux] leaked resume survived cleanup: ${title}`,
+        );
+      }
+    }
+
+    // The navigate-and-delete loop that used to be inlined here is now
+    // `sweepReferenceGroups`, which does the same thing with the same warning
+    // shape (`[spec] leaked <tab> row survived cleanup: <name>`) and adds a
+    // try/catch of its own that names the groups it may have left behind. The
+    // viewport widening above stays HERE and must stay ahead of this call: the
+    // shared helper knows nothing about the "Mobile Viewport" describe block.
+    await sweepReferenceGroups(page, referenceGroups, "keyboard-ux");
+  } catch (error) {
+    // swallow-ok: afterEach cleanup net — a throwing hook replaces the real test
+    // failure with its own, which is strictly worse than a warned-about leak.
+    // The guard started flagging this block when the inlined sweep loop became a
+    // call to `sweepReferenceGroups`: that helper asserts, so the try now
+    // reaches an assertion indirectly where it previously did not.
+    console.warn(`[keyboard-ux] afterEach cleanup failed: ${String(error)}`);
+  }
+});
 
 async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
@@ -15,65 +169,20 @@ async function navigateToJobs(page: Page) {
 }
 
 async function openAddJobDialog(page: Page) {
-  await page.getByTestId("add-job-btn").click();
-  await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
-}
+  const title = page.getByTestId("add-job-dialog-title");
 
-async function deleteJob(page: Page, jobTitle: string) {
-  await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("domcontentloaded");
-  try {
-    const row = page.getByRole("row", { name: new RegExp(jobTitle, "i") });
-    await row.first().waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("job-actions-menu-btn").first().click();
-    await page.getByRole("menuitem", { name: "Delete" }).click();
-    await page.getByRole("button", { name: "Delete" }).click();
-  } catch {
-    // Job may not exist — skip cleanup
-  }
-}
-
-async function ensureResumeExists(page: Page, resumeTitle: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  const existingRow = page.getByRole("row", {
-    name: new RegExp(resumeTitle, "i"),
-  });
-  try {
-    await existingRow.first().waitFor({ state: "visible", timeout: 3000 });
-    return resumeTitle;
-  } catch {
-    // Resume does not exist — create
-  }
-  await page.getByRole("button", { name: "New Resume" }).click();
-  await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(
-    page.getByRole("row", { name: new RegExp(resumeTitle, "i") }).first(),
-  ).toBeVisible({ timeout: 10000 });
-  return resumeTitle;
-}
-
-async function deleteResume(page: Page, title: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  try {
-    const row = page
-      .getByRole("row", { name: new RegExp(title, "i") })
-      .first();
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("resume-actions-menu-btn").click({ force: true });
-    await page
-      .getByRole("menuitem", { name: "Delete" })
-      .click({ force: true });
-    await expect(page.getByRole("alertdialog")).toBeVisible();
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Delete" })
-      .click({ force: true });
-  } catch {
-    // skip cleanup
-  }
+  // `add-job-btn` is server-rendered, so waiting for it to be VISIBLE does not
+  // prove React has hydrated and attached its onClick. At the 375x667 viewport
+  // the Kanban board mounts late enough that the first click is dropped
+  // outright — reproduced standalone: identical script, dialog opens when a
+  // couple of evaluate() round-trips precede the click and does not when they
+  // do not. Retry the click until the dialog actually opens, and assert the
+  // outcome rather than the input.
+  await expect(async () => {
+    if (await title.isVisible()) return;
+    await page.getByTestId("add-job-btn").click();
+    await expect(title).toBeVisible({ timeout: 3000 });
+  }).toPass({ timeout: 20000 });
 }
 
 /**
@@ -104,8 +213,39 @@ function hasAnnouncement(announcements: string[], substring: string): boolean {
 // Console error collector
 // ---------------------------------------------------------------------------
 
-function collectConsoleErrors(page: Page): string[] {
+type ConsoleErrorOracle = {
+  /** Open the observation window at the current position. */
+  mark: () => void;
+  /**
+   * APPLICATION console errors recorded since the last `mark()`.
+   *
+   * Browser transport failures and a DEVELOPMENT React build's hydration
+   * complaints are deliberately not among them; they are warned about
+   * instead. See `classifyConsoleErrors` in `../helpers/console-oracle`, which
+   * carries the whole argument and its measurements.
+   */
+  sinceMark: () => string[];
+};
+
+/**
+ * A console-error oracle with an EXPLICIT observation window.
+ *
+ * The listeners go on at the top of the test body and cannot be moved later:
+ * `page.on` never sees what it missed. But the assertion must not judge
+ * everything they heard. Page load, the auth redirect and hydration all run
+ * before the behaviour under test, and their errors used to fail whichever
+ * interaction test happened to navigate afterwards — the oracle's window was
+ * wider than the behaviour it was written to observe (E2E-B28).
+ *
+ * `mark()` opens the window immediately before the act phase; `sinceMark()`
+ * reports only what arrived after it, classified. A `sinceMark()` with no
+ * preceding `mark()` reports everything, i.e. the old behaviour, so forgetting
+ * the mark makes a test noisier rather than silently blind.
+ */
+function collectConsoleErrors(page: Page): ConsoleErrorOracle {
   const errors: string[] = [];
+  let windowStart = 0;
+
   page.on("console", (msg) => {
     if (msg.type() === "error") {
       errors.push(msg.text());
@@ -114,16 +254,44 @@ function collectConsoleErrors(page: Page): string[] {
   page.on("pageerror", (err) => {
     errors.push(err.message);
   });
-  return errors;
-}
 
-function filterCriticalErrors(errors: string[]): string[] {
-  return errors.filter(
-    (e) =>
-      !e.includes("favicon") &&
-      !e.includes("404") &&
-      !e.includes("Failed to fetch"),
-  );
+  return {
+    mark: () => {
+      windowStart = errors.length;
+    },
+    sinceMark: () => {
+      const { app, transport, frameworkHydration } = classifyConsoleErrors(
+        errors.slice(windowStart),
+      );
+      if (transport.length > 0) {
+        // Not a failure, but not discarded either: this is the evidence that
+        // the dev server went away mid-test, and without it the next reader of
+        // a slow or red run has nothing to go on (E2E-B35).
+        console.warn(
+          `[keyboard-ux] ${transport.length} transport error(s) inside the ` +
+            `console window — the dev server was unreachable, which is a ` +
+            `statement about the harness and not about the app: ` +
+            `${JSON.stringify(transport)}`,
+        );
+      }
+      if (frameworkHydration.length > 0) {
+        // Same contract as the transport warning above, and for the same
+        // reason: a suppressed message that leaves no trace is how a suite
+        // starts lying. Under a production build this branch is unreachable —
+        // the prose it matches exists only in React's development bundle — so
+        // seeing it at all also tells the reader which server answered.
+        console.warn(
+          `[keyboard-ux] ${frameworkHydration.length} development-build ` +
+            `hydration report(s) inside the console window — E2E-B11 traced ` +
+            `these to the Next.js dev server's tree shape, above app code, ` +
+            `and a production run reports the same class of defect as ` +
+            `"Minified React error #418", which still fails: ` +
+            `${JSON.stringify(frameworkHydration)}`,
+        );
+      }
+      return app;
+    },
+  };
 }
 
 /**
@@ -159,21 +327,31 @@ function getSourceCombobox(page: Page) {
 }
 
 // ---------------------------------------------------------------------------
-// Tests: 1. BaseCombobox (AddJob modal — Title, Company, Location, Source)
+// Tests: 1. Combobox (AddJob modal — Title, Company, Location, Source)
+//
+// Named `BaseCombobox` until 2026-09-14, which named the wrong file. AddJob
+// renders `Combobox` from `src/components/ComboBox.tsx` (AddJob.tsx:55);
+// `src/components/ui/base-combobox.tsx` has no importer and cannot appear in
+// this dialog. See docs/knip-unused-ui-primitives.md section 5.
 // ---------------------------------------------------------------------------
 
-test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
+test.describe("Keyboard UX: Combobox (AddJob modal)", () => {
   test.beforeEach(async ({ page }) => {
     await ensureEnglishLocale(page);
   });
 
   test("Enter key creates a new option in Title combobox", async ({ page }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const title = `KBTest Title ${uid}`;
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     // Open the Title combobox (first combobox in the dialog)
     await getTitleCombobox(page).click();
@@ -183,6 +361,10 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await titleInput.fill(title);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for options list.
     await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+    // Registered BEFORE the keystroke that writes the row: an Enter that
+    // creates the JobTitle and then fails an assertion below has still leaked
+    // one, and only a registered name gets cleaned up.
+    createdJobTitles.push(title);
     await titleInput.press("Enter");
     // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for combobox to close.
     await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => null);
@@ -190,11 +372,16 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     // Verify the created option shows in the trigger button
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
 
-    // Verify sr-only announcement
-    const announcements = await getAllAnnouncements(page);
-    expect(hasAnnouncement(announcements, "Created")).toBe(true);
+    // Verify sr-only announcement. ComboBox announces
+    // t("forms.optionCreated") = "{label} created" — label first, lowercase
+    // verb — so the old substring "Created" never matched. Assert the exact
+    // announcement instead, and retry: setAnnouncement lands a render later.
+    await expect(async () => {
+      const announcements = await getAllAnnouncements(page);
+      expect(hasAnnouncement(announcements, `${title} created`)).toBe(true);
+    }).toPass({ timeout: 5000 });
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Enter key creates a new option in Company combobox", async ({
@@ -213,9 +400,9 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await companyInput.fill(company);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write — see the Title test above.
+    createdCompanies.push(company);
     await companyInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getCompanyCombobox(page)).toContainText(company);
   });
@@ -236,9 +423,9 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await locationInput.fill(location);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write — see the Title test above.
+    createdLocations.push(location);
     await locationInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getLocationCombobox(page)).toContainText(location);
   });
@@ -291,22 +478,29 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
   }) => {
     const uid = uniqueId();
     const title = `KBRapid ${uid}`;
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
-    await titleInput.type(title, { delay: 20 });
+    // pressSequentially, not fill(): the combobox filters on every keystroke,
+    // and fill() emits a single input event, which exercises a different path.
+    await titleInput.pressSequentially(title, { delay: 20 });
+    // Registered before the write — see the Title test above.
+    createdJobTitles.push(title);
     await titleInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1500) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Click outside clears stale text on reopen", async ({ page }) => {
@@ -347,12 +541,17 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     page,
   }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const skill = `KBSkill ${uid}`;
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
     await openSkillsPopover(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     const skillInput = page.getByPlaceholder(/Type a skill/i);
     await expect(skillInput).toBeVisible();
@@ -360,6 +559,10 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     await skillInput.fill(skill);
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write: this Enter creates a Tag row that outlives
+    // the dialog (TagInput.tsx:137-170 — only Enter creates; Tab and Escape do
+    // not), and the AddJob form is never submitted, so nothing else removes it.
+    createdTags.push(skill);
     await skillInput.press("Enter");
 
     // Wait for async createTag to complete and chip to render
@@ -378,7 +581,7 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
       ).toBe(true);
     }).toPass({ timeout: 5000 });
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Multiple tags can be added rapidly via Enter", async ({ page }) => {
@@ -396,9 +599,16 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
       await skillInput.fill(skill);
       // M-T-04 follow-up: replaced waitForTimeout(200) — wait for UI to settle.
       await page.waitForLoadState("domcontentloaded");
+      // Registered inside the loop, before each write: a failure on iteration 2
+      // must still clean up the row iteration 1 created. This is why the
+      // tracking is an array and not a scalar.
+      createdTags.push(skill);
       await skillInput.press("Enter");
-      // M-T-04 follow-up: replaced waitForTimeout(800) — wait for server round-trip.
-      await safeWait(page, { loadState: "networkidle" });
+      // The next iteration types over the field, so this skill's chip has to
+      // be committed before we continue.
+      await expect(page.getByText(skill).first()).toBeVisible({
+        timeout: 10000,
+      });
     }
 
     for (let i = 1; i <= 3; i++) {
@@ -440,22 +650,30 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     const skillInput = page.getByPlaceholder(/Type a skill/i);
     await expect(skillInput).toBeVisible();
 
-    // Create a skill first
+    // Create a skill first. TagInput's Enter handler bails on an empty
+    // inputValue, and createTag's transition clears the field when it resolves
+    // — so assert the controlled value has actually landed before each Enter
+    // rather than relying on a waitForLoadState that resolves instantly on an
+    // already-loaded page.
     await skillInput.fill(skill);
-    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
-    await page.waitForLoadState("domcontentloaded");
+    await expect(skillInput).toHaveValue(skill);
+    // Registered once, before the FIRST write. The second Enter below is the
+    // subject under test precisely because it creates nothing — it announces
+    // "already selected" (TagInput.tsx:160-165).
+    createdTags.push(skill);
     await skillInput.press("Enter");
 
-    // Wait for async createTag to complete and chip to render
-    await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
-    // Wait for React startTransition to commit localTags state update
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
+    // Wait for async createTag to complete: the chip renders AND the field is
+    // cleared by the same transition. Waiting for the clear is what makes the
+    // re-fill below deterministic.
+    await expect(
+      page.getByRole("button", { name: `Remove ${skill}` }),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(skillInput).toHaveValue("");
 
     // Try adding the same skill again
     await skillInput.fill(skill);
-    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
-    await page.waitForLoadState("domcontentloaded");
+    await expect(skillInput).toHaveValue(skill);
     await skillInput.press("Enter");
 
     // Verify sr-only announcement says "already selected" (async state update)
@@ -479,10 +697,14 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     page,
   }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc1 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -499,18 +721,32 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     // Wait for Step 1 to render with the occupation combobox
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 10000 });
     await keywordsCombobox.click();
 
     const searchInput = page.getByPlaceholder(/Search occupations/i);
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
+
     const keyword = `KBKeyword ${uid}`;
     await searchInput.fill(keyword);
-    // Wait for debounce + ESCO API fetch to complete or timeout
-    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
+    // The occupation list is fetched from the ESCO proxy behind a debounce.
+    // Wait for the list to react to the typed text — same pattern as
+    // selectOrCreateComboboxOption. An empty list is a legitimate outcome.
+    await page
+      .getByRole("option")
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 })
+      .catch(() => null);
     await searchInput.press("Enter");
 
     // Wait for async keyword addition to complete
@@ -522,16 +758,20 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
       expect(hasAnnouncement(announcements, "added")).toBe(true);
     }).toPass({ timeout: 5000 });
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 
   test("Multiple keywords via Enter", async ({ page }) => {
     const uid = uniqueId();
     const resumeTitle = `E2E Resume KBOcc2 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -543,7 +783,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 10000 });
     await keywordsCombobox.click();
 
@@ -552,22 +796,31 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     for (let i = 1; i <= 3; i++) {
       await searchInput.fill(`KW${i} ${uid}`);
-      // Wait for debounce + ESCO API fetch to complete or timeout
-      // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-      await safeWait(page, { loadState: "networkidle" });
+      // The occupation list is fetched from the ESCO proxy behind a debounce.
+      // Wait for the list to react to the typed text — same pattern as
+      // selectOrCreateComboboxOption. An empty list is a legitimate outcome.
+      await page
+        .getByRole("option")
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 })
+        .catch(() => null);
       await searchInput.press("Enter");
       // Wait for chip to appear before adding next keyword
       await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 10000 });
     }
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 
   test("Tab closes keywords popover", async ({ page }) => {
     const uid = uniqueId();
     const resumeTitle = `E2E Resume KBOcc3 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -579,7 +832,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 5000 });
     await keywordsCombobox.click();
 
@@ -595,17 +852,21 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await expect(searchInput).not.toBeVisible();
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 
   test("Rapid type + Enter before ESCO results load does not crash", async ({
     page,
   }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc4 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -617,21 +878,29 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 5000 });
     await keywordsCombobox.click();
 
     const searchInput = page.getByPlaceholder(/Search occupations/i);
 
-    await searchInput.type(`QuickKW ${uid}`, { delay: 10 });
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
+
+    // pressSequentially, not fill(): see the Title test above.
+    await searchInput.pressSequentially(`QuickKW ${uid}`, { delay: 10 });
     await searchInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(page.getByText(`QuickKW ${uid}`).first()).toBeVisible();
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 });
 
@@ -661,8 +930,6 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 5000 });
     await locationCombobox.click();
-    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible();
@@ -680,7 +947,7 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
 
   test("Search for country and select via click", async ({ page }) => {
     const uid = uniqueId();
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
 
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -701,38 +968,50 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 10000 });
     await locationCombobox.click();
-    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible({ timeout: 5000 });
 
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
+
     await locationInput.fill("Germany");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const germanyOption = page
       .getByRole("option")
       .filter({ hasText: /Germany/i })
       .first();
-    try {
-      await germanyOption.waitFor({ state: "visible", timeout: 8000 });
-      await germanyOption.click();
-      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
-      await page.waitForLoadState("domcontentloaded");
 
-      await expect(page.getByText(/Germany|DE/i).first()).toBeVisible();
+    // ONLY the availability probe may skip; everything after it is this test's
+    // subject and must be able to FAIL.
+    //
+    // E2E-B27's shape here was a `try` that wrapped the assertions too. The
+    // first repair turned its `console.log("Note: …")` into `test.skip`, which
+    // moved the report from PASSED to NOT RUN — more honest, and still unable
+    // to tell "the EU service is down" from "select-by-click regressed". The
+    // combobox fetches /api/eures/locations, a proxy to a service this suite
+    // does not control, so an option list that never arrives is a legitimate
+    // reason not to run. A click that then does not select is a defect.
+    const optionsAvailable = await germanyOption
+      .waitFor({ state: "visible", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    test.skip(
+      !optionsAvailable,
+      "EURES location options unavailable — external service",
+    );
 
-      const announcements = await getAllAnnouncements(page);
-      const hasContent = announcements.some((a) => a.length > 0);
-      expect(hasContent).toBe(true);
-    } catch {
-      console.log(
-        "Note: Location options not available; skipping selection assertion",
-      );
-    }
+    await germanyOption.click();
+    // No load-state wait: the page is already loaded, so `domcontentloaded`
+    // resolves instantly and proves nothing. The assertion below retries.
+    await expect(page.getByText(/Germany|DE/i).first()).toBeVisible();
 
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    const announcements = await getAllAnnouncements(page);
+    expect(announcements.some((a) => a.length > 0)).toBe(true);
+
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("Country with regions: click expands/collapses", async ({ page }) => {
@@ -754,25 +1033,27 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 5000 });
     await locationCombobox.click();
-    // M-T-04 follow-up: replaced waitForTimeout(3000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const countryWithRegions = page
       .getByRole("option")
       .filter({ hasText: /▸/ })
       .first();
 
-    try {
-      await countryWithRegions.waitFor({ state: "visible", timeout: 5000 });
-      await countryWithRegions.click();
-      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
-      await page.waitForLoadState("domcontentloaded");
+    // Same external dependency as the test above, and the same split: the
+    // probe may skip, the expand/collapse behaviour below may not (E2E-B27).
+    const regionsAvailable = await countryWithRegions
+      .waitFor({ state: "visible", timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    test.skip(
+      !regionsAvailable,
+      "EURES country-with-regions unavailable — external service",
+    );
 
-      const expanded = page.getByText(/All of|▾/).first();
-      await expect(expanded).toBeVisible({ timeout: 3000 });
-    } catch {
-      console.log("Note: No country with regions found in test data");
-    }
+    await countryWithRegions.click();
+    await expect(page.getByText(/All of|▾/).first()).toBeVisible({
+      timeout: 3000,
+    });
   });
 });
 
@@ -792,10 +1073,15 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
   }) => {
     const uid = uniqueId();
     const title = `KBMobile ${uid}`;
-    const errors = collectConsoleErrors(page);
+    const consoleErrors = collectConsoleErrors(page);
 
     await navigateToJobs(page);
     await openAddJobDialog(page);
+
+    // E2E-B28: the console-error window opens HERE, so the assertion at the
+    // end of this test judges the interaction below — not the page load,
+    // auth redirect and hydration that got us to this point.
+    consoleErrors.mark();
 
     await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or search Title");
@@ -804,6 +1090,8 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await titleInput.fill(title);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for options list.
     await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+    // Registered before the write — see the Title test above.
+    createdJobTitles.push(title);
     await titleInput.press("Enter");
     // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for combobox to close.
     await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => null);
@@ -813,6 +1101,9 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await getCompanyCombobox(page).click();
     const companyInput = page.getByPlaceholder("Create or search Company");
     await expect(companyInput).toBeVisible();
+    // NOT registered, and deliberately so: this value leaves via Tab, and
+    // `ComboBox.handleInputKeyDown` (ComboBox.tsx:84-88) only creates on Enter —
+    // Tab just closes the popover and clears the field. No row is written.
     await companyInput.fill("test mobile");
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
@@ -822,7 +1113,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await expect(companyInput).not.toBeVisible();
-    expect(filterCriticalErrors(errors)).toEqual([]);
+    expect(consoleErrors.sinceMark()).toEqual([]);
   });
 
   test("CommandList has touch-action: pan-y on mobile", async ({ page }) => {
@@ -862,19 +1153,19 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
     const firstOption = page.getByRole("option").first();
-    try {
-      await firstOption.waitFor({ state: "visible", timeout: 3000 });
-      await firstOption.click();
-      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
-      await page.waitForLoadState("domcontentloaded");
+    // No try/catch here, deliberately. Job sources are seeded (prisma/seed.ts
+    // creates nine), so an option list that does not appear is a defect, not
+    // an unavailable external service — the two EURES sites above are the
+    // ones with a dependency this suite does not control. Swallowing here
+    // left the sr-only assertion unreachable while the test reported PASSED
+    // (E2E-B27).
+    await firstOption.waitFor({ state: "visible", timeout: 3000 });
+    await firstOption.click();
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
-      const announcements = await getAllAnnouncements(page);
-      expect(hasAnnouncement(announcements, "selected")).toBe(true);
-    } catch {
-      console.log(
-        "Note: Job source options not found — skipping assertion",
-      );
-    }
+    const announcements = await getAllAnnouncements(page);
+    expect(hasAnnouncement(announcements, "selected")).toBe(true);
   });
 
   test("TagInput sr-only reports tag count after creation", async ({
@@ -893,6 +1184,8 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     await skillInput.fill(skill);
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write — see the first TagInput test above.
+    createdTags.push(skill);
     await skillInput.press("Enter");
 
     // Wait for chip to appear (confirms the async creation completed)

@@ -167,7 +167,7 @@ export default function PublicApiKeySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("api.title")}</h3>
+          <h2 className="text-lg font-medium">{t("api.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("api.description")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ export default function PublicApiKeySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("api.title")}</h3>
+          <h2 className="text-lg font-medium">{t("api.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("api.description")}</p>
         </div>
         <div className="text-center py-8">
@@ -198,7 +198,7 @@ export default function PublicApiKeySettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("api.title")}</h3>
+        <h2 className="text-lg font-medium">{t("api.title")}</h2>
         <p className="text-sm text-muted-foreground">{t("api.description")}</p>
         <p className="text-xs text-muted-foreground mt-1">{t("api.rateLimitInfo")}</p>
       </div>

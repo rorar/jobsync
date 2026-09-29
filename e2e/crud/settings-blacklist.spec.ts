@@ -1,16 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /** Navigate to Settings > Company Blacklist section. */
 async function navigateToBlacklist(page: Page) {
@@ -26,6 +19,22 @@ async function navigateToBlacklist(page: Page) {
   await page
     .getByRole("heading", { name: "Company Blacklist" })
     .waitFor({ state: "visible", timeout: 10000 });
+
+  // ...and then for the entries list. CompanyBlacklistSettings.tsx:172 keeps
+  // the heading and the add form mounted and swaps only the list for a spinner,
+  // so the heading proves even less here than in the other panels.
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
+  await page
+    .getByRole("main")
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 10000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
 
 /** Add a blacklist entry with the given pattern. Uses default match type "Contains". */

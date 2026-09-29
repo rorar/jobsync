@@ -229,7 +229,7 @@ function StagedVacancyCardImpl({
                 aria-label={`${t("staging.selectVacancy")}: ${vacancy.title}`}
               />
             )}
-            <CardTitle className="text-base font-medium leading-tight">
+            <CardTitle as="h2" className="text-base font-medium leading-tight">
               {vacancy.title}
             </CardTitle>
           </div>

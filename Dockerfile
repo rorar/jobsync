@@ -1,15 +1,20 @@
-FROM node:20.18.0-alpine AS base
+FROM node:22.23.2-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 
 RUN apk add --no-cache libc6-compat
+# bun.lock is the project's lockfile (the tests, CI and local builds all install
+# from it). Install with the same bun version CI pins: keep this tag equal to
+# `bun-version` in .github/workflows/ci.yml and `bun` in mise.toml. The binary is copied into the node
+# base so install scripts (prisma engines, sharp) still run under node.
+COPY --from=oven/bun:1.4.0-alpine /usr/local/bin/bun /usr/local/bin/bun
+RUN bun --version
 # Set the working directory
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder

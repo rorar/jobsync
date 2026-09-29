@@ -66,6 +66,27 @@ export interface PrivacySettings {
   emailConfirmationBeforeDeletion: boolean;
   /** F-4: Days to wait before executing deletion (0 = immediate) */
   coolingOffDays: 0 | 7 | 14 | 30;
+  /**
+   * CRM retention: whether auto-created contacts are ERASED automatically once
+   * their retention period elapses (specs/crm.allium ExpireAutoCreatedPersons).
+   *
+   * `false` does NOT mean "keep forever". The retention period stays declared,
+   * `retentionExpiresAt` is still written and still advanced by the last-activity
+   * clock, and the date stays visible on the contact. Only the unattended erasure
+   * stops — the operator takes the storage-limitation duty (Art. 5(1)(e)) over by
+   * hand. Default `true`: the enforcing value is the safe one.
+   */
+  crmRetentionEnabled: boolean;
+  /**
+   * CRM retention period in days, measured from last activity (not creation).
+   *
+   * Deliberately a BOUNDED union with no "unlimited" member: Art. 5(1)(e) does
+   * not permit "never", so offering indefinite retention as a configuration
+   * would re-create the very defect this setting exists to fix. The 1095-day
+   * ceiling matches RETENTION_CONFIG.crmActivityLogRetentionDays, so a Person is
+   * never retained longer than its own timeline.
+   */
+  crmRetentionDays: 180 | 365 | 730 | 1095;
 }
 
 export interface UserSettingsData {
@@ -97,7 +118,16 @@ export const defaultPrivacySettings: PrivacySettings = {
   auditAccountDeletion: true,
   emailConfirmationBeforeDeletion: false,
   coolingOffDays: 0,
+  // Enforcing default (see PrivacySettings.crmRetentionEnabled).
+  crmRetentionEnabled: true,
+  // 730 == CRM_CONFIG.autoCreatedRetentionDays: an operator who never opens the
+  // setting keeps exactly today's declared policy.
+  crmRetentionDays: 730,
 };
+
+/** Allowed CRM retention periods (ADR-019 runtime validation source of truth). */
+export const ALLOWED_CRM_RETENTION_DAYS = [180, 365, 730, 1095] as const;
+export type CrmRetentionDays = (typeof ALLOWED_CRM_RETENTION_DAYS)[number];
 
 export const defaultUserSettings: UserSettingsData = {
   ai: {

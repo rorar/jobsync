@@ -16,6 +16,7 @@ import {
   HealthStatus,
   CircuitBreakerState,
   CredentialType,
+  type DataEnrichmentManifest,
 } from "../manifest";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import db from "@/lib/db";
@@ -147,6 +148,20 @@ export class EnrichmentOrchestrator {
       // Skip circuit-broken modules
       if (registered.circuitBreakerState === CircuitBreakerState.OPEN) {
         this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Circuit breaker open");
+        continue;
+      }
+
+      // Skip modules that do not declare support for this dimension. A chain
+      // entry naming a module for the wrong dimension (e.g. a copy-paste in
+      // DEFAULT_CHAINS) would otherwise call it anyway and only fail later,
+      // inside the module itself, with no diagnostic naming the real cause.
+      // Direct replacement for the now-removed data-enrichment/registry.ts
+      // facade, whose getEnrichmentModuleByDimension() was the only reader
+      // of manifest.supportedDimensions (required by
+      // specs/data-enrichment.allium) but was never called from here.
+      const enrichmentManifest = registered.manifest as DataEnrichmentManifest;
+      if (!enrichmentManifest.supportedDimensions?.includes(input.dimension)) {
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Module does not declare support for this dimension");
         continue;
       }
 

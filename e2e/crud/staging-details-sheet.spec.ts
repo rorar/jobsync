@@ -18,12 +18,7 @@
  * ones.
  */
 import { test, expect, type Page } from "@playwright/test";
-
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
+import { ensureEnglishLocale } from "../helpers";
 
 async function navigateToStaging(page: Page) {
   await page.goto("/dashboard/staging");
@@ -56,8 +51,6 @@ test.describe("Staging details sheet", () => {
   test("opens, shows vacancy title, and closes without losing position", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
-
     await navigateToStaging(page);
 
     // The "New" tab is the default; we want to look at staged vacancies.
@@ -83,7 +76,16 @@ test.describe("Staging details sheet", () => {
     const firstButton = detailsButtons.first();
     const accessibleName = await firstButton.getAttribute("aria-label");
     expect(accessibleName).toMatch(/^Details: /);
-    const vacancyTitle = accessibleName!.replace(/^Details: /, "").trim();
+    // Sprint 2 H-NEW-04 made the label `Details: <title> — <employer>` so screen
+    // readers can tell two identically-titled vacancies apart. The sheet renders
+    // title and employer in separate nodes, so the concatenated string is never
+    // one text node — take the title segment only. Splitting on the first " — "
+    // is safe even for a title that contains one: the assertion below is a
+    // substring match.
+    const vacancyTitle = accessibleName!
+      .replace(/^Details: /, "")
+      .split(" — ")[0]
+      .trim();
     expect(vacancyTitle.length).toBeGreaterThan(0);
 
     // Open the sheet

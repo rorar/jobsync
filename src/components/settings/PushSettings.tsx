@@ -348,7 +348,7 @@ export default function PushSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.pushTitle")}</h3>
+          <h2 className="text-lg font-medium">{t("settings.pushTitle")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.pushDescription")}
           </p>
@@ -372,7 +372,7 @@ export default function PushSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.pushTitle")}</h3>
+          <h2 className="text-lg font-medium">{t("settings.pushTitle")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.pushDescription")}
           </p>
@@ -399,7 +399,7 @@ export default function PushSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.pushTitle")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.pushTitle")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.pushDescription")}
         </p>

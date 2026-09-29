@@ -46,9 +46,14 @@ function Settings() {
 
   return (
     <div className="flex flex-col col-span-3">
-      <h3 className="text-2xl font-semibold leading-none tracking-tight mb-4">
+      {/*
+        h1, not h3: CardTitle renders an h3 (src/components/ui/card.tsx:36), so
+        an h3 here put the page title on the same level as the cards below it.
+        The classes are unchanged, so nothing moves visually.
+      */}
+      <h1 className="text-2xl font-semibold leading-none tracking-tight mb-4">
         {t("settings.pageTitle")}
-      </h3>
+      </h1>
       <div className="flex flex-col md:flex-row gap-6">
         <SettingsSidebar
           activeSection={activeSection}

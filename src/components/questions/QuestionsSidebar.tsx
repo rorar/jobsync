@@ -25,7 +25,14 @@ function QuestionsSidebar({
   const { t } = useTranslations();
   return (
     <div className="w-48 border-r py-4 hidden md:block h-full">
-      <h3 className="font-semibold mb-4 text-sm">{t("questions.skillTags")}</h3>
+      {/*
+        h2, not h3: this sidebar renders BEFORE the page's own h1 (see the
+        page client), so the heading that precedes it is the app title h1 in
+        Header.tsx. An h3 there stepped 1 -> 3, which axe's heading-order
+        rule fails. The level is the only thing that changed; the class, and
+        therefore the size, is untouched.
+      */}
+      <h2 className="font-semibold mb-4 text-sm">{t("questions.skillTags")}</h2>
       <ul className="space-y-1">
         <li>
           <button

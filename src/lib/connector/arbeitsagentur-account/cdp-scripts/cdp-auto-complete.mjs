@@ -48,7 +48,7 @@ for (let i = 0; i < 120; i++) {
     });
     if (res?.result?.value) console.log(`  → ${res.result.value}`);
     ws.close();
-  } catch(e) {}
+  } catch(e) { /* best-effort teardown: the socket is closing anyway */ }
 
   await new Promise(r => setTimeout(r, 2000));
 }

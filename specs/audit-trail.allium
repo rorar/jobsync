@@ -56,6 +56,7 @@ enum AuditAction {
     `job.status_change`
     `job.note_add`
     `person.pii_read`
+    `person.anonymize`
 }
 
 enum AuditTargetType {
@@ -165,6 +166,28 @@ rule AuditJobDelete {
     )
 }
 
+rule AuditPersonAnonymise {
+    -- Art. 5(2): the erasure is the one action a controller is most likely to be
+    -- asked to demonstrate, and it was the only mutation in the system leaving no
+    -- attributable trace — the contact_deleted timeline projection deliberately
+    -- nulls the person reference, so it cannot serve as the record.
+    --
+    -- The entry names the subject and the actor and nothing else. It carries no
+    -- before/after snapshot: an erasure snapshot would preserve exactly the PII
+    -- the erasure removes (see SnapshotsAreFieldDiffsNotPii), so the audit trail
+    -- records THAT the person was erased, never WHAT was erased.
+    when: PersonAnonymised(actor, person)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `person.anonymize`,
+        target_type: person,
+        target_id: person.id,
+        timestamp: now,
+        allowed: true
+    )
+}
+
 rule AuditJobNoteAdd {
     when: JobNoteAdded(actor, job, note_id)
     ensures: AuditLogEntry.created(
@@ -217,8 +240,11 @@ rule AuditPersonPiiRead {
 invariant DataMinimisation {
     -- Art. 5(1)(c): a Person-PII read records access only — never a content
     -- snapshot. No PII is copied into the audit payload beyond target id + actor.
+    -- The same applies to an erasure entry: a snapshot there would preserve the
+    -- very data the erasure removes.
     for e in AuditLogEntries:
-        e.action = `person.pii_read` implies e.before_after = null
+        (e.action = `person.pii_read` or e.action = `person.anonymize`)
+            implies e.before_after = null
 }
 
 invariant SnapshotsAreFieldDiffsNotPii {

@@ -28,7 +28,7 @@ export default function TopActivitiesCard({ data }: TopActivitiesCardProps) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-green-600">
+          <CardTitle as="h2" className="text-sm font-medium text-green-600">
             {t("dashboard.topActivities")}
           </CardTitle>
           <div className="flex rounded-md border text-xs">

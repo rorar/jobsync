@@ -107,6 +107,23 @@ describe("addJobContact", () => {
     });
   });
 
+  it("rejects linking a consent-blocked person (GDPR Art. 7(3); W-C5)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (prisma.job.findFirst as jest.Mock).mockResolvedValue({ id: "job-1" });
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({
+      id: "person-1",
+      processingBasis: "consent",
+      consentWithdrawnAt: new Date(),
+    });
+
+    const result = await addJobContact("job-1", "person-1");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("crm.errors.consentWithdrawn");
+    expect(prisma.jobContact.create).not.toHaveBeenCalled();
+    expect(eventBus.publish).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid contact role at the boundary (ADR-019)", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.job.findFirst as jest.Mock).mockResolvedValue({ id: "job-1" });

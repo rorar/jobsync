@@ -3,3 +3,19 @@ npm-debug.log
 .next
 .vscode
 .git
+# Never bake local state or secrets into an image (BUGS SEC-B10). CI builds
+# from a fresh checkout and is unaffected; a local `docker build .` is not.
+.env
+.env.*
+!.env.example
+prisma/*.db
+prisma/*.db-journal
+prisma/.e2e-*
+data
+test-results
+playwright-report
+.next-e2e
+heap-snapshots
+.headroom
+.serena
+.understand-anything

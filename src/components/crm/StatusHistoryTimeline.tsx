@@ -118,7 +118,7 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-muted-foreground" />
-          <CardTitle className="text-base">{t("jobs.statusHistory")}</CardTitle>
+          <CardTitle as="h2" className="text-base">{t("jobs.statusHistory")}</CardTitle>
         </div>
       </CardHeader>
       <CardContent>
@@ -160,6 +160,17 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
         {/* Timeline entries */}
         {!loading && !error && entries.length > 0 && (
           <>
+            {/*
+              A live region that enters the DOM together with its content is
+              announced inconsistently; one that is already mounted when its
+              content changes is not. This one mounts with the timeline, long
+              before the user can reach the Load more button, so it is the
+              thing that announces the append. The spinner in the button is
+              aria-hidden so the two never announce the same thing twice.
+            */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {loadingMore ? t("jobs.statusHistoryLoading") : ""}
+            </div>
             <div
               className="max-h-80 overflow-y-auto pr-1"
               role="list"
@@ -245,21 +256,32 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
             </div>
             {/* Load more pagination */}
             {hasMore && (
+              /*
+                The label stays put: with aria-disabled the button no longer
+                vanishes from the focus model when it goes inert, so the
+                accessible name of the control the user is standing on must
+                not change underneath them. The live region above carries the
+                announcement; the spinner is the visual signal only.
+              */
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full mt-2 text-xs"
-                onClick={loadMore}
-                disabled={loadingMore}
+                className="w-full mt-2 text-xs aria-disabled:opacity-50"
+                onClick={() => {
+                  // aria-disabled keeps the button focusable and in the tab
+                  // order, so refusing the activation is the handler's job.
+                  if (loadingMore) return;
+                  loadMore();
+                }}
+                aria-disabled={loadingMore}
               >
-                {loadingMore ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    {t("jobs.statusHistoryLoading")}
-                  </>
-                ) : (
-                  t("jobs.statusHistoryLoadMore")
+                {loadingMore && (
+                  <Loader2
+                    className="h-3.5 w-3.5 mr-1.5 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
                 )}
+                {t("jobs.statusHistoryLoadMore")}
               </Button>
             )}
           </>

@@ -128,7 +128,7 @@ export function NotesSection({ jobId }: NotesSectionProps) {
         onSaved={handleSaved}
       />
       <DeleteAlertDialog
-        pageTitle="note"
+        pageTitle={t("jobs.deleteTargetNote")}
         open={deleteAlertOpen}
         onOpenChange={setDeleteAlertOpen}
         onDelete={handleDelete}

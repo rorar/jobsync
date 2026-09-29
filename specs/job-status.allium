@@ -581,8 +581,13 @@ rule MigrateLegacyStatusesToPerUser {
 ------------------------------------------------------------
 
 invariant OneCategoryPerKindPerUser {
-    for a in Categories:
-        for b in Categories:
+    -- `Categories` named no declared type: the entity is JobStatusCategory, so
+    -- the collection is JobStatusCategories. Corrected 2026-09-05. Nothing
+    -- reported it -- `allium check` resolves neither name and reports the same
+    -- zero errors for both -- and the sibling invariant below already used the
+    -- correct form (`Jobs` for entity `Job`).
+    for a in JobStatusCategories:
+        for b in JobStatusCategories:
             a != b and a.user_id = b.user_id implies a.kind != b.kind
 }
 

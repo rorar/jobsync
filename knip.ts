@@ -20,7 +20,6 @@ const config: KnipConfig = {
   // Project scope
   project: [
     "src/**/*.{ts,tsx}",
-    "types/**/*.ts",
     "scripts/**/*.ts",
   ],
 
@@ -37,8 +36,6 @@ const config: KnipConfig = {
     // Transitive/peer deps of @nivo/bar + @nivo/calendar
     "@nivo/core",
     "@react-spring/web",
-    // Transitive dep of @dnd-kit/core
-    "@dnd-kit/utilities",
     // Static assets in public/flags/ — SVG references, not JS imports
     "circle-flags",
     // Type import in postcss.config.mjs — provided by tailwindcss

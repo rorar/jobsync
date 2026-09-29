@@ -725,6 +725,64 @@ rule HandleContactCreated {
         -- Auto-created contacts (from job imports) are silent.
 }
 
+-- -----------------------------------------------------------------------------
+-- Inbox interaction
+-- -----------------------------------------------------------------------------
+-- Surface NotificationBell has always provided these three operations and no
+-- rule listened for any of them (SPEC-B3, found 2026-09-05 against the
+-- module-lifecycle copy of the same surface; the copy was removed and its
+-- operations land here). Everything above this line delivers a notification;
+-- these three are what the recipient does with one afterwards.
+
+rule MarkNotificationRead {
+    -- A recipient marks one notification as read.
+    when: MarkAsRead(viewer, notification)
+    requires: notification.user_id = viewer.id
+
+    ensures: notification.read = true
+
+    @guidance
+        -- Ownership, not visibility: another user's notification and a
+        -- notification that does not exist are refused identically, so the two
+        -- cannot be told apart by probing.
+        -- Idempotent -- re-marking an already-read notification succeeds and
+        -- changes nothing, so there is deliberately no `read = false` guard.
+        -- Read state is per notification and per recipient; it is never shared.
+}
+
+rule MarkAllNotificationsRead {
+    -- A recipient clears the unread badge in one action.
+    when: MarkAllAsRead(viewer)
+    let unread = Notifications where user_id = viewer.id and read = false
+
+    ensures:
+        for n in unread:
+            n.read = true
+
+    @guidance
+        -- Scoped to the caller's own unread notifications, and to the ones that
+        -- exist when the action is taken: one arriving during the sweep stays
+        -- unread rather than being silently cleared.
+        -- An empty inbox is not an error.
+}
+
+rule DismissNotificationFromInbox {
+    -- A recipient removes a notification from the inbox permanently.
+    when: DismissNotification(viewer, notification)
+    requires: notification.user_id = viewer.id
+
+    ensures: not exists notification
+
+    @guidance
+        -- Dismissal REMOVES the record. It is not a read-state change and not a
+        -- soft delete, so a dismissed notification cannot be recovered and
+        -- cannot reappear.
+        -- It acts on the in-app copy only. Delivery to the webhook, email and
+        -- push channels has already happened and is unaffected -- dismissing
+        -- here recalls no email and no POST.
+        -- Same ownership contract as MarkNotificationRead.
+}
+
 -- =============================================================================
 -- Invariants
 -- =============================================================================
@@ -773,13 +831,19 @@ actor NotificationRecipient {
 surface NotificationBell {
     -- Bell icon in the app header with unread count badge and dropdown.
     facing viewer: NotificationRecipient
-    context notification: Notification where user_id = viewer.email
+    context notification: Notification where user_id = viewer.id
+        -- user_id holds the User's id, not their address. This read
+        -- `= viewer.email` until 2026-09-05: both sides are String, so the
+        -- predicate type-checked and no tool objected, but it matched nothing
+        -- and would have made every operation below unreachable.
 
     exposes:
         notification.type
         notification.message
         notification.read
         notification.created_at
+        notification.module_id
+        notification.automation_id
 
     provides:
         MarkAsRead(viewer, notification)
@@ -802,7 +866,8 @@ surface NotificationBell {
 surface NotificationPreferencesPanel {
     -- Settings page section for configuring notification preferences.
     facing viewer: NotificationRecipient
-    context prefs: NotificationPreference where user_id = viewer.email
+    context prefs: NotificationPreference where user_id = viewer.id
+        -- Same correction as NotificationBell above: id, not email.
 
     exposes:
         prefs.enabled
@@ -827,6 +892,8 @@ surface NotificationPreferencesPanel {
 -- =============================================================================
 -- Open Questions
 -- =============================================================================
+
+open question "Surface NotificationPreferencesPanel provides UpdatePreferences(viewer, prefs) and ResetToDefaults(viewer, prefs), and no rule listens for either -- the same defect SPEC-B3 raised against the inbox operations, in the same file, still open. Rules were NOT written for them because both need a decision first: UpdatePreferences carries no payload parameter (prefs is the existing context entity), so the signature cannot express what is being changed, and it is unclear whether an update is whole-record or per-field; and ResetToDefaults needs the default it resets TO stated as config or a default declaration rather than left to the prose of @invariant PreferencesDefaults."
 
 open question "Should vacancy_promoted notifications be enabled by default? The user just performed the action — the notification may feel redundant. Consider disabled by default with opt-in."
 

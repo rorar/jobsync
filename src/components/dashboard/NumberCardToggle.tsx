@@ -58,7 +58,7 @@ export default function NumberCardToggle({ data }: NumberCardToggleProps) {
             activeIndicatorTestId="number-card-active-indicator"
           />
         </div>
-        <CardTitle className="text-4xl">
+        <CardTitle as="h2" className="text-4xl">
           {current.num}{" "}
           <span className="text-xs text-muted-foreground">{t("dashboard.jobsApplied")}</span>
         </CardTitle>

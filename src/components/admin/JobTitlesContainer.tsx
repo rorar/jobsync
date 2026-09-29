@@ -24,15 +24,18 @@ function JobTitlesContainer() {
   const loadJobTitles = useCallback(
     async (page: number) => {
       setLoading(true);
-      const { data, total } = await getJobTitleList(
-        page,
-        recordsPerPage,
-        "applied"
-      );
-      if (data) {
-        setTitles((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalJobTitles(total ?? 0);
-        setPage(page);
+      try {
+        const { data, total } = await getJobTitleList(
+          page,
+          recordsPerPage,
+          "applied"
+        );
+        if (data) {
+          setTitles((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalJobTitles(total ?? 0);
+          setPage(page);
+        }
+      } finally {
         setLoading(false);
       }
     },
@@ -52,15 +55,24 @@ function JobTitlesContainer() {
       <div className="col-span-3">
         <Card x-chunk="dashboard-06-chunk-0">
           <CardHeader className="flex-row justify-between items-center">
-            <CardTitle>Job Titles</CardTitle>
-            <div className="flex items-center">
-              <div className="ml-auto flex items-center gap-2">
-                {/* <AddCompany reloadCompanies={reloadJobTitles} /> */}
-              </div>
-            </div>
+            <CardTitle as="h2">{t("admin.jobTitles")}</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading && <Loading />}
+            {/*
+              A live region that enters the DOM together with its content is
+              announced inconsistently; one that is already mounted when its
+              content changes is not. So the announcement lives here, always
+              rendered, and the spinner below is aria-hidden so that the two
+              never announce the same thing twice.
+            */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {loading ? t("common.loading") : ""}
+            </div>
+            {loading && (
+              <div aria-hidden="true">
+                <Loading />
+              </div>
+            )}
             {titles.length > 0 && (
               <>
                 <JobTitlesTable
@@ -82,16 +94,35 @@ function JobTitlesContainer() {
                 </div>
               </>
             )}
+            {/*
+              Without this, an empty list renders a blank card: no table, no
+              message, no explanation. Same shape as ActivityTypesContainer.
+            */}
+            {!loading && titles.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                {t("admin.noJobTitles")}
+              </div>
+            )}
             {titles.length < totalJobTitles && (
               <div className="flex justify-center p-4">
+                {/*
+                  The label stays put: with aria-disabled the button no longer
+                  vanishes from the focus model when it goes inert, and the
+                  live region above already announces the load.
+                */}
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => loadJobTitles(page + 1)}
-                  disabled={loading}
-                  className="btn btn-primary"
+                  onClick={() => {
+                    // aria-disabled keeps the button focusable and in the tab
+                    // order, so refusing the activation is the handler's job.
+                    if (loading) return;
+                    loadJobTitles(page + 1);
+                  }}
+                  aria-disabled={loading}
+                  className="btn btn-primary aria-disabled:opacity-50"
                 >
-                  {loading ? t("common.loading") : t("common.loadMore")}
+                  {t("common.loadMore")}
                 </Button>
               </div>
             )}

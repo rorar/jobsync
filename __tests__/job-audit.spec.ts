@@ -61,6 +61,15 @@ jest.mock("@prisma/client", () => {
     jobStatusHistory: {
       create: jest.fn(),
     },
+    crmNote: {
+      deleteMany: jest.fn(),
+    },
+    crmNoteTarget: {
+      findMany: jest.fn(),
+    },
+    crmTask: {
+      deleteMany: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
@@ -233,6 +242,17 @@ describe("Job-CRUD audit trail (S6a)", () => {
   });
 
   describe("deleteJobById → job.delete", () => {
+    // W-D3: the delete now runs in a transaction together with the orphaned-CRM
+    // prune, so $transaction must execute the array for the audit to be reached.
+    beforeEach(() => {
+      (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.$transaction as jest.Mock).mockImplementation(
+        async (ops: unknown) => Promise.all(ops as Promise<unknown>[]),
+      );
+    });
+
     it("writes one audit entry with action job.delete, no snapshot", async () => {
       (prisma.job.delete as jest.Mock).mockResolvedValue({ id: "job-id" });
 

@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "@/components/ui/use-toast";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, Scale } from "lucide-react";
 import DataExportSettings from "@/components/settings/DataExportSettings";
 import {
   getPrivacySettings,
@@ -96,10 +96,10 @@ export default function PrivacySecuritySettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium flex items-center gap-2">
+          <h2 className="text-lg font-medium flex items-center gap-2">
             <ShieldCheck className="h-5 w-5" />
             {t("settings.privacyTitle")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.privacyDesc")}
           </p>
@@ -115,10 +115,10 @@ export default function PrivacySecuritySettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium flex items-center gap-2">
+        <h2 className="text-lg font-medium flex items-center gap-2">
           <ShieldCheck className="h-5 w-5" />
           {t("settings.privacyTitle")}
-        </h3>
+        </h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.privacyDesc")}
         </p>
@@ -214,6 +214,117 @@ export default function PrivacySecuritySettings() {
             </SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/*
+        W-B3: CRM data retention (GDPR Art. 5(1)(e) storage limitation).
+
+        Placed in `privacy` rather than `danger-zone` because it is a standing
+        data-handling policy, not a one-off destructive act — it belongs beside
+        the export control (Art. 15/20), which is the other ongoing GDPR
+        surface.
+      */}
+      <div className="rounded-lg border p-4 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="crm-retention-enabled">
+              {t("settings.privacyRetentionLabel")}
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.privacyRetentionDesc")}
+            </p>
+          </div>
+          <Switch
+            id="crm-retention-enabled"
+            checked={settings.crmRetentionEnabled}
+            onCheckedChange={(checked) =>
+              save({ ...settings, crmRetentionEnabled: checked })
+            }
+            disabled={isSaving}
+            aria-label={t("settings.privacyRetentionLabel")}
+          />
+        </div>
+
+        {/*
+          The period select stays ENABLED when automatic erasure is off. That is
+          deliberate and is the whole of decision D2: switching the automation
+          off does not delete the policy — the period remains the operator's
+          declared retention period and each contact keeps showing its expiry
+          date. Disabling the control here would say the opposite.
+        */}
+        <div className="space-y-2 border-t pt-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="crm-retention-period">
+              {t("settings.privacyRetentionPeriodLabel")}
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.privacyRetentionPeriodDesc")}
+            </p>
+          </div>
+          <Select
+            value={String(settings.crmRetentionDays)}
+            onValueChange={(value) =>
+              save({
+                ...settings,
+                crmRetentionDays: Number(value) as PrivacySettings["crmRetentionDays"],
+              })
+            }
+            disabled={isSaving}
+          >
+            <SelectTrigger id="crm-retention-period" className="w-[240px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {/*
+                No "never" / "unlimited" option, on purpose: Art. 5(1)(e) does
+                not permit indefinite retention, so offering it as a menu item
+                would smuggle the exact defect this setting exists to fix back
+                in as a configuration.
+              */}
+              <SelectItem value="180">
+                {t("settings.privacyRetention180")}
+              </SelectItem>
+              <SelectItem value="365">
+                {t("settings.privacyRetention365")}
+              </SelectItem>
+              <SelectItem value="730">
+                {t("settings.privacyRetention730")}
+              </SelectItem>
+              <SelectItem value="1095">
+                {t("settings.privacyRetention1095")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {!settings.crmRetentionEnabled && (
+          <p
+            className="rounded-md bg-muted p-3 text-sm text-muted-foreground"
+            role="status"
+          >
+            {t("settings.privacyRetentionOffNotice")}
+          </p>
+        )}
+
+        {/*
+          @rorar asked for this warning explicitly. It is always visible — not a
+          tooltip, not behind a disclosure — because a warning nobody sees is
+          decoration.
+        */}
+        <div className="flex gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+          <Scale
+            className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500"
+            aria-hidden="true"
+          />
+          <div className="space-y-1">
+            <p className="text-sm font-medium">
+              {t("settings.privacyRetentionLegalTitle")}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.privacyRetentionLegalBody")}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* S2: Data Export (GDPR Art. 15, 20) */}

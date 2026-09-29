@@ -210,7 +210,20 @@ export async function checkModuleHealth(
     }
   }
 
-  // Persist to DB (best-effort)
+  // Persist to DB (best-effort).
+  //
+  // `status` is deliberately absent from the create payload. Health is an
+  // observation of an external system; lifecycle (active/inactive) is an
+  // intention, asserted only by the admin-gated activateModule/deactivateModule
+  // (specs/module-lifecycle.allium, AdminOnlyModuleLifecycle — whose own
+  // justification asserts that this path "writes only module.healthStatus, NOT
+  // module.status"). A row materialised by a probe must therefore carry no
+  // opinion about activation: omitting the column lets the schema default
+  // (`status String @default("active")`, prisma/schema.prisma:606) supply it,
+  // which is the same default the manifest declares (registry.ts:67). That
+  // equivalence is what lets E2E reset global module state by deleting rows
+  // rather than writing a status (ADR-043) — absence expresses the default,
+  // and a health probe must not turn it back into a value.
   try {
     await prisma.moduleRegistration.upsert({
       where: { moduleId },
@@ -221,7 +234,6 @@ export async function checkModuleHealth(
       create: {
         moduleId,
         connectorType: registered.manifest.connectorType,
-        status: registered.status,
         healthStatus: newHealthStatus,
       },
     });

@@ -10,9 +10,10 @@ import {
   ArrowRightLeft, FileText, CheckSquare, Calendar,
   UserPlus, UserCog, Mail, MailOpen, Phone, Paperclip,
   Bell, Send, FileCheck, Activity as ActivityIcon,
-  UserX, AlertTriangle,
+  UserX, AlertTriangle, Handshake, Share2,
 } from "lucide-react";
 import type { ActivityType } from "@/models/person.model";
+import { activityLabel, activityDetailText } from "@/components/crm/activity-format";
 
 interface ActivityTimelineProps {
   targetPersonId?: string;
@@ -39,6 +40,8 @@ const ACTIVITY_ICONS: Record<string, React.ElementType> = {
   application_submitted: FileCheck,
   contact_deleted: UserX,
   automation_degraded: AlertTriangle,
+  referral_recorded: Handshake,
+  referral_status_changed: Share2,
 };
 
 const ACTIVITY_TYPES: ActivityType[] = [
@@ -47,6 +50,7 @@ const ACTIVITY_TYPES: ActivityType[] = [
   "contact_updated", "email_sent", "email_received", "call_logged",
   "document_attached", "reminder_triggered", "follow_up_sent",
   "application_submitted", "contact_deleted", "automation_degraded",
+  "referral_recorded", "referral_status_changed",
 ];
 
 export function ActivityTimeline({ targetPersonId, targetJobId, targetCompanyId }: ActivityTimelineProps) {
@@ -123,6 +127,10 @@ export function ActivityTimeline({ targetPersonId, targetJobId, targetCompanyId 
               const type = activity.activityType as string;
               const Icon = ACTIVITY_ICONS[type] ?? ActivityIcon;
               const happenedAt = new Date(activity.happenedAt as string);
+              // Dynamic keys (activity types / referral statuses) bypass the typed
+              // TranslationKey; the helpers own the fallback + JSON-parse safety.
+              const td = (k: string) => t(k as Parameters<typeof t>[0]);
+              const detailText = activityDetailText(type, activity.details, td);
 
               return (
                 <div key={activity.id as string} className="relative flex gap-4 pl-2">
@@ -131,7 +139,7 @@ export function ActivityTimeline({ targetPersonId, targetJobId, targetCompanyId 
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="text-xs">{t(`crm.activity.${type}`)}</Badge>
+                      <Badge variant="outline" className="text-xs">{activityLabel(type, td)}</Badge>
                       {String(activity.linkedRecordName ?? "") && (
                         <span className="text-sm font-medium truncate">{String(activity.linkedRecordName)}</span>
                       )}
@@ -139,8 +147,8 @@ export function ActivityTimeline({ targetPersonId, targetJobId, targetCompanyId 
                     <p className="text-xs text-muted-foreground mt-1">
                       {happenedAt.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </p>
-                    {Boolean(activity.details) && (
-                      <p className="text-xs text-muted-foreground mt-1">{String(activity.details)}</p>
+                    {detailText && (
+                      <p className="text-xs text-muted-foreground mt-1">{detailText}</p>
                     )}
                   </div>
                 </div>

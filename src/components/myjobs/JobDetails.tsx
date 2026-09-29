@@ -90,7 +90,7 @@ function JobDetails({ job }: { job: JobResponse }) {
                 />
                 <span className="text-sm text-muted-foreground">{job?.Company?.label}</span>
               </div>
-              <CardTitle>{job?.JobTitle?.label}</CardTitle>
+              <CardTitle as="h1">{job?.JobTitle?.label}</CardTitle>
               <CardDescription>
                 {job?.Location?.label} - {getJobType(job?.jobType)}
               </CardDescription>
@@ -104,7 +104,7 @@ function JobDetails({ job }: { job: JobResponse }) {
                 : null}
             </div>
           </CardHeader>
-          <h3 className="ml-4">
+          <div className="ml-4">
             {now && job.dueDate && now > job.dueDate && job.Status?.category?.kind === "lead" ? (
               <Badge className="bg-red-500">{t("jobs.expired")}</Badge>
             ) : (
@@ -121,7 +121,7 @@ function JobDetails({ job }: { job: JobResponse }) {
             <span className="ml-2">
               {job?.appliedDate ? formatDateShort(new Date(job?.appliedDate), locale) : ""}
             </span>
-          </h3>
+          </div>
           {job.tags && job.tags.length > 0 && (
             <div className="my-3 ml-4 flex flex-wrap gap-1">
               {job.tags.map((tag) => (
@@ -174,10 +174,10 @@ function JobDetails({ job }: { job: JobResponse }) {
           {/* CRM activity timeline (Welle 3 P3): unified person + company + job
               entries for this job, filtered by job and its hiring company. */}
           <div className="mx-4 mb-4">
-            <h4 className="font-medium mb-2 flex items-center gap-2">
+            <h2 className="font-medium mb-2 flex items-center gap-2">
               <ActivityIcon className="h-4 w-4" />
               {t("crm.timeline")}
-            </h4>
+            </h2>
             <ActivityTimeline
               targetJobId={job.id}
               targetCompanyId={job.Company?.id}
@@ -186,13 +186,13 @@ function JobDetails({ job }: { job: JobResponse }) {
 
           {parsedMatchData && (
             <div className="mx-4 mb-4">
-              <h4 className="font-medium mb-2 flex items-center gap-2">
+              <h2 className="font-medium mb-2 flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 {t("jobs.aiMatchAnalysis")}
                 {job.matchScore && (
                   <Badge variant="default">{job.matchScore}{t("jobs.percentMatch")}</Badge>
                 )}
-              </h4>
+              </h2>
               <MatchDetails matchData={parsedMatchData} />
             </div>
           )}

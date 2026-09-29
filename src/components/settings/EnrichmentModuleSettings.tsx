@@ -113,7 +113,12 @@ function EnrichmentModuleSettings() {
         toast({
           variant: "destructive",
           title: t("settings.error"),
-          description: result.message || t("settings.unexpectedError"),
+          // `message` is an i18n KEY (see module.actions.ts), not display text
+          // — without t() the user reads e.g. "errors.deactivateModule"
+          // verbatim. ApiKeySettings.tsx documents the same trap.
+          description: result.message
+            ? t(result.message)
+            : t("settings.unexpectedError"),
         });
       }
     } catch (error) {
@@ -149,7 +154,12 @@ function EnrichmentModuleSettings() {
         toast({
           variant: "destructive",
           title: t("settings.error"),
-          description: result.message || t("settings.unexpectedError"),
+          // `message` is an i18n KEY (see module.actions.ts), not display text
+          // — without t() the user reads e.g. "errors.deactivateModule"
+          // verbatim. ApiKeySettings.tsx documents the same trap.
+          description: result.message
+            ? t(result.message)
+            : t("settings.unexpectedError"),
         });
       }
     } catch (error) {
@@ -208,9 +218,9 @@ function EnrichmentModuleSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">
+          <h2 className="text-lg font-medium">
             {t("enrichment.modulesTitle")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("enrichment.modulesDescription")}
           </p>
@@ -226,9 +236,9 @@ function EnrichmentModuleSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">
+        <h2 className="text-lg font-medium">
           {t("enrichment.modulesTitle")}
-        </h3>
+        </h2>
         <p className="text-sm text-muted-foreground">
           {t("enrichment.modulesDescription")}
         </p>

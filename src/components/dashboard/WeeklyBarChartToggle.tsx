@@ -155,7 +155,7 @@ export default function WeeklyBarChartToggle({
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between mb-1 mt-3">
           <div className="flex items-baseline gap-2">
-            <CardTitle className="text-green-600">
+            <CardTitle as="h2" className="text-green-600">
               {t("dashboard.weekly")} {resolveLabel(current)}
             </CardTitle>
             {totalHours !== null && (

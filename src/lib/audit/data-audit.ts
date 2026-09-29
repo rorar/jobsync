@@ -29,7 +29,8 @@ export type DataAuditAction =
   | "job.delete"
   | "job.status_change"
   | "job.note_add"
-  | "person.pii_read";
+  | "person.pii_read"
+  | "person.anonymize";
 
 export type DataAuditTargetType = "job" | "person" | "company";
 

@@ -14,7 +14,7 @@ export function KanbanEmptyState({ onAddJob }: KanbanEmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8 max-w-sm mx-auto text-center">
       <Inbox className="h-16 w-16 text-muted-foreground/40" aria-hidden="true" />
-      <h3 className="text-lg font-medium mt-4">{t("jobs.kanbanEmptyBoard")}</h3>
+      <h2 className="text-lg font-medium mt-4">{t("jobs.kanbanEmptyBoard")}</h2>
       {onAddJob && (
         <Button variant="outline" className="mt-6" onClick={onAddJob}>
           <PlusCircle className="h-4 w-4" />

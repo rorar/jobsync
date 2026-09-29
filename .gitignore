@@ -30,6 +30,10 @@ e2e/.auth/
 
 # next.js
 /.next/
+# The E2E production build (scripts/e2e-prod-build.sh). Kept out of /.next/ so a
+# `next start` build and the dev server's Turbopack cache cannot invalidate each
+# other; see next.config.mjs `distDir`.
+/.next-e2e/
 /out/
 
 # production
@@ -60,6 +64,13 @@ next-env.d.ts
 dev.db
 dev.db-journal
 dev.db.backup-*
+
+# E2E disposable run database (scripts/e2e-db.sh). The template is a build
+# artefact rebuilt from schema + migrations + seeds; the run copy dies with the
+# next run. Neither belongs in git, and neither is the developer's dev.db.
+prisma/.e2e-template.db*
+prisma/.e2e-template.stamp
+prisma/.e2e-run.db*
 /test-results/
 /playwright-report/
 /blob-report/
@@ -68,7 +79,14 @@ data/files/resumes
 data/logos
 .github/*
 !.github/workflows
+# Issue forms, PR template and label definitions (2026-09-29). Upstream ignored
+# .github wholesale and re-included only workflows (6fd8247f); these are ours.
+!.github/ISSUE_TEMPLATE/
+!.github/pull_request_template.md
+!.github/labels.yml
 .claude/settings.local.json
+# headroom wrap writes per-run markers next to the settings it borrows
+.claude/.headroom_wrap_*
 .specify
 # /specs — Allium specs are now tracked in git (19 specs, 8000+ lines)
 .vscode
@@ -80,3 +98,21 @@ AGENTS.md
 devenv.lock
 logs/sessions/
 .domain-experts/
+
+# Agent/MCP tool state — local caches and per-machine config, never shared
+.headroom/
+.serena/
+
+# Stray nohup logs. `scripts/restart.sh` run under nohup without a redirect drops
+# one next to the script; test-e2e.sh redirects to /tmp deliberately, so any
+# nohup.out in the tree is an accident.
+nohup.out
+__pycache__/
+
+# V8 heap snapshots. Node writes them to the SERVER's cwd, which is this
+# worktree, and one from a loaded dev server is multiple gigabytes.
+# tools/next-heap/snapshot-pair.py moves them into heap-snapshots/; the bare
+# pattern catches the window before it does, and any taken by hand.
+Heap.*.heapsnapshot
+*.heapsnapshot
+/heap-snapshots/

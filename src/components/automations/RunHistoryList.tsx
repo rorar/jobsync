@@ -83,7 +83,7 @@ export function RunHistoryList({ runs, loading = false, error = false, onRetry }
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{t("automations.runHistory")}</CardTitle>
+          <CardTitle as="h2">{t("automations.runHistory")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8">
@@ -105,7 +105,7 @@ export function RunHistoryList({ runs, loading = false, error = false, onRetry }
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{t("automations.runHistory")}</CardTitle>
+          <CardTitle as="h2">{t("automations.runHistory")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -123,7 +123,7 @@ export function RunHistoryList({ runs, loading = false, error = false, onRetry }
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <History aria-hidden="true" className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">{t("automations.noRuns")}</h3>
+          <h2 className="text-lg font-medium">{t("automations.noRuns")}</h2>
           <p className="text-muted-foreground text-center mt-2">
             {t("automations.noRunsDesc")}
           </p>
@@ -147,7 +147,7 @@ export function RunHistoryList({ runs, loading = false, error = false, onRetry }
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("automations.runHistory")}</CardTitle>
+        <CardTitle as="h2">{t("automations.runHistory")}</CardTitle>
         <CardDescription>
           {t("automations.runHistoryDesc")}
         </CardDescription>

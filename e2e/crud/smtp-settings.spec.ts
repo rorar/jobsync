@@ -1,16 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast, safeWait } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /** Dismiss any visible toast notifications that might overlay buttons. */
 async function dismissToasts(page: Page) {
@@ -48,7 +41,12 @@ async function navigateToSmtp(page: Page) {
     .waitFor({ state: "visible", timeout: 15000 });
 
   // Wait for loading spinner to disappear
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
   await page
+    .getByRole("main")
     .locator(".animate-spin")
     .first()
     .waitFor({ state: "hidden", timeout: 15000 })
@@ -150,6 +148,9 @@ async function deleteSmtpConfig(page: Page) {
     // Dismiss the delete toast
     await dismissToasts(page);
   } catch {
+    // swallow-ok: teardown helper, called from tests that may not have created a
+    // config at all. It asserts through `dismissToasts`/locator waits, and a throw
+    // here would fail the test on its cleanup rather than on its subject.
     // Config may not exist — skip cleanup
   }
 }
@@ -196,8 +197,8 @@ test.describe("SMTP Settings", () => {
 
   test("should configure SMTP and display the saved config", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);
@@ -229,8 +230,8 @@ test.describe("SMTP Settings", () => {
     await deleteSmtpConfig(page);
   });
 
-  test("should edit SMTP configuration", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should edit SMTP configuration", async ({ page }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);
@@ -272,8 +273,8 @@ test.describe("SMTP Settings", () => {
     await deleteSmtpConfig(page);
   });
 
-  test("should delete SMTP configuration", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should delete SMTP configuration", async ({ page }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);
@@ -306,8 +307,8 @@ test.describe("SMTP Settings", () => {
 
   test("should show test email button with cooldown text", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
 
     await navigateToSmtp(page);

@@ -1,15 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { ensureEnglishLocale } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToStaging(page: Page) {
   await page.goto("/dashboard/staging");

@@ -57,6 +57,16 @@ interview and attaches no new contact (not new processing).
 `ConsentBlockedRecordIsProcessingRestricted` + `ConsentBlockOnlyOnConsentBasis`
 invariants, `consent_withdrawn_at` on `PersonGdprExtension` + `PersonDataExport`.
 
+> **Updated 2026-08-25 (W-H1).** `PersonGdprExtension` no longer exists.
+> `crm-gdpr.allium` now imports `crm.allium` instead of hand-copying its
+> entities, so `consent_withdrawn_at` and the derived `is_consent_blocked` live
+> on `crm/Person` (`specs/crm.allium` `entity Person`) — where the Prisma column
+> `Person.consentWithdrawnAt` always was. The rules and both invariants are
+> unchanged and still in `crm-gdpr.allium`; they now read the fields off
+> `crm/Person`. The two Art. 7(3) actions this ADR describes also finally have a
+> declared boundary: `surface ConsentManagement` in `crm-gdpr.allium`.
+> See `docs/w-h1-crm-gdpr-drift-inventory.md`.
+
 ## Consequences
 
 - **+** Art. 7(3) satisfied with a reversible, non-destructive model.

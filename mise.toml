@@ -1,0 +1,19 @@
+# Toolchain for local development (https://mise.jdx.dev). Replaces devenv.nix on
+# hosts without Nix; devenv.nix stays for those that still use it.
+#
+# Keep these versions equal to the other two places that pin them:
+#   bun  -> Dockerfile `COPY --from=oven/bun:<version>-alpine` and
+#           .github/workflows/ci.yml `bun-version`
+#   node -> Dockerfile `FROM node:<version>-alpine` and ci.yml `node-version`
+# Jest needs Node 22 (not bun): see scripts/test.sh.
+#
+# Deliberately NOT here:
+# - python: tools/allium-refcheck/refcheck.py runs on the system python3; a
+#   mise pin would make every shell that enters this directory download one.
+# - [env] _.file = ".env": mise's dotenv parser rejects lines that
+#   src/lib/env-sync.ts writes, and secrets should not be loaded into every
+#   shell. The app reads .env itself.
+# - Prisma engines / Playwright browsers: the tools fetch matching binaries.
+[tools]
+bun = "1.4.0"
+node = "22.23.2"

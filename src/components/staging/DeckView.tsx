@@ -322,7 +322,7 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
     return (
       <div className="flex flex-col items-center justify-center py-16 px-8 max-w-sm mx-auto text-center">
         <Inbox className="h-16 w-16 text-muted-foreground/40" />
-        <h3 className="text-lg font-medium mt-4">{t("deck.emptyTitle")}</h3>
+        <h2 className="text-lg font-medium mt-4">{t("deck.emptyTitle")}</h2>
         <p className="text-sm text-muted-foreground mt-2">{t("deck.emptyDescription")}</p>
         <Button variant="outline" className="mt-6" onClick={onBackToList}>
           {t("deck.backToList")}
@@ -336,7 +336,7 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
     return (
       <div className="flex flex-col items-center justify-center py-16 px-8 max-w-sm mx-auto text-center">
         <CheckCircle2 className="h-16 w-16 text-emerald-500/60" />
-        <h3 className="text-lg font-medium mt-4">{t("deck.sessionCompleteTitle")}</h3>
+        <h2 className="text-lg font-medium mt-4">{t("deck.sessionCompleteTitle")}</h2>
         <p className="text-sm text-muted-foreground mt-2">
           {t("deck.sessionCompleteDescription")
             .replace("{count}", String(stats.promoted + stats.dismissed + stats.superLiked + stats.blocked + stats.skipped))

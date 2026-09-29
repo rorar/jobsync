@@ -58,6 +58,8 @@ const dataSourceVariant = (source: string) => {
       return "secondary" as const;
     case "imported":
       return "outline" as const;
+    case "quick_capture":
+      return "secondary" as const;
     default:
       return "outline" as const;
   }
@@ -223,6 +225,7 @@ export default function ContactsPageClient() {
             <SelectItem value="manual">{t("crm.dataSource.manual")}</SelectItem>
             <SelectItem value="auto_created">{t("crm.dataSource.auto_created")}</SelectItem>
             <SelectItem value="imported">{t("crm.dataSource.imported")}</SelectItem>
+            <SelectItem value="quick_capture">{t("crm.dataSource.quick_capture")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -246,7 +249,7 @@ export default function ContactsPageClient() {
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <Users className="h-16 w-16 text-muted-foreground" />
           <div className="text-center">
-            <h3 className="text-lg font-medium">{t("crm.noContacts")}</h3>
+            <h2 className="text-lg font-medium">{t("crm.noContacts")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {t("crm.noContactsDescription")}
             </p>

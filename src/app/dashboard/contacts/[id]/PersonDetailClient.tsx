@@ -182,7 +182,9 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   // excludes the current contact (NoSelfConnection is also enforced server-side).
   const openAddConnection = async () => {
     setAddConnOpen(true);
-    const res = await getPersons({ pageSize: 200 });
+    // IT-B1: pickers must never surface anonymized/archived persons — selecting
+    // an erased contact would re-link it into new processing (GDPR Art. 17).
+    const res = await getPersons({ status: "active", pageSize: 200 });
     if (res.success && res.data) {
       setConnPersons(
         res.data.persons
@@ -352,7 +354,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Contact Info */}
             <Card>
-              <CardHeader><CardTitle>{t("crm.contactDetails")}</CardTitle></CardHeader>
+              <CardHeader><CardTitle as="h2">{t("crm.contactDetails")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {String(person.headline ?? "") && (
                   <div className="flex items-center gap-2 text-sm">
@@ -388,7 +390,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
 
             {/* Emails & Phones */}
             <Card>
-              <CardHeader><CardTitle>{t("crm.email")} & {t("crm.phone")}</CardTitle></CardHeader>
+              <CardHeader><CardTitle as="h2">{t("crm.email")} & {t("crm.phone")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {emails.map((e) => (
                   <div key={e.email} className="flex items-center gap-2 text-sm">
@@ -410,7 +412,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
 
             {/* GDPR Info */}
             <Card>
-              <CardHeader><CardTitle>{t("crm.gdpr")}</CardTitle></CardHeader>
+              <CardHeader><CardTitle as="h2">{t("crm.gdpr")}</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("crm.processingBasis")}</span>

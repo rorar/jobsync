@@ -6,7 +6,7 @@ import "server-only";
  * IMPORTANT: This file MUST be imported synchronously (not via dynamic import)
  * in every entry point that queries the ModuleRegistry (module.actions.ts,
  * runner.ts, providers.ts). Modules must be registered before the first
- * facade query (enrichmentConnectorRegistry, connectorRegistry, etc.).
+ * facade query (connectorRegistry, aiProviderRegistry, etc.).
  *
  * Replaces the per-connector barrel files (connectors.ts).
  * Each import triggers the module's self-registration side effect.

@@ -26,6 +26,64 @@ export const getAllActivityTypes = async (): Promise<ActionResult<ActivityType[]
   }
 };
 
+export const getActivityTypeList = async (
+  page: number = 1,
+  limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
+  countBy?: string
+): Promise<ActionResult<ActivityType[]>> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("errors.notAuthenticated");
+    }
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      prisma.activityType.findMany({
+        where: {
+          createdBy: user.id,
+        },
+        skip,
+        take: limit,
+        ...(countBy
+          ? {
+              select: {
+                id: true,
+                label: true,
+                value: true,
+                createdBy: true,
+                // Capitalised relation names — prisma/schema.prisma:491-492
+                // declares `Activities Activity[]` and `Tasks Task[]`, so the
+                // count keys are not the lower-case ones the siblings use.
+                _count: {
+                  select: {
+                    Activities: true,
+                    Tasks: true,
+                  },
+                },
+              },
+            }
+          : {}),
+        orderBy: {
+          Activities: {
+            _count: "desc",
+          },
+        },
+      }),
+      prisma.activityType.count({
+        where: {
+          createdBy: user.id,
+        },
+      }),
+    ]);
+    return { success: true, data, total };
+  } catch (error) {
+    const msg = "errors.fetchFailed";
+    return handleError(error, msg);
+  }
+};
+
 export const createActivityType = async (
   label: string
 ): Promise<ActionResult<ActivityType>> => {
@@ -47,6 +105,72 @@ export const createActivityType = async (
     return { success: true, data: upsertedActivityType };
   } catch (error) {
     const msg = "errors.createFailed";
+    return handleError(error, msg);
+  }
+};
+
+export const deleteActivityTypeById = async (
+  activityTypeId: string
+): Promise<ActionResult<ActivityType>> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("errors.notAuthenticated");
+    }
+
+    // ADR-015: scope the guard to this user's activities.
+    //
+    // The database already refuses this delete on its own: Activity.activityTypeId
+    // is NOT NULL (prisma/schema.prisma:510) behind an ON DELETE RESTRICT foreign
+    // key (Activity_activityTypeId_fkey, most recently written in
+    // prisma/migrations/20260513170926_s1_account_deletion_cascades/migration.sql:17).
+    // The count exists to turn that refusal into a translated message rather than
+    // a raw P2003.
+    //
+    // Scoping leaves a residual gap, and it is the right trade: the constraint is
+    // global while this count is per-user, so an activity belonging to somebody
+    // else passes the guard and the delete then fails with P2003, which
+    // handleError maps to errors.referenceError (src/lib/utils.ts:57). That is a
+    // graceful translated failure. Widening the count to close it would let
+    // another user's rows block this delete and leak their existence — the exact
+    // defect ADR-015 is about, and the one jobtitle.actions.ts:120-123 records
+    // having been fixed for. All five sibling reference deletes (tag, company,
+    // jobtitle, jobSource, jobLocation) carry the same residual by the same
+    // choice.
+    const activities = await prisma.activity.count({
+      where: {
+        activityTypeId,
+        userId: user.id,
+      },
+    });
+
+    if (activities > 0) {
+      throw new Error(
+        `Activity type cannot be deleted while activities still reference it! `
+      );
+    }
+
+    // There is deliberately NO Task guard here. The two foreign keys onto
+    // ActivityType are asymmetric, and the asymmetry is in the generated SQL, not
+    // in a Prisma default: Task_activityTypeId_fkey is ON DELETE SET NULL
+    // (prisma/migrations/20260113163354_add_task_model/migration.sql:15) over a
+    // nullable column (prisma/schema.prisma:531). A task with no activity type is
+    // a first-class valid state, not a broken one — src/models/addTaskForm.schema.ts:30
+    // has the field `optional().nullable()`, src/models/task.model.ts:29 types it
+    // `string | null`, and src/components/tasks/TasksSidebar.tsx:30-46 renders the
+    // "All" bucket such a task stays in. Blocking on tasks would make a type
+    // permanently undeletable for a state the domain explicitly supports. The UI
+    // warns about the task count instead and lets the user proceed.
+    const res = await prisma.activityType.delete({
+      where: {
+        id: activityTypeId,
+        createdBy: user.id,
+      },
+    });
+    return { success: true, data: res };
+  } catch (error) {
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

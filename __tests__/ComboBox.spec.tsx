@@ -15,6 +15,7 @@
 
 import React from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useForm } from "react-hook-form";
 import { Form, FormField, FormItem } from "@/components/ui/form";
 import { Combobox } from "@/components/ComboBox";
@@ -81,5 +82,89 @@ describe("Combobox trigger value rendering (#6 re-verify)", () => {
     // empty (find() miss). Unreachable on the real jobs page (getAllCompanies
     // returns ALL of the user's companies).
     expect(screen.getByRole("combobox")).not.toHaveTextContent("Select Company");
+  });
+});
+
+/**
+ * E2E-B39 regression.
+ *
+ * A created option must survive the PARENT replacing the options array. The
+ * old code made a created option visible by calling `options.unshift(result)`
+ * — mutating the prop in place — while the trigger derived its text from that
+ * same array. A parent that refetches (AddExperience does, on mount) dropped
+ * the row out, `field.value` still held the new id, `find` missed, and the
+ * trigger rendered "".
+ *
+ * This is written as a PRODUCT test, not an E2E one, because that is what the
+ * defect is. It was tracked for days as test-isolation flakiness: a loaded
+ * server widens the window between the create resolving and the fetch landing,
+ * so it surfaced only when other specs ran first.
+ */
+function CreateHarness({ optionsAfterRefetch }: { optionsAfterRefetch: typeof OPTIONS }) {
+  const form = useForm({ defaultValues: { company: "" } });
+  // A COPY, and that detail is the test. The old code called
+  // `options.unshift(result)`, mutating whatever array it was handed — so
+  // seeding from the shared `OPTIONS` and then "refetching" `OPTIONS` would
+  // hand back the very array the created row had just been pushed into, and
+  // the assertion below would pass against the defect. It did, on the first
+  // draft of this test.
+  const [options, setOptions] = React.useState(() => [...OPTIONS]);
+  return (
+    <Form {...form}>
+      <button type="button" onClick={() => setOptions(optionsAfterRefetch)}>
+        simulate parent refetch
+      </button>
+      <FormField
+        control={form.control}
+        name="company"
+        render={({ field }) => (
+          <FormItem>
+            <Combobox
+              options={options}
+              field={field}
+              label="Company"
+              creatable
+              onCreateOption={async (label: string) => ({
+                id: "created-1",
+                label,
+                value: label.toLowerCase(),
+              })}
+            />
+          </FormItem>
+        )}
+      />
+    </Form>
+  );
+}
+
+describe("Combobox created-option durability (E2E-B39)", () => {
+  // jsdom implements no scrollIntoView and Radix's Command calls it on the
+  // active item. Same shape as the setPointerCapture stub in
+  // SuperLikeCelebration.spec.tsx — a jsdom gap, not a component defect.
+  beforeAll(() => {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    (HTMLElement.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView = () => {};
+  });
+
+  it("keeps showing a created option after the parent replaces the options array", async () => {
+    const user = userEvent.setup();
+    // The refetch deliberately does NOT contain the created row — that is the
+    // real sequence: the fetch was in flight before the create resolved.
+    render(<CreateHarness optionsAfterRefetch={[...OPTIONS]} />);
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(
+      screen.getByPlaceholderText(/create or search/i),
+      "Initech",
+    );
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByRole("combobox")).toHaveTextContent("Initech");
+
+    await user.click(screen.getByText("simulate parent refetch"));
+
+    // The decisive assertion: before the fix this read "" because the created
+    // row lived only in the array the parent just threw away.
+    expect(screen.getByRole("combobox")).toHaveTextContent("Initech");
   });
 });

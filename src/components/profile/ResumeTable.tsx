@@ -163,7 +163,7 @@ function ResumeTable({ resumes, editResume, reloadResumes }: ResumeTableProps) {
         </TableBody>
       </Table>
       <DeleteAlertDialog
-        pageTitle={t("profile.resume")}
+        pageTitle={t("profile.deleteTargetResume")}
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={() => deleteResume(resumeToDelete!)}

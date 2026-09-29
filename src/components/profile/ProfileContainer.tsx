@@ -79,10 +79,17 @@ const ProfileContainer = () => {
 
   return (
     <div className="space-y-4">
-      <ProfilePreferencesCard />
+      {/*
+        The resume card comes FIRST because its title is the page's name: it is
+        rendered as an h1 and every other heading on this page has to sit below
+        it. ProfilePreferencesCard opens with an h2, so while it was above, a
+        screen-reader user met a section of the page before the page named
+        itself. Moving it down is the only fix that neither duplicates the
+        title nor invents a second one. See UI-B18 in docs/BUGS.md.
+      */}
       <Card>
       <CardHeader className="flex-row justify-between items-center">
-        <CardTitle>{t("profile.title")}</CardTitle>
+        <CardTitle as="h1">{t("profile.title")}</CardTitle>
         <div className="flex items-center">
           <Button
             size="sm"
@@ -130,19 +137,30 @@ const ProfileContainer = () => {
         )}
         {resumes.length < totalResumes && (
           <div className="flex justify-center p-4">
+            {/*
+              The label stays put: with aria-disabled the button no longer
+              vanishes from the focus model when it goes inert, and the
+              <Loading /> region above already announces the load.
+            */}
             <Button
               size="sm"
               variant="outline"
-              onClick={() => loadResumes(page + 1)}
-              disabled={loading}
-              className="btn btn-primary"
+              onClick={() => {
+                // aria-disabled keeps the button focusable and in the tab
+                // order, so refusing the activation is the handler's job.
+                if (loading) return;
+                loadResumes(page + 1);
+              }}
+              aria-disabled={loading}
+              className="btn btn-primary aria-disabled:opacity-50"
             >
-              {loading ? t("profile.loading") : t("profile.loadMore")}
+              {t("profile.loadMore")}
             </Button>
           </div>
         )}
       </CardContent>
       </Card>
+      <ProfilePreferencesCard />
     </div>
   );
 };

@@ -60,7 +60,7 @@ export default function RecentCardToggle({
     <Card className="mb-2">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-green-600">
+          <CardTitle as="h2" className="text-green-600">
             {t("dashboard.recent")} {currentLabel}
           </CardTitle>
           <ToolbarRadioGroup<RecentTab>

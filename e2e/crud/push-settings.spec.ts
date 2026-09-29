@@ -1,15 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { ensureEnglishLocale } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /** Navigate to Settings > Push section. */
 async function navigateToPush(page: Page) {
@@ -26,6 +20,22 @@ async function navigateToPush(page: Page) {
     .getByText("Push Notifications", { exact: true })
     .first()
     .waitFor({ state: "visible", timeout: 15000 });
+
+  // ...and then for the panel's own data. PushSettings.tsx:347 early-returns a
+  // loading block containing that same heading, so the wait above passes while
+  // the controls are still unmounted.
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
+  await page
+    .getByRole("main")
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 15000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +65,12 @@ test.describe("Push Settings", () => {
     ).toBeVisible();
 
     // Wait for loading spinner to disappear
+    // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+    // DOM order) renders its own .animate-spin whenever a scheduler run is
+    // active, so an unscoped .first() would wait on the wrong element,
+    // time out, and be swallowed by the .catch below.
     await page
+      .getByRole("main")
       .locator(".animate-spin")
       .first()
       .waitFor({ state: "hidden", timeout: 15000 })

@@ -6,6 +6,7 @@
  */
 import { anonymizePerson, mergePersons, updatePerson, withdrawConsent, reinstateConsent } from "@/actions/person.actions";
 import { getCurrentUser } from "@/utils/user.utils";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import db from "@/lib/db";
 
 // ---------------------------------------------------------------------------
@@ -29,12 +30,18 @@ jest.mock("@/lib/db", () => ({
     crmBlocklist: { deleteMany: jest.fn() },
     referral: { updateMany: jest.fn() },
     personConnection: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+    crmNote: { deleteMany: jest.fn(), updateMany: jest.fn() },
+    crmTask: { deleteMany: jest.fn(), updateMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
 
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
+}));
+
+jest.mock("@/lib/audit/data-audit", () => ({
+  writeDataAuditLog: jest.fn(),
 }));
 
 jest.mock("next/cache", () => ({
@@ -64,6 +71,8 @@ const mockDb = db as unknown as {
   crmBlocklist: { deleteMany: jest.Mock };
   referral: { updateMany: jest.Mock };
   personConnection: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+  crmNote: { deleteMany: jest.Mock; updateMany: jest.Mock };
+  crmTask: { deleteMany: jest.Mock; updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -71,7 +80,7 @@ const mockDb = db as unknown as {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const USER = { id: "user-1" };
+const USER = { id: "user-1", email: "user-1@example.com" };
 const PERSON_ID = "person-1";
 const WINNER_ID = "winner-1";
 const LOSER_ID = "loser-1";
@@ -113,6 +122,10 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
     mockDb.crmTaskTarget.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.crmTaskTarget.findMany.mockResolvedValue([]);
     mockDb.crmTaskTarget.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.crmNote.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.crmNote.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.crmTask.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.crmTask.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.crmInterview.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmActivityLog.updateMany.mockResolvedValue({ count: 0 });
     mockDb.jobContact.deleteMany.mockResolvedValue({ count: 0 });
@@ -159,6 +172,103 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       });
     });
 
+    it("writes an attributable audit entry for the erasure, with no snapshot (Art. 5(2))", async () => {
+      await anonymizePerson(PERSON_ID);
+
+      expect(writeDataAuditLog).toHaveBeenCalledWith({
+        actorId: USER.id,
+        actorEmail: USER.email,
+        action: "person.anonymize",
+        targetType: "person",
+        targetId: PERSON_ID,
+      });
+      // No before/after: an erasure snapshot would preserve the very PII the
+      // erasure removes (audit-trail.allium DataMinimisation).
+      const call = (writeDataAuditLog as jest.Mock).mock.calls[0][0];
+      expect(call.beforeAfter).toBeUndefined();
+    });
+
+    it("scrubs free text on notes and tasks that named this person (GDPR Art. 17)", async () => {
+      mockDb.crmNoteTarget.findMany.mockResolvedValue([{ noteId: "note-1" }]);
+      mockDb.crmTaskTarget.findMany.mockResolvedValue([{ taskId: "task-1" }]);
+
+      await anonymizePerson(PERSON_ID);
+
+      // A record that ALSO targets a Job survives the target removal, so the
+      // prune (zero targets) never reaches it — but it still holds free text
+      // about the erased person, and the Art. 15 export reads notes by userId
+      // with no target filter. Scrub rather than retain.
+      expect(mockDb.crmNote.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["note-1"] }, userId: USER.id },
+        data: {
+          title: null,
+          body: "",
+          updatedByType: "system",
+          updatedById: USER.id,
+        },
+      });
+      // Tasks are scrubbed, never deleted — rule DeleteTask permits a hard
+      // delete only from a terminal status, and the board renders the row.
+      expect(mockDb.crmTask.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["task-1"] }, userId: USER.id },
+        data: {
+          title: "",
+          description: null,
+          updatedByType: "system",
+          updatedById: USER.id,
+        },
+      });
+      expect(mockDb.crmTask.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("scrubs before the targets are removed, so the ids still name the records", async () => {
+      mockDb.crmNoteTarget.findMany.mockResolvedValue([{ noteId: "note-1" }]);
+
+      await anonymizePerson(PERSON_ID);
+
+      const ops = mockDb.$transaction.mock.calls[0][0];
+      const scrub = mockDb.crmNote.updateMany.mock.results[0].value;
+      const targetDelete = mockDb.crmNoteTarget.deleteMany.mock.results[0].value;
+      expect(ops.indexOf(scrub)).toBeLessThan(ops.indexOf(targetDelete));
+    });
+
+    it("prunes notes orphaned by the target removal, last in the tx (W-D3)", async () => {
+      await anonymizePerson(PERSON_ID);
+
+      // Removing the person's note targets can leave a note with zero targets —
+      // unreachable in the UI, yet still holding free text about the erased
+      // person (GDPR Art. 17). It must be pruned in the same tx.
+      expect(mockDb.crmNoteTarget.findMany).toHaveBeenCalledWith({
+        where: { targetPersonId: PERSON_ID, note: { userId: USER.id } },
+        select: { noteId: true },
+      });
+      expect(mockDb.crmNote.deleteMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: [] },
+          userId: USER.id,
+          targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
+        },
+      });
+
+      // Tasks are NOT pruned: an orphaned task stays visible on the board and
+      // still fires overdue reminders, and rule DeleteTask forbids hard-deleting
+      // a non-terminal task.
+      expect(mockDb.crmTask.deleteMany).not.toHaveBeenCalled();
+
+      // The prune's no-live-target predicate only holds once the
+      // target rows are gone — it must be the LAST op in the transaction array.
+      const ops = mockDb.$transaction.mock.calls[0][0];
+      expect(ops[ops.length - 1]).toBe(mockDb.crmNote.deleteMany.mock.results[0].value);
+    });
+
     it("includes userId in jobContact.deleteMany WHERE clause", async () => {
       await anonymizePerson(PERSON_ID);
 
@@ -185,7 +295,7 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       });
     });
 
-    it("includes userId in crmBlocklist.deleteMany WHERE clause when person has emails", async () => {
+    it("removes blocklist entries for the person's email AND its domain (W-C3)", async () => {
       mockDb.person.findFirst.mockResolvedValue(
         basePerson(PERSON_ID, {
           emails: JSON.stringify([{ email: "alice@example.com", isPrimary: true, label: "work" }]),
@@ -197,9 +307,39 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       expect(mockDb.crmBlocklist.deleteMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
           userId: USER.id,
-          handle: { in: ["alice@example.com"] },
+          handle: { in: expect.arrayContaining(["alice@example.com", "example.com"]) },
         }),
       });
+    });
+
+    it("removes blocklist entries for the person's phone handles too (W-C3)", async () => {
+      mockDb.person.findFirst.mockResolvedValue(
+        basePerson(PERSON_ID, {
+          emails: JSON.stringify([{ email: "bob@acme.io", isPrimary: true, label: "work" }]),
+          phones: JSON.stringify([{ number: "+49 170 1234567", type: "work", isPrimary: true }]),
+        }),
+      );
+
+      await anonymizePerson(PERSON_ID);
+
+      const call = mockDb.crmBlocklist.deleteMany.mock.calls[0][0];
+      const handles: string[] = call.where.handle.in;
+      expect(handles).toEqual(
+        expect.arrayContaining(["bob@acme.io", "acme.io", "+49 170 1234567"]),
+      );
+    });
+
+    it("marks the anonymized person's last actor as the system (W-C4)", async () => {
+      await anonymizePerson(PERSON_ID);
+
+      expect(mockDb.person.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "anonymized",
+            updatedBySource: "system",
+          }),
+        }),
+      );
     });
 
     // Inside Track (Welle 5) — AnonymizeCascadesToInsideTrack (specs/inside-track.allium)
@@ -615,6 +755,100 @@ describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
 
         expect(result.success).toBe(true);
         expect(mockDb.company.count).not.toHaveBeenCalled();
+        expect(mockDb.person.update).toHaveBeenCalled();
+      });
+    });
+
+    // W-H2: create rejects a subdivision without a country; update must be
+    // symmetric — over the effective (post-update) state, not just the input.
+    // The boundary regex answers "well-formed?", not "real?". NT (Neutral Zone,
+    // withdrawn 1993) and YD (South Yemen, withdrawn 1990) pass it, and ICU still
+    // holds week data for them -- so an unreal country yielded a plausible
+    // business calendar rather than an error. Membership now gates both write
+    // paths; this block covers update, and createPerson carries the same gate.
+    describe("country code must be a live ISO 3166-1 alpha-2", () => {
+      const stubExisting = {
+        id: PERSON_ID,
+        status: "active",
+        processingBasis: "legitimate_interest",
+        consentWithdrawnAt: null,
+        addressCountryCode: null,
+        addressSubdivisionCode: null,
+      };
+
+      it.each(["NT", "YD", "XX", "ZZ"])(
+        "rejects the well-formed but non-existent code %s without writing",
+        async (code) => {
+          mockDb.person.findFirst.mockResolvedValue(stubExisting);
+
+          const result = await updatePerson(PERSON_ID, { addressCountryCode: code });
+
+          expect(result.success).toBe(false);
+          expect(result.message).toBe("crm.errors.invalidCountryCode");
+          expect(mockDb.person.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it("still accepts a real country code in lower case", async () => {
+        mockDb.person.findFirst.mockResolvedValue(stubExisting);
+
+        const result = await updatePerson(PERSON_ID, { addressCountryCode: "de" });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe("subdivision requires country (W-H2)", () => {
+      it("rejects a subdivision when neither input nor existing supplies a country", async () => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+          addressCountryCode: null,
+          addressSubdivisionCode: null,
+        });
+
+        const result = await updatePerson(PERSON_ID, { addressSubdivisionCode: "BY" });
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("crm.errors.subdivisionWithoutCountry");
+        expect(mockDb.person.update).not.toHaveBeenCalled();
+      });
+
+      it("rejects nulling the country while a subdivision remains set", async () => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+          addressCountryCode: "DE",
+          addressSubdivisionCode: "BY",
+        });
+
+        const result = await updatePerson(PERSON_ID, { addressCountryCode: null });
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("crm.errors.subdivisionWithoutCountry");
+        expect(mockDb.person.update).not.toHaveBeenCalled();
+      });
+
+      it("accepts a subdivision paired with a country in the same update", async () => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+          addressCountryCode: null,
+          addressSubdivisionCode: null,
+        });
+
+        const result = await updatePerson(PERSON_ID, {
+          addressCountryCode: "DE",
+          addressSubdivisionCode: "BY",
+        });
+
+        expect(result.success).toBe(true);
         expect(mockDb.person.update).toHaveBeenCalled();
       });
     });

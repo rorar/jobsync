@@ -215,6 +215,26 @@ describe("Tag Actions", () => {
       });
     });
 
+    // ADR-015 regression. Both counts ran unscoped until 2026-09-08, so another
+    // user's job or question blocked this delete and leaked its existence. The
+    // ownership columns differ — Job.userId, Question.createdBy — which is the
+    // detail a fix is most likely to get half right, so this asserts both where
+    // clauses rather than the outcome.
+    it("scopes both guards to this user's rows", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.job.count as jest.Mock).mockResolvedValue(0);
+      (prisma.question.count as jest.Mock).mockResolvedValue(0);
+
+      await deleteTagById("tag-1");
+
+      expect(prisma.job.count).toHaveBeenCalledWith({
+        where: { tags: { some: { id: "tag-1" } }, userId: mockUser.id },
+      });
+      expect(prisma.question.count).toHaveBeenCalledWith({
+        where: { tags: { some: { id: "tag-1" } }, createdBy: mockUser.id },
+      });
+    });
+
     it("should return error when tag is linked to jobs only", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.job.count as jest.Mock).mockResolvedValue(3);

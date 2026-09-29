@@ -15,6 +15,7 @@ import {
   isConsentBlocked,
   CRM_CONFIG,
 } from "@/models/person.model";
+import { touchPersonsRetention } from "@/lib/crm/retention-policy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,6 +113,15 @@ export async function createCrmTask(
         },
       },
     });
+
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // a task targeting a contact asserts a FUTURE need for them — the cleanest
+    // necessity signal there is under Art. 5(1)(e). ALL person targets are
+    // touched, not just `firstTarget` (see createCrmNote for the same note).
+    await touchPersonsRetention(
+      user.id,
+      input.targets.map((t) => t.targetPersonId),
+    );
 
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
     const firstTarget = input.targets[0];
@@ -230,6 +240,12 @@ export async function deleteCrmTask(taskId: string): Promise<ActionResult<{ id: 
       where: { id: taskId, userId: user.id },
     });
     if (!task) return { success: false, message: "crm.errors.taskNotFound" };
+
+    // DeleteTask spec (crm.allium): only terminal tasks may be hard-deleted;
+    // an active task must be cancelled first (W-A1).
+    if (task.status !== "done" && task.status !== "cancelled") {
+      return { success: false, message: "crm.errors.taskNotTerminal" };
+    }
 
     // Cascade delete targets via onDelete: Cascade
     await prisma.crmTask.delete({ where: { id: taskId } });

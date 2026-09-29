@@ -1,0 +1,337 @@
+#!/usr/bin/env bash
+# Fail when an E2E run left rows behind that nothing owns.
+#
+# Implements `SettledTestCaseOwnsNoLeakedRow` in
+# specs/e2e-test-infrastructure.allium, which has existed as prose since
+# 2026-09-02 and has had no enforcement: its only implementations are two
+# per-file afterEach detectors that `console.warn` and never fail
+# (e2e/crud/settings-api-keys.spec.ts, e2e/crud/webhook-settings.spec.ts).
+#
+# WHY THIS EXISTS RATHER THAN A FIXTURE REWRITE
+# --------------------------------------------
+# The alternative was routing all 26 spec files through Playwright factory
+# fixtures. Measured against one full run, that buys a property most models
+# already have, at the cost of touching 77 tests. This gate enforces the
+# property instead, and catches the next spec that breaks it — which is what the
+# rewrite was actually for.
+#
+# The premise it was first argued from turned out to be wrong, and that is worth
+# recording here rather than in a commit nobody re-reads: the models that ended
+# at zero residue did so because the run was GREEN, not because those specs own
+# their rows. smtp-settings, settings-blacklist and question-crud clean up
+# INLINE at the end of the test body — the path a failed assertion skips.
+# Measured 2026-09-02: one injected failing assertion before the inline delete
+# leaves SmtpConfig at 1, an active per-user singleton (E2E-B37).
+#
+# TWO SHAPES, ONLY ONE OF WHICH A COUNT CAN SEE
+# ---------------------------------------------
+#   INSERT residue — a row created and not deleted. A count delta finds it.
+#   UPDATE residue — an existing row mutated and not restored. The count is
+#     UNCHANGED, so counting alone cannot see it. Found here by ATTACHing the
+#     template and asking which rows that came FROM it were written after this
+#     run was provisioned. Verified against a seeded StagedVacancy.
+#
+# AND THE EXAMPLE THAT MOTIVATED THE UPDATE HALF IS NOT COVERED BY IT.
+# `deactivateModule` upserts onto a ModuleRegistration row the health monitor
+# created (src/actions/module.actions.ts:348), and that is exactly the shape a
+# count misses — but neither prisma/seed.ts nor seed-e2e.ts creates a
+# ModuleRegistration row, so the template holds NONE, and the `EXISTS (… FROM
+# tmpl …)` filter below excludes every one of them. The model is in
+# ALLOWED_MUTATION as well, but removing it would change nothing: the query
+# cannot reach those rows either way. Stated here rather than left for someone
+# to discover, because the header of a check claiming coverage it does not have
+# is worse than no header. Closing it means seeding module state into the
+# template so the rows exist to be compared.
+# So this checks both: counts for the first, `updatedAt` against the run's own
+# provisioning timestamp for the second.
+#
+# Its blind spot, stated rather than discovered later: `Profile` has no
+# `updatedAt` column, so a mutation of a seeded Profile row is invisible to both
+# halves. `Job`, `Company`, `JobTitle` and `Location` have none either.
+set -uo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DIR/.."
+source "$DIR/e2e-db.sh"
+
+# ---------------------------------------------------------------------------
+# Allowlists. Every entry carries its reason; an allowlist that does not say why
+# decays into "things we gave up on".
+# ---------------------------------------------------------------------------
+
+# Rows these models gain are not leaks. Membership only, deliberately no
+# budgets: AdminAuditLog is written on every job create/update/delete and every
+# Person PII read (src/lib/audit/data-audit.ts:77) fire-and-forget, the CRM cron
+# writes every 15 minutes, and the dev server keeps running after the suite
+# exits — so any number here would measure wall clock, not ownership.
+ALLOWED_GROWTH=(
+  "AdminAuditLog"       # append-only audit trail; every admin action and PII read
+  "EnrichmentLog"       # append-only attempt log, one row per module per chain
+  "CrmActivityLog"      # append-only timeline projection
+  "Notification"        # dispatched notifications, an outcome of the run
+  "EnrichmentResult"    # enrichment cache, keyed and TTL'd, not owned by a test
+  "ModuleRegistration"  # created by the health monitor for every module, not by a test
+  "JobStatusHistory"    # append-only history of status transitions
+  "_e2e_meta"           # written by e2e_db_provision_run, not by a test
+)
+
+# Debt, not permission.
+#
+# These models leak TODAY, from specs the 2026-09-02 audit already recorded
+# (E2E-B22, E2E-B23, E2E-B24) plus E2E-B38's one conditional survivor. A gate that is red from its first day gets switched off, so
+# they do not fail the run — but they are NOT in ALLOWED_GROWTH either, because
+# nothing about them is by design. Every run prints them as outstanding debt with
+# the finding that owns them, and the entry is deleted when the finding is.
+#
+# The distinction matters: ALLOWED_GROWTH says "this is not a leak";
+# KNOWN_DEBT says "this is a leak we have not fixed yet, and here is its number".
+#
+# WHAT THIS MAPPING CANNOT DO, stated because its output has already been read
+# as more than it is. The key is a MODEL, not a spec. When a JobTitle row
+# survives a run, this gate knows the model and prints the finding id filed
+# against that model -- it does NOT know which spec wrote the row, and it has
+# no way to find out. So the id is a POINTER TO A FINDING, never an
+# attribution of blame to a test file.
+#
+# Measured 2026-09-05, which is why this paragraph exists: the run reported
+# JobTitle +15 / Company +15 / Location +13 against E2E-B25, whose subject is
+# keyboard-ux.spec.ts. Querying the kept run database showed keyboard-ux had
+# left ZERO rows -- every one of them belonged to job-crud, job-detail-panels,
+# job-status-crud, contact-company-link, profile-crud, automation-crud or
+# question-crud. The gate was right about the leak and wrong about the owner,
+# and the wrong owner was acted on. To find the real one, read the row names
+# out of `prisma/.e2e-run.db` and match their prefixes against the specs.
+KNOWN_DEBT=(
+  # PRUNED 2026-09-08, and the pruning is the point: while a model sits here the
+  # gate PRINTS it and carries on, so a regression in a model that is actually
+  # fixed would be classified as known debt instead of failing the run.
+  #
+  # Removed: Resume, JobTitle, Company, Location, Automation, JobSource — the
+  # whole of E2E-B38's measured leak. It had ONE cause and two halves:
+  #   * `deleteAutomation` filtered menu items on `.lucide-trash-2`, a class
+  #     lucide-react never renders (it builds `lucide-${toKebabCase("Trash2")}`
+  #     = `lucide-trash2`, no hyphen before the digit — createLucideIcon.js:17
+  #     and shared/src/utils.js:8). The click expired against actionTimeout and
+  #     the cleanup net's catch swallowed it, so every test leaked its
+  #     automation on the GREEN path, and each surviving automation held its
+  #     resume undeletable (profile.actions.ts:389-398, Restrict at
+  #     schema.prisma:556). That is Automation +5 and Resume +5 with the same
+  #     five uids.
+  #   * `enrichment.spec.ts` had no teardown at all — the one spec under
+  #     e2e/crud that writes reference rows and owned none. It creates the
+  #     JobSource row `Manual` (not among the nine seeded in prisma/seed.ts;
+  #     AddJob.tsx declares the control creatable), plus a JobTitle, Company and
+  #     Location per run.
+  # A third contributor was profile-crud's JobTitle sweep, commented out since
+  # 2026-09-04 pending E2E-B39. E2E-B39 turned out to be a ComboBox defect and
+  # was fixed in the component (3fe7412a), so the sweep is back on.
+  #
+  # Evidence for the removal is ONE full production run, 112/112 in 8.3 min,
+  # with all six at zero — not the four consecutive runs the previous prune
+  # used. That is deliberate: unlike those nine, these six have a MECHANISM that
+  # was proven broken statically and then repaired, so the run confirms a
+  # prediction rather than establishing a pattern. If a later run reds on one of
+  # these, believe the gate: re-add the entry with the count and the date.
+  #
+  # ActivityType left this list on 2026-09-08 as well, and by a different route:
+  # E2E-B44 gave it the delete path it never had, so the sweep can now reach a
+  # type a spec mints. What remained after that was one row — the string
+  # activity-crud and task-crud deliberately SHARE, which neither may delete
+  # because the other is still using it. That row is now seeded
+  # (prisma/seed-e2e.ts), which is what it always was in substance: a
+  # precondition two specs depend on and neither owns. A fixture is not residue.
+  "Person:E2E-B22"     # +4 — structural: no deletePerson exists, by GDPR design
+  "Referral:E2E-B23"   # +1 — structural, same shape as Person
+)
+
+# REMOVED 2026-09-09: "Job:E2E-B38". The entry argued that enforcing Job would
+# "add a second red line to every genuine failure", and it was written in the
+# same commit that pruned the six above it — so it described the cost of
+# enforcement as it stood BEFORE that prune, and was already false when the ink
+# dried.
+#
+# What it missed: JobTitle, Company, Location and JobSource became ENFORCED in
+# that same commit, and their deletes REFUSE while a Job references them
+# (`jobtitle.actions.ts:136-147` and its siblings). A Job that survived a failing
+# body therefore blocked the reference sweep, and the gate already failed — for
+# those four models, which carry no finding id and sit one causal layer away from
+# the cause, while the one model that HAS an explanatory id was filed under
+# "outstanding debt (not the failure below)". The red line was being paid in the
+# worse currency.
+#
+# The Job delete now lives in the afterEach of all five specs that create one
+# (job-crud, job-detail-panels and enrichment converted 2026-09-09; kanban and
+# job-status-crud already were), so the sweep succeeds on the failing path too.
+# That REMOVES the red line rather than adding one, and Job becomes a model
+# whose delta means what it says.
+
+# REMOVED 2026-09-08, and the removal is the point of the entry rather than
+# tidying: while a model sits in this array the gate PRINTS it and carries on, so
+# a regression in a model that has actually been fixed would be classified as
+# known debt instead of failing the run. E2E-B24 said exactly that and nobody had
+# acted on it.
+#
+# Each of these measured ZERO across the same four consecutive full runs, and
+# each has a cleanup path that runs on the failing path too (an `afterEach` net,
+# not an inline delete), which is why the zero is expected to hold:
+#
+#   Tag            keyboard-ux sweeps it via ADMIN_TAB.tag
+#   Task           task-crud's afterEach purge
+#   Activity       activity-crud's afterEach purge
+#   ResumeSection  profile-crud deletes the resume; the cascade in
+#   ContactInfo      deleteResumeById's transaction takes its children
+#   Summary
+#   WorkExperience
+#   Education
+#   JobStatus      job-status-crud's cleanup, zero in four runs incl. the failing one
+#
+# If one of them comes back, the gate now fails and names it — which is the whole
+# difference between a measured fix and an enforced one.
+
+# WHERE THESE ENTRIES CAME FROM — the split is itself a finding.
+#
+# Three groups, in array order. Read the boundaries by NAME; the counts are only
+# a recount aid and go stale the moment a fixed entry is deleted:
+#
+#   Resume … Referral          the 2026-09-02 audit, i.e. a document   (7 today)
+#   Task, Activity, ActivityType   THIS GATE, on two rewritten specs   (3 today)
+#   ResumeSection … Job        THIS GATE, on its first full run        (9 today)
+#
+# Twelve of the nineteen therefore came from the gate, not from the audit that
+# was supposed to have catalogued them — and every one of the last nine already
+# sat, at the same counts, in a full-run measurement taken the day before the
+# list was written. That is the finding recorded as E2E-B38: the list was seeded
+# from a document when a measurement of the same thing already existed on disk,
+# and the document was the less complete of the two.
+#
+# The sentence this replaces said "nine above ResumeSection, ten below". Both
+# numbers were wrong on the day they were written (85efc2fd), and the shape was
+# wrong too — it described two groups where there are three. Recounted against
+# the array on 2026-09-04.
+#
+# The middle three leaked before this gate existed as well. The between-runs
+# purge that ADR-045 deleted (its steps 2, 3 and 12) removed them at the START of
+# the next run, so no run ever ENDED visibly dirty and nothing surfaced them.
+# Deleting that purge did not create the leak; it stopped hiding it. That is the
+# gate earning its place on its first day of real use.
+
+# Seeded rows these models are allowed to have modified. Keep this list short
+# and hostile: every entry is a place where a test changed shared state and
+# nothing restored it.
+ALLOWED_MUTATION=(
+  "ModuleRegistration"  # the health monitor writes healthStatus on every probe
+  "UserSettings"        # seeded singleton the settings specs legitimately drive
+)
+
+# ---------------------------------------------------------------------------
+# Preconditions. A gate that cannot run says so; it never passes silently.
+# ---------------------------------------------------------------------------
+skip() { echo "[residue] SKIPPED — $1"; exit 0; }
+
+command -v sqlite3 >/dev/null 2>&1 || skip "sqlite3 is not installed."
+[ -f "$E2E_RUN_DB" ]      || skip "no run database at $E2E_RUN_DB (was E2E_KEEP_RUN_DB=0, or no run yet?)"
+[ -f "$E2E_TEMPLATE_DB" ] || skip "no template at $E2E_TEMPLATE_DB"
+
+PROVISIONED_AT="$(sqlite3 "$E2E_RUN_DB" \
+  "SELECT value FROM _e2e_meta WHERE key='provisioned_at_ms';" 2>/dev/null)"
+RUN_STAMP="$(sqlite3 "$E2E_RUN_DB" \
+  "SELECT value FROM _e2e_meta WHERE key='template_stamp';" 2>/dev/null)"
+
+[ -n "$PROVISIONED_AT" ] || skip "the run database carries no provenance — it predates this check, or provisioning was skipped (E2E_REUSE_SERVER=1)."
+
+# The run database says which template it came from. If the template has been
+# rebuilt since, the diff below would compare against a baseline this run never
+# saw and report something plausible.
+CURRENT_STAMP="$(_e2e_db_stamp)"
+if [ "$RUN_STAMP" != "$CURRENT_STAMP" ]; then
+  skip "the template was rebuilt after this run (stamp ${RUN_STAMP:0:12}… vs ${CURRENT_STAMP:0:12}…); nothing to compare against."
+fi
+
+# ---------------------------------------------------------------------------
+# Measure
+# ---------------------------------------------------------------------------
+in_list() {
+  local needle="$1"; shift
+  local item
+  for item in "$@"; do [ "$item" = "$needle" ] && return 0; done
+  return 1
+}
+
+TABLES="$(sqlite3 "$E2E_TEMPLATE_DB" \
+  "SELECT name FROM sqlite_master WHERE type='table'
+     AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%';")"
+
+growth_violations=""
+mutation_violations=""
+allowed_seen=""
+debt_seen=""
+
+for t in $TABLES; do
+  tmpl="$(sqlite3 "$E2E_TEMPLATE_DB" "SELECT count(*) FROM \"$t\";" 2>/dev/null)"
+  run="$(sqlite3 "$E2E_RUN_DB" "SELECT count(*) FROM \"$t\";" 2>/dev/null)"
+  [ -z "$tmpl" ] || [ -z "$run" ] && continue
+  delta=$(( run - tmpl ))
+
+  if [ "$delta" -gt 0 ]; then
+    debt_id=""
+    for entry in "${KNOWN_DEBT[@]}"; do
+      [ "${entry%%:*}" = "$t" ] && debt_id="${entry#*:}"
+    done
+    if in_list "$t" "${ALLOWED_GROWTH[@]}"; then
+      allowed_seen="$allowed_seen  $t +$delta\n"
+    elif [ -n "$debt_id" ]; then
+      debt_seen="$debt_seen  $t +$delta  ($debt_id, unfixed)\n"
+    else
+      growth_violations="$growth_violations  $t: template=$tmpl run=$run (+$delta rows left behind)\n"
+    fi
+  fi
+
+  # UPDATE residue: a row that came from the template and was written after this
+  # run was provisioned. ATTACH rather than compare counts — the ids decide
+  # which rows are the template's, and a count cannot.
+  if sqlite3 "$E2E_TEMPLATE_DB" "PRAGMA table_info(\"$t\");" | grep -q '|updatedAt|'; then
+    touched="$(sqlite3 "$E2E_RUN_DB" \
+      "ATTACH DATABASE '$E2E_TEMPLATE_DB' AS tmpl;
+       SELECT count(*) FROM main.\"$t\" r
+         WHERE r.updatedAt > $PROVISIONED_AT
+           AND EXISTS (SELECT 1 FROM tmpl.\"$t\" s WHERE s.id = r.id);" 2>/dev/null)"
+    if [ -n "$touched" ] && [ "$touched" -gt 0 ]; then
+      if in_list "$t" "${ALLOWED_MUTATION[@]}"; then
+        allowed_seen="$allowed_seen  $t ~$touched (mutated, allowed)\n"
+      else
+        mutation_violations="$mutation_violations  $t: $touched seeded row(s) modified and not restored\n"
+      fi
+    fi
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
+if [ -z "$growth_violations" ] && [ -z "$mutation_violations" ]; then
+  echo "[residue] OK — no NEW unowned rows and no modified seed data."
+  [ -n "$allowed_seen" ] && printf "[residue] allowed, for the record:\n%b" "$allowed_seen"
+  [ -n "$debt_seen" ] && {
+    printf "[residue] OUTSTANDING DEBT — leaks with a finding, not permission:\n%b" "$debt_seen"
+    echo "[residue]   the id names the FINDING filed against that model, NOT the spec that wrote"
+    echo "[residue]   the row. This gate cannot tell them apart. Read the names out of the run"
+    echo "[residue]   database before acting on an attribution."
+  }
+  exit 0
+fi
+
+[ -n "$debt_seen" ] && printf "[residue] outstanding debt (not the failure below):\n%b" "$debt_seen"
+echo "[residue] FAIL — the run left state behind that no test owns:" >&2
+[ -n "$growth_violations" ]   && printf "\n rows created and not deleted:\n%b" "$growth_violations" >&2
+[ -n "$mutation_violations" ] && printf "\n seed data modified and not restored:\n%b" "$mutation_violations" >&2
+cat >&2 <<'TRAILER'
+
+ Invariant: SettledTestCaseOwnsNoLeakedRow, specs/e2e-test-infrastructure.allium
+ A test must remove what it created and restore what it changed, on the failing
+ path as well as the passing one -- which means a test.afterEach hook, not a
+ statement at the end of the test body that a thrown assertion skips.
+ See e2e/crud/webhook-settings.spec.ts for the pattern that works.
+
+ If the row genuinely is not a test's to own, add the model to ALLOWED_GROWTH or
+ ALLOWED_MUTATION in scripts/check-e2e-residue.sh WITH ITS REASON.
+TRAILER
+exit 1

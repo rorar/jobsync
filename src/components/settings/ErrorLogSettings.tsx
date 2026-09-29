@@ -175,7 +175,7 @@ function ErrorLogSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.errorLog")}</h3>
+          <h2 className="text-lg font-medium">{t("settings.errorLog")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.errorLogDesc")}
           </p>
@@ -191,7 +191,7 @@ function ErrorLogSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.errorLog")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.errorLog")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.errorLogDesc")}
         </p>
@@ -218,14 +218,14 @@ function ErrorLogSettings() {
 
         {/* Error list header */}
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-muted-foreground">
+          <h3 className="text-sm font-medium text-muted-foreground">
             {errors.length > 0
               ? (errors.length === 1
                   ? t("settings.errorCountOne")
                   : t("settings.errorCountMany")
                 ).replace("{count}", String(errors.length))
               : ""}
-          </h4>
+          </h3>
           {errors.length > 0 && (
             <Button
               variant="outline"

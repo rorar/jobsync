@@ -1,4 +1,5 @@
 "use client";
+import ActivityTypesContainer from "@/components/admin/ActivityTypesContainer";
 import CompaniesContainer from "@/components/admin/CompaniesContainer";
 import JobLocationsContainer from "@/components/admin/JobLocationsContainer";
 import JobSourcesContainer from "@/components/admin/JobSourcesContainer";
@@ -26,11 +27,23 @@ function AdminTabsContainer() {
   );
 
   const onTabChange = (tab: string) => {
-    router.push(pathname + "?" + createQueryString("tab", tab));
+    // replace, not push: the tab is a view state, not a destination. Every
+    // change used to add a history entry, so Back walked the user through the
+    // tabs they had visited instead of leaving the admin page — and the more
+    // tabs there are, the longer that walk. Six now.
+    router.replace(pathname + "?" + createQueryString("tab", tab));
   };
   return (
     <Tabs
       defaultValue={queryParams.get("tab") || "companies"}
+      activationMode="manual"
+      // Manual activation: an arrow key moves focus, Enter or Space activates.
+      // Radix defaults to automatic, where each arrow key press selects the tab
+      // it lands on — and selecting a tab here MOUNTS its container and fires a
+      // server fetch (Radix only mounts the active TabsContent). Arrowing from
+      // Companies to Activity Types therefore issued five loads to reach one.
+      // This is the pattern the ARIA authoring practices prescribe when
+      // activation is expensive.
       onValueChange={(e) => onTabChange(e)}
     >
       <TabsList>
@@ -39,6 +52,9 @@ function AdminTabsContainer() {
         <TabsTrigger value="locations">{t("admin.locations")}</TabsTrigger>
         <TabsTrigger value="sources">{t("admin.sources")}</TabsTrigger>
         <TabsTrigger value="skills">{t("admin.skills")}</TabsTrigger>
+        <TabsTrigger value="activity-types">
+          {t("admin.activityTypes")}
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="companies">
         <CompaniesContainer />
@@ -54,6 +70,9 @@ function AdminTabsContainer() {
       </TabsContent>
       <TabsContent value="skills">
         <TagsContainer />
+      </TabsContent>
+      <TabsContent value="activity-types">
+        <ActivityTypesContainer />
       </TabsContent>
     </Tabs>
   );

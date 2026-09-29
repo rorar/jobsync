@@ -174,7 +174,7 @@ function ActivitiesTable({
         </TableBody>
       </Table>
       <DeleteAlertDialog
-        pageTitle="activity"
+        pageTitle={t("activities.deleteTargetActivity")}
         open={alertOpen}
         onOpenChange={setAlertOpen}
         onDelete={deleteActivity}

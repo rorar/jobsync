@@ -269,7 +269,8 @@ export function AddJob({
     (async () => {
       setPersonsLoading(true);
       try {
-        const result = await getPersons({ pageSize: 200 });
+        // IT-B1: active-only — anonymized/archived persons must not be selectable.
+        const result = await getPersons({ status: "active", pageSize: 200 });
         if (!active || !result.success || !result.data) return;
         setPersons(
           result.data.persons.map((p) =>

@@ -1,5 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, safeWait, selectOrCreateComboboxOption } from "../helpers";
+import {
+  expectToast,
+  rowsByText,
+  safeWait,
+  selectOrCreateComboboxOption,
+  uniqueId,
+} from "../helpers";
+import {
+  activityRows,
+  deleteActivity as deleteActivityFlow,
+  purgeActivity,
+} from "../helpers/activity-fixture";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -11,11 +22,63 @@ async function navigateToTasks(page: Page) {
   await page.getByTestId("add-task-btn").waitFor({ state: "visible" });
 }
 
+/**
+ * The same activity type activity-crud uses, and for the same reason.
+ *
+ * Corrected 2026-09-08: `ActivityType` DOES have a delete path now
+ * (`deleteActivityTypeById`, and the sixth admin tab — E2E-B44). This string is
+ * still shared for the reason that outlived that one: `createActivityType`
+ * (`src/actions/activity.actions.ts:41-45`) upserts on the value, so both specs
+ * naming it reuse a single row and both take `selectOrCreateComboboxOption`'s
+ * cheap exact-match path instead of the slow create path.
+ *
+ * Precisely because it is shared, NEITHER spec may sweep it — a cleanup here
+ * would delete a row activity-crud is still using, and the other way round.
+ * A test that needs a disposable type mints a `uniqueId()`-suffixed one and
+ * sweeps that; activity-crud does exactly this. Nothing asserts on this name.
+ */
+const E2E_ACTIVITY_TYPE = "E2E Activity Type";
+
+/**
+ * Titles of the tasks created by the test currently running.
+ *
+ * Every test deletes its task inline as its last action — the path a thrown
+ * assertion skips (E2E-B37 measured that shape leaving a row behind).
+ * `createTask` registers here itself so no caller can forget, and `deleteTask`
+ * de-registers only once the row is provably gone, so the afterEach net below
+ * only ever deletes what genuinely leaked.
+ *
+ * An ARRAY, not a scalar: a test that creates two tasks must not leak all but
+ * the last. Module scope is per-worker (workers are separate processes running
+ * their tests serially) and the hook swaps the reference out, so nothing bleeds
+ * into the next test.
+ */
+let createdTaskTitles: string[] = [];
+
+/**
+ * Names of the ACTIVITIES this spec causes to exist — a separate list because
+ * they are a separate aggregate with a separate screen, and because the Task
+ * cannot be removed until the Activity is.
+ *
+ * `startActivityFromTask` (`src/actions/task.actions.ts:343-350`) creates an
+ * `Activity` named after the task, and `deleteTaskById` (:261-267) then REFUSES
+ * to delete that task for as long as it exists (`tasks.cannotDeleteWithActivity`);
+ * `Activity.taskId` is an optional relation with no cascade
+ * (`prisma/schema.prisma:512-513`), so deleting the task would not remove the
+ * activity anyway. Cleanup order is therefore Activity first, Task second —
+ * the reverse silently achieves neither, which is E2E-B24's `Activity +1`.
+ */
+let startedActivityNames: string[] = [];
+
 async function createTask(
   page: Page,
   title: string,
   options?: { activityType?: string },
 ) {
+  // Register BEFORE creating: a create that fails after the row was written
+  // has still leaked one.
+  createdTaskTitles.push(title);
+
   await page.getByTestId("add-task-btn").click({ force: true });
   await expect(page.getByTestId("task-form-dialog-title")).toBeVisible();
 
@@ -59,15 +122,27 @@ async function stopRunningActivity(page: Page) {
     await stopButton.click({ force: true });
     await expect(stopButton).not.toBeVisible({ timeout: 10000 });
   } catch {
-    // No running activity
+    // swallow-ok: idempotent precondition — there may be no running activity.
   }
+}
+
+/**
+ * Rows carrying this file's evidence that a deletion happened — DOM locators,
+ * deliberately not `getByRole("row")`, because every one of those reads happens
+ * while a modal is open or closing. `rowsByText` (e2e/helpers/index.ts) carries
+ * the mechanism and E2E-B40's measurement; this file is where it was measured.
+ *
+ * Only the deletion helpers need it. The inline `getByRole("row", …)` in the
+ * test bodies runs with no modal open, where the role engine remains the better
+ * default.
+ */
+function taskRows(page: Page, title: string) {
+  return rowsByText(page, title);
 }
 
 async function deleteTask(page: Page, title: string) {
   // Wait for the task row to be visible before interacting
-  await expect(
-    page.getByRole("row", { name: new RegExp(title, "i") }).first(),
-  ).toBeVisible({ timeout: 10000 });
+  await expect(taskRows(page, title).first()).toBeVisible({ timeout: 10000 });
 
   await page
     .getByRole("row", { name: new RegExp(title, "i") })
@@ -82,6 +157,152 @@ async function deleteTask(page: Page, title: string) {
     .getByRole("alertdialog")
     .getByRole("button", { name: "Delete" })
     .click({ force: true });
+
+  // Proof #1 — the SERVER answered. `TasksContainer.onDeleteTask` (:132-147)
+  // toasts `tasks.deletedSuccess` only after `deleteTaskById` has resolved, and
+  // `expectToast` finds the viewport through a CSS attribute selector, so no
+  // modal can hide it from the assertion.
+  //
+  // This is the line that makes the helper true. Without it `deleteTask`
+  // returned while the action was still in flight, the test ended, and the page
+  // closed under the request — `deleteTask` is the LAST statement of six of the
+  // seven tests that create a task, and exactly those six rows were in the run
+  // database afterwards. The seventh waited for this toast and is the one that
+  // deleted.
+  //
+  // It is also the only place a REFUSED delete can surface: `deleteTaskById`
+  // returns `tasks.cannotDeleteWithActivity` for a task that still has an
+  // activity, which renders a DESTRUCTIVE toast this pattern does not match. A
+  // refusal now fails the test instead of reading as a disappearing row.
+  await expectToast(page, /Task has been deleted/);
+
+  // Proof #2 — and the list agrees. Worth keeping, worth nothing alone: until
+  // `taskRows` became a DOM locator this assertion was satisfied by the modal's
+  // own `aria-hidden` (E2E-B40), which is how six leaked rows passed as gone.
+  await expect(taskRows(page, title)).toHaveCount(0, { timeout: 15000 });
+
+  // Gone for real — drop it from the tracking so the afterEach does not
+  // re-delete a row that no longer exists. Anything that threw above skips this
+  // line and stays tracked, which is exactly the case the net exists for.
+  createdTaskTitles = createdTaskTitles.filter((t) => t !== title);
+}
+
+/**
+ * Delete the activity named `activityName` loudly, then de-register it.
+ *
+ * Used inline (loudly) because on the green path the task deletion that follows
+ * DEPENDS on it having worked — an activity delete left in flight surfaces later
+ * as `tasks.cannotDeleteWithActivity` on a different line. See
+ * `startedActivityNames`.
+ *
+ * The click flow and its two proofs moved to `../helpers/activity-fixture` on
+ * 2026-09-14: `activity-crud` needs the identical sequence, and the two private
+ * copies had drifted over each other's gaps — this file's copy had the
+ * running-activity pre-assert that one lacked, that one had the E2E-B40
+ * rationale this file lacked, although E2E-B40 was measured here. See that
+ * file's header.
+ *
+ * De-registering stays local: `startedActivityNames` is this spec's own array.
+ * Anything that throws inside `deleteActivityFlow` skips the line below and
+ * stays tracked, which is the case the teardown net exists for.
+ */
+async function deleteActivityTracked(page: Page, activityName: string) {
+  await deleteActivityFlow(page, activityName);
+  startedActivityNames = startedActivityNames.filter((n) => n !== activityName);
+}
+
+/**
+ * Make every task visible regardless of status.
+ *
+ * `TasksContainer` seeds `statusFilter` from `DEFAULT_STATUS_FILTER` on every
+ * mount (:78-80) and does not persist it, so a `page.goto` resets the filter to
+ * In Progress + Needs Attention. Two tests below leave their task in `complete`
+ * — invisible to the teardown net unless the filter is widened first. Silent:
+ * this only ever runs from teardown.
+ */
+async function revealAllTaskStatuses(page: Page): Promise<boolean> {
+  try {
+    await page
+      .getByRole("button", { name: "Status", exact: true })
+      .click({ force: true });
+    for (const label of ["Complete", "Cancelled"]) {
+      const item = page.getByRole("menuitemcheckbox", { name: label });
+      await item.waitFor({ state: "visible", timeout: 5000 });
+      // Read aria-checked rather than isChecked(): the state lives on the
+      // attribute for a menuitemcheckbox, and a toggle that is already on must
+      // not be clicked back off.
+      if ((await item.getAttribute("aria-checked")) !== "true") {
+        await item.click({ force: true });
+      }
+      // CONFIRM the toggle took, rather than assuming the click landed. A
+      // forced click on an element under an overlay reports success and changes
+      // nothing, and every consequence of that is invisible downstream — see
+      // the caller.
+      await expect(item).toHaveAttribute("aria-checked", "true", {
+        timeout: 5000,
+      });
+    }
+    return true;
+  } catch {
+    // swallow-ok: teardown convenience — a throwing hook would replace the real
+    // test failure with its own. Returning FALSE is what makes the swallow
+    // safe, and it is the change that closes this half of E2E-B40.
+    //
+    // The reassurance that used to stand here — "a task that stays hidden is
+    // reported by the afterEach's re-check" — was FALSE, and in the one
+    // direction that matters. If this widener fails, the row stays filtered out
+    // of the list; `purgeTask`'s `waitFor({ state: "visible" })` then throws
+    // into its own catch, AND the re-check counts zero rows, because the filter
+    // hides the row from both reads equally. Silent leak, no warning. This is
+    // the OTHER half of E2E-B40 — the originally-blamed status filter, not the
+    // aria-hidden blinding that the DOM locators fixed.
+    //
+    // A real fix still has to ask the SERVER rather than the list; a zero count
+    // through a filter this function could not open establishes nothing either
+    // way. What the boolean buys is that the caller now knows which it is, and
+    // says so, instead of printing silence that reads as "clean".
+    return false;
+  } finally {
+    // In the `finally`, because a widener that threw leaves the dropdown OPEN,
+    // and an open Radix menu puts `aria-hidden` on the rest of the tree — so
+    // the very next `purgeTask` would fail for a second, unrelated reason and
+    // the report would name the wrong one.
+    await page.keyboard.press("Escape").catch(() => undefined);
+  }
+}
+
+/**
+ * Teardown-only deleters: same clicks, no assertions, never throw.
+ *
+ * Deliberately NOT `deleteTask` / `deleteActivityTracked`: those are used inline
+ * where a failed step must fail the test, whereas teardown must stay silent so
+ * it cannot turn one failed test into a failed run.
+ *
+ * The activity half of this pair now lives in `../helpers/activity-fixture` as
+ * `purgeActivity`; only `purgeTask` is still local, because Task is this spec's
+ * own aggregate and no other spec deletes one.
+ */
+async function purgeTask(page: Page, title: string) {
+  try {
+    const row = taskRows(page, title).first();
+    await row.waitFor({ state: "visible", timeout: 5000 });
+    await row.getByTestId("task-actions-menu-btn").click({ force: true });
+    await page.getByRole("menuitem", { name: "Delete" }).click({ force: true });
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Delete" })
+      .click({ force: true });
+    // `toHaveCount(0)` rather than `waitFor({ state: "detached" })`: detached is
+    // also true of a locator that matches nothing, so under the old role-based
+    // `taskRows` it resolved instantly against the modal's `aria-hidden` and the
+    // net "succeeded" without deleting anything (E2E-B40). The throw stays
+    // inside the try — teardown must report, not fail the run.
+    await expect(taskRows(page, title)).toHaveCount(0, { timeout: 15000 });
+  } catch {
+    // swallow-ok: cleanup net — the task may already be gone, and a throwing
+    // hook would replace the real test failure with its own. The afterEach
+    // re-checks and warns, so a failure here is not silent.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -91,10 +312,81 @@ async function deleteTask(page: Page, title: string) {
 // storageState handles authentication — no per-test login needed
 
 test.describe("Task CRUD", () => {
+  // Safety net for the inline deletes at the end of each test — see
+  // `createdTaskTitles` and `startedActivityNames` above. On a green test both
+  // lists are already empty (the delete helpers de-register), so the hook costs
+  // nothing and stays silent; a warning here therefore means a REAL leak, not
+  // routine noise.
+  test.afterEach(async ({ page }) => {
+    // Swap the references out BEFORE the first await: clearing afterwards would
+    // keep entries alive into the next test if a delete throws, and clearing in
+    // a beforeEach would not run at all under test.skip.
+    const leakedActivities = startedActivityNames;
+    const leakedTasks = createdTaskTitles;
+    startedActivityNames = [];
+    createdTaskTitles = [];
+    if (leakedActivities.length === 0 && leakedTasks.length === 0) return;
+
+    try {
+      // Activities FIRST — deleteTaskById refuses while task.activity exists.
+      // A test that failed inside createTask leaves the browser on the open
+      // form dialog, so navigate first; and keep everything inside the try,
+      // because a hook that throws replaces the real test failure in the
+      // report.
+      if (leakedActivities.length > 0) {
+        await stopRunningActivity(page);
+        for (const name of leakedActivities) {
+          await purgeActivity(page, name);
+          // purgeActivity swallows every error by design, so calling it proves
+          // nothing — look again. Without this the hook's catch below only
+          // fires when navigation throws, and a row the net FAILED to delete
+          // would pass in silence.
+          if ((await activityRows(page, name).count()) > 0) {
+            console.warn(
+              `[task-crud] leaked activity survived cleanup: ${name} ` +
+                `— it also blocks its task's deletion (E2E-B24).`,
+            );
+          }
+        }
+      }
+
+      if (leakedTasks.length > 0) {
+        await navigateToTasks(page);
+        const revealed = await revealAllTaskStatuses(page);
+        for (const title of leakedTasks) {
+          await purgeTask(page, title);
+          const remaining = await taskRows(page, title).count();
+          if (remaining > 0) {
+            console.warn(
+              `[task-crud] leaked task survived cleanup: ${title} ` +
+                `— it stays in the run database (E2E-B24).`,
+            );
+          } else if (!revealed) {
+            // A zero count is NOT good news here. The status filter hides a
+            // Complete or Cancelled row from `purgeTask`'s delete AND from this
+            // re-check, equally — so when the widener failed, "no rows" and
+            // "deleted" are the same reading. Saying which one this is costs a
+            // line; not saying it is how a leak gets reported as cleaned.
+            console.warn(
+              `[task-crud] cleanup could not widen the status filter, so ` +
+                `${title} reads as gone WITHOUT that having been established ` +
+                `— the filter hides the row from the delete and from this ` +
+                `check alike (E2E-B40).`,
+            );
+          }
+        }
+      }
+    } catch (error) {
+      // swallow-ok: afterEach cleanup net — a throwing hook would replace the real
+      // test failure with its own; the warning below names what may be left behind.
+      console.warn(`[task-crud] afterEach cleanup failed: ${String(error)}`);
+    }
+  });
+
   test("should create a new task and verify it appears in the list", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
 
     await navigateToTasks(page);
@@ -111,7 +403,7 @@ test.describe("Task CRUD", () => {
   test("should edit the task title and verify updated values", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
     const updatedTitle = `E2E Task Updated ${uid}`;
 
@@ -138,6 +430,13 @@ test.describe("Task CRUD", () => {
     await titleInput.fill(updatedTitle);
     await titleInput.blur();
 
+    // Track the title the row is ABOUT to carry, WITHOUT dropping the one it
+    // still carries: only one of the two can exist, but which one depends on
+    // whether the save below succeeds, and a rename that never lands is exactly
+    // the case the net is for. `purgeTask` gives an absent title a bounded 5 s
+    // probe, so tracking both costs seconds on the green path.
+    createdTaskTitles.push(updatedTitle);
+
     const saveBtn = page.getByTestId("save-task-btn");
     await expect(saveBtn).toBeEnabled();
     await saveBtn.click();
@@ -149,12 +448,18 @@ test.describe("Task CRUD", () => {
       page.getByRole("row", { name: new RegExp(updatedTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
 
+    // The rename is now PROVEN, so the old title can no longer name a row —
+    // drop it. Doing this here rather than at the fill above keeps the
+    // both-titles coverage for every path that can still throw, and lets the
+    // afterEach return before its first await on a green run.
+    createdTaskTitles = createdTaskTitles.filter((t) => t !== taskTitle);
+
     // Cleanup
     await deleteTask(page, updatedTitle);
   });
 
   test("should change task status via the actions menu", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
 
     // Create
@@ -184,7 +489,7 @@ test.describe("Task CRUD", () => {
   });
 
   test("should delete the task and verify removal", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
 
     // Create
@@ -194,13 +499,12 @@ test.describe("Task CRUD", () => {
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Delete
+    // Delete. Both halves of the proof now live in `deleteTask` — asserting the
+    // same toast again here would only race the same 5 s lifetime
+    // (toaster.tsx:19) for information the helper already established.
     await deleteTask(page, taskTitle);
 
-    await expectToast(page, /Task has been deleted/);
-    await expect(
-      page.getByRole("row", { name: new RegExp(taskTitle, "i") }),
-    ).not.toBeVisible({ timeout: 10000 });
+    await expect(taskRows(page, taskTitle)).toHaveCount(0, { timeout: 10000 });
   });
 
   // --- Migrated from tasks.spec.ts (unique tests) ---
@@ -236,7 +540,7 @@ test.describe("Task CRUD", () => {
   });
 
   test("should toggle task completion via checkbox", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Toggle ${uid}`;
 
     await navigateToTasks(page);
@@ -276,12 +580,12 @@ test.describe("Task CRUD", () => {
   test("should start activity from task and redirect to activities", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Activity Task ${uid}`;
 
     await stopRunningActivity(page);
     await navigateToTasks(page);
-    await createTask(page, taskTitle, { activityType: "E2E Testing" });
+    await createTask(page, taskTitle, { activityType: E2E_ACTIVITY_TYPE });
     await expect(
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -309,16 +613,33 @@ test.describe("Task CRUD", () => {
       .getByRole("menuitem", { name: "Start Activity" })
       .click({ force: true });
 
+    // The row is written by startActivityFromTask under the TASK's title
+    // (task.actions.ts:345, `activityName: task.title`). Register it before the
+    // outcome is known: an assertion that throws below has still leaked one.
+    startedActivityNames.push(taskTitle);
+
     // startActivityFromTask both toasts AND redirects to /dashboard/activities;
     // the navigation can clear the toast before it's asserted, so the toast
     // check is best-effort and the redirect URL is the reliable success signal.
     await expectToast(page, /Activity started from task/).catch(() => null);
     await expect(page).toHaveURL(/\/dashboard\/activities/, { timeout: 15000 });
 
-    // Stop the running activity
+    // Stop the running activity. Wait for the banner to go: the stop is a
+    // server action like any other, and the old code left it in flight.
     const stopBtn = page.getByRole("button", { name: "Stop" });
     await stopBtn.waitFor({ state: "visible", timeout: 10000 });
     await stopBtn.click({ force: true });
+    await stopBtn.waitFor({ state: "hidden", timeout: 10000 });
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+
+    // Cleanup — ACTIVITY FIRST. Stopping an activity does not remove it, and
+    // deleteTaskById refuses to delete a task that still has one
+    // (task.actions.ts:261-267, `tasks.cannotDeleteWithActivity`). Deleting the
+    // task first therefore achieved neither: the destructive toast went
+    // unread, and BOTH rows survived the run. That is E2E-B24's `Activity +1`
+    // and one of its `Task +6`.
+    await deleteActivityTracked(page, taskTitle);
 
     // Cleanup task
     await navigateToTasks(page);
@@ -328,12 +649,12 @@ test.describe("Task CRUD", () => {
   test("should not allow starting activity on completed task", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Completed ${uid}`;
 
     await stopRunningActivity(page);
     await navigateToTasks(page);
-    await createTask(page, taskTitle, { activityType: "E2E Testing" });
+    await createTask(page, taskTitle, { activityType: E2E_ACTIVITY_TYPE });
     await expect(
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });

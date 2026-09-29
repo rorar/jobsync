@@ -13,6 +13,8 @@
  */
 
 import { z } from "zod";
+import { DATA_SOURCES } from "@/models/person.model";
+import { REFERRAL_KINDS, REFERRAL_STATUSES } from "@/models/insideTrack.model";
 import type {
   VacancyPromotedPayload,
   VacancyDismissedPayload,
@@ -42,6 +44,8 @@ import type {
   CrmTaskCreatedPayload,
   CrmTaskCompletedPayload,
   CrmNoteCreatedPayload,
+  ReferralRecordedPayload,
+  ReferralStatusChangedPayload,
 } from "./event-types";
 
 // ---------------------------------------------------------------------------
@@ -227,7 +231,7 @@ export const EnrichmentFailedPayloadSchema = z.object({
 export const ContactCreatedPayloadSchema = z.object({
   personId: z.string(),
   userId: z.string(),
-  source: z.enum(["manual", "auto_created", "imported"]),
+  source: z.enum(DATA_SOURCES),
 }) satisfies z.ZodType<ContactCreatedPayload>;
 
 export const ContactUpdatedPayloadSchema = z.object({
@@ -239,7 +243,7 @@ export const ContactUpdatedPayloadSchema = z.object({
 export const ContactDeletedPayloadSchema = z.object({
   personId: z.string(),
   userId: z.string(),
-  reason: z.enum(["anonymized", "merged", "deleted"]),
+  reason: z.enum(["anonymized", "merged", "deleted", "retention_expired"]),
 }) satisfies z.ZodType<ContactDeletedPayload>;
 
 export const InterviewScheduledPayloadSchema = z.object({
@@ -254,11 +258,15 @@ export const InterviewCompletedPayloadSchema = z.object({
   interviewId: z.string(),
   jobId: z.string(),
   userId: z.string(),
+  personId: z.string().optional(),
   outcome: z.string(),
 }) satisfies z.ZodType<InterviewCompletedPayload>;
 
 export const ReminderTriggeredPayloadSchema = z.object({
   userId: z.string(),
+  // `retention_expired` and `follow_up_due` are RESERVED, not dead — see the
+  // doc comment on ReminderTriggeredPayload in event-types.ts for what each is
+  // held for and why neither was retired. Kept in sync by `satisfies` below.
   reason: z.enum(["interview_upcoming", "task_overdue", "retention_expired", "follow_up_due"]),
   targetJobId: z.string().optional(),
   targetPersonId: z.string().optional(),
@@ -291,6 +299,27 @@ export const CrmNoteCreatedPayloadSchema = z.object({
   targetJobId: z.string().optional(),
   targetCompanyId: z.string().optional(),
 }) satisfies z.ZodType<CrmNoteCreatedPayload>;
+
+// Inside Track referrals (spec: inside-track.allium). kind/status use the shared
+// const-array enums so a new Referral kind or status can never drift from the
+// wire schema.
+export const ReferralRecordedPayloadSchema = z.object({
+  referralId: z.string(),
+  userId: z.string(),
+  kind: z.enum(REFERRAL_KINDS),
+  tipsterPersonId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
+}) satisfies z.ZodType<ReferralRecordedPayload>;
+
+export const ReferralStatusChangedPayloadSchema = z.object({
+  referralId: z.string(),
+  userId: z.string(),
+  previousStatus: z.enum(REFERRAL_STATUSES),
+  newStatus: z.enum(REFERRAL_STATUSES),
+  systemInitiated: z.boolean(),
+  tipsterPersonId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
+}) satisfies z.ZodType<ReferralStatusChangedPayload>;
 
 // ---------------------------------------------------------------------------
 // Schema Registry — maps DomainEventType to its Zod schema
@@ -325,6 +354,8 @@ export const EventPayloadSchemas = {
   CrmTaskCreated: CrmTaskCreatedPayloadSchema,
   CrmTaskCompleted: CrmTaskCompletedPayloadSchema,
   CrmNoteCreated: CrmNoteCreatedPayloadSchema,
+  ReferralRecorded: ReferralRecordedPayloadSchema,
+  ReferralStatusChanged: ReferralStatusChangedPayloadSchema,
 } as const;
 
 // ---------------------------------------------------------------------------

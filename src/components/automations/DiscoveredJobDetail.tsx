@@ -168,9 +168,9 @@ export function DiscoveredJobDetail({
             </div>
 
             <div>
-              <h4 className="font-medium mb-2">
+              <h3 className="font-medium mb-2">
                 {t("automations.discoveredJob.descriptionHeading")}
-              </h4>
+              </h3>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                 {job.description}
               </p>

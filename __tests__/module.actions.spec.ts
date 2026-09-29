@@ -29,10 +29,21 @@ jest.mock("@/utils/user.utils", () => ({
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   default: {
-    moduleRegistration: { findMany: jest.fn(), upsert: jest.fn() },
+    // `findUnique` is read by deactivateModule's short-circuit (MOD-B1): a
+    // memory-only INACTIVE must not be trusted without the DB agreeing.
+    moduleRegistration: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+    },
     automation: { findMany: jest.fn(), updateMany: jest.fn() },
     user: { count: jest.fn(), findFirst: jest.fn() },
     apiKey: { findFirst: jest.fn() },
+    // deactivateModule runs the status write and the pause cascade inside ONE
+    // interactive transaction (MOD-B1 residual). The default implementation is
+    // installed in beforeEach; tests that care about rollback semantics swap in
+    // one that can tell a commit from a rollback.
+    $transaction: jest.fn(),
   },
 }));
 
@@ -145,6 +156,23 @@ describe("module.actions", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     // Default: empty DB (syncRegistryFromDb succeeds with no rows)
     (prisma.moduleRegistration.findMany as jest.Mock).mockResolvedValue([]);
+    // Default: the persisted row agrees with whatever the registry reports as
+    // INACTIVE. deactivateModule only reads this on its short-circuit path
+    // (MOD-B1), so this default keeps that path a no-op unless a test says
+    // otherwise.
+    (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue({
+      status: ModuleStatus.INACTIVE,
+    });
+    // Default $transaction: run the callback against the same mock client, so
+    // every per-model assertion in this file keeps working unchanged whether the
+    // statement runs inside the transaction or not. A rejection propagates —
+    // the only part of "rollback" a mock can honestly model on its own.
+    (prisma.$transaction as unknown as jest.Mock).mockImplementation(
+      async (arg: unknown) =>
+        typeof arg === "function"
+          ? await (arg as (tx: typeof prisma) => Promise<unknown>)(prisma)
+          : Promise.all(arg as unknown[]),
+    );
     // Default: no modules
     (moduleRegistry.getByType as jest.Mock).mockReturnValue([]);
     // Default admin posture: single-user implicit (Tier B). User count is 1
@@ -368,6 +396,314 @@ describe("module.actions", () => {
       expect(result.message).toBe("errors.notAuthenticated");
       expect(emitEvent).not.toHaveBeenCalled();
     });
+
+    // =======================================================================
+    // MOD-B1 — a lost write must not be reported as success, and the
+    // short-circuit must not fire on a memory-only state.
+    //
+    // The in-memory registry is per-process; `ModuleRegistration` is the
+    // record. The old code mutated memory first and persisted second, so a
+    // rejected write left this process asserting INACTIVE while the database
+    // still said active. The `registered.status === INACTIVE` short-circuit
+    // then answered `success: true` on every retry WITHOUT consulting the
+    // database, so the disagreement could never repair itself — recovery
+    // required activate-then-deactivate, which nobody would guess.
+    // =======================================================================
+    describe("MOD-B1 — persist before mutating memory", () => {
+      it("leaves the in-memory registry untouched when the DB write fails", async () => {
+        (prisma.moduleRegistration.upsert as jest.Mock).mockRejectedValue(
+          new Error("SQLITE_BUSY: database is locked"),
+        );
+        // Available on purpose: a regression that paused automations before
+        // (or despite) the failed persist would otherwise succeed silently.
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", name: "Daily Search", userId: "user-1" },
+        ]);
+        (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+        const result = await deactivateModule(moduleId);
+
+        // Told, not silently succeeded.
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("errors.deactivateModule");
+        // Memory never moves ahead of the database.
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        // No half-applied deactivation.
+        expect(prisma.automation.updateMany).not.toHaveBeenCalled();
+        expect(emitEvent).not.toHaveBeenCalled();
+      });
+
+      it("persists BEFORE mutating the in-memory registry", async () => {
+        const callOrder: string[] = [];
+        (prisma.moduleRegistration.upsert as jest.Mock).mockImplementationOnce(
+          async () => {
+            callOrder.push("persist");
+            return {};
+          },
+        );
+        (moduleRegistry.setStatus as jest.Mock).mockImplementationOnce(() => {
+          callOrder.push("memory");
+          return true;
+        });
+
+        await deactivateModule(moduleId);
+
+        expect(callOrder).toEqual(["persist", "memory"]);
+      });
+
+      it("re-runs the deactivation when memory says INACTIVE but no row exists", async () => {
+        // Absence is NOT inactive: per ADR-043/ADR-044 a missing
+        // ModuleRegistration row means the schema default `active`. This is
+        // exactly the state a previously-failed write (or the E2E reset that
+        // deletes every row) leaves behind, and it must be repaired.
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({ id: moduleId }),
+          status: ModuleStatus.INACTIVE,
+        });
+        (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", name: "Daily Search", userId: "user-1" },
+        ]);
+        (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+        // The write actually happened this time — the whole point.
+        expect(prisma.moduleRegistration.upsert).toHaveBeenCalled();
+        expect(moduleRegistry.setStatus).toHaveBeenCalledWith(
+          moduleId,
+          ModuleStatus.INACTIVE,
+        );
+        expect(result.data!.pausedAutomations).toBe(1);
+      });
+
+      it("re-runs the deactivation when memory says INACTIVE but the row says active", async () => {
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({ id: moduleId }),
+          status: ModuleStatus.INACTIVE,
+        });
+        (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue({
+          status: ModuleStatus.ACTIVE,
+        });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+        expect(prisma.moduleRegistration.upsert).toHaveBeenCalled();
+      });
+
+      it("short-circuits without writing when memory AND the database agree", async () => {
+        // The happy path of the short-circuit is unchanged: a genuinely
+        // already-inactive module is still a cheap no-op.
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({ id: moduleId }),
+          status: ModuleStatus.INACTIVE,
+        });
+        (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue({
+          status: ModuleStatus.INACTIVE,
+        });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+        expect(result.data!.pausedAutomations).toBe(0);
+        expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        expect(prisma.automation.findMany).not.toHaveBeenCalled();
+        expect(emitEvent).not.toHaveBeenCalled();
+      });
+    });
+
+    // =======================================================================
+    // MOD-B1 RESIDUAL — the deactivation commits as ONE unit
+    //
+    // The tests above pin a failure of the FIRST statement. A throw after it
+    // was the residual, and in this function it was self-concealing rather
+    // than merely incomplete: the row said `inactive`, memory said INACTIVE,
+    // the two AGREED — so the short-circuit above accepted the agreement, and
+    // every retry answered `success: true` with `pausedAutomations: 0` while
+    // the automations it claimed to have paused kept running. The outer catch
+    // reported the first failure honestly; nothing could act on it.
+    //
+    // A rollback cannot produce that agreement: the row stays `active`, memory
+    // is never touched (the mirror is below the commit), so the next call falls
+    // through and re-runs the whole cascade.
+    // =======================================================================
+    describe("MOD-B1 residual — status and cascade commit together", () => {
+      it("writes the status and pauses inside ONE transaction, and only then touches memory and the bus", async () => {
+        const trace: string[] = [];
+        (prisma.$transaction as unknown as jest.Mock).mockImplementationOnce(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            trace.push("tx:begin");
+            try {
+              const out = await fn(prisma);
+              trace.push("tx:commit");
+              return out;
+            } catch (err) {
+              trace.push("tx:rollback");
+              throw err;
+            }
+          },
+        );
+        (prisma.moduleRegistration.upsert as jest.Mock).mockImplementationOnce(
+          async () => {
+            trace.push("persist");
+            return {};
+          },
+        );
+        (prisma.automation.findMany as jest.Mock).mockImplementationOnce(async () => {
+          trace.push("query");
+          return [{ id: "auto-1", name: "Daily Search", userId: "user-1" }];
+        });
+        (prisma.automation.updateMany as jest.Mock).mockImplementationOnce(async () => {
+          trace.push("pause");
+          return { count: 1 };
+        });
+        (moduleRegistry.setStatus as jest.Mock).mockImplementationOnce(() => {
+          trace.push("memory");
+          return true;
+        });
+        (emitEvent as jest.Mock).mockImplementationOnce(() => {
+          trace.push("emit");
+        });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+        expect(result.data!.pausedAutomations).toBe(1);
+        // Ordering is the assertion. The mirror and the ModuleDeactivated event
+        // follow the commit: an event published from inside the transaction
+        // announces a pause that may still roll back, and its consumers write
+        // through the non-transactional client into a database the transaction
+        // is still holding open.
+        expect(trace).toEqual([
+          "tx:begin",
+          "persist",
+          "query",
+          "pause",
+          "tx:commit",
+          "memory",
+          "emit",
+        ]);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      });
+
+      it("reports failure and touches nothing when the pause cascade fails", async () => {
+        const trace: string[] = [];
+        (prisma.$transaction as unknown as jest.Mock).mockImplementationOnce(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            trace.push("tx:begin");
+            try {
+              const out = await fn(prisma);
+              trace.push("tx:commit");
+              return out;
+            } catch (err) {
+              trace.push("tx:rollback");
+              throw err;
+            }
+          },
+        );
+        (prisma.moduleRegistration.upsert as jest.Mock).mockImplementationOnce(
+          async () => {
+            trace.push("persist");
+            return {};
+          },
+        );
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", name: "Daily Search", userId: "user-1" },
+        ]);
+        (prisma.automation.updateMany as jest.Mock).mockRejectedValueOnce(
+          new Error("SQLITE_BUSY: database is locked"),
+        );
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("errors.deactivateModule");
+        // The status write is INSIDE the unit that rolled back, not a separate
+        // write that survived the failure.
+        expect(trace).toEqual(["tx:begin", "persist", "tx:rollback"]);
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        expect(emitEvent).not.toHaveBeenCalled();
+      });
+
+      it("re-runs the cascade on the next call instead of short-circuiting on agreed-but-wrong state", async () => {
+        // The residual's actual cost, and the reason a bare try/catch around
+        // the cascade would NOT have closed it. With the status written
+        // durably and memory mirrored, a retry finds row and memory in
+        // agreement, takes the short-circuit, and returns success with
+        // `pausedAutomations: 0` — the automations are never paused and no
+        // further call will ever try.
+        //
+        // The model below is the smallest thing that can tell a commit from a
+        // rollback: a write made INSIDE the transaction is applied only when
+        // the callback resolves; a write made outside one is durable
+        // immediately — which is exactly what the unfixed code does.
+        let memoryStatus: ModuleStatus = ModuleStatus.ACTIVE;
+        let rowStatus: string | null = ModuleStatus.ACTIVE;
+        let pendingRowStatus: string | null = null;
+        let inTransaction = false;
+
+        (moduleRegistry.get as jest.Mock).mockImplementation(() => ({
+          ...makeRegisteredModule({ id: moduleId }),
+          status: memoryStatus,
+        }));
+        (moduleRegistry.setStatus as jest.Mock).mockImplementation(
+          (_id: string, status: ModuleStatus) => {
+            memoryStatus = status;
+            return true;
+          },
+        );
+        (prisma.moduleRegistration.findUnique as jest.Mock).mockImplementation(
+          async () => (rowStatus === null ? null : { status: rowStatus }),
+        );
+        (prisma.moduleRegistration.upsert as jest.Mock).mockImplementation(
+          async () => {
+            if (inTransaction) pendingRowStatus = ModuleStatus.INACTIVE;
+            else rowStatus = ModuleStatus.INACTIVE;
+            return {};
+          },
+        );
+        (prisma.$transaction as unknown as jest.Mock).mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            inTransaction = true;
+            pendingRowStatus = null;
+            try {
+              const out = await fn(prisma);
+              if (pendingRowStatus !== null) rowStatus = pendingRowStatus;
+              return out;
+            } finally {
+              inTransaction = false;
+              pendingRowStatus = null;
+            }
+          },
+        );
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([
+          { id: "auto-1", name: "Daily Search", userId: "user-1" },
+        ]);
+        (prisma.automation.updateMany as jest.Mock)
+          .mockRejectedValueOnce(new Error("SQLITE_BUSY: database is locked"))
+          .mockResolvedValue({ count: 1 });
+
+        const first = await deactivateModule(moduleId);
+
+        expect(first.success).toBe(false);
+        // Nothing durable, nothing remembered — so no false agreement exists
+        // for the retry to short-circuit on.
+        expect(rowStatus).toBe(ModuleStatus.ACTIVE);
+        expect(memoryStatus).toBe(ModuleStatus.ACTIVE);
+
+        const second = await deactivateModule(moduleId);
+
+        // The decisive assertion: the automations actually get paused.
+        expect(second.success).toBe(true);
+        expect(second.data!.pausedAutomations).toBe(1);
+        expect(rowStatus).toBe(ModuleStatus.INACTIVE);
+        expect(memoryStatus).toBe(ModuleStatus.INACTIVE);
+        expect(prisma.automation.updateMany).toHaveBeenCalledTimes(2);
+      });
+    });
   });
 
   // ===========================================================================
@@ -495,6 +831,14 @@ describe("module.actions", () => {
         ...makeRegisteredModule({ id: moduleId }),
         status: ModuleStatus.ACTIVE,
       });
+      // ...AND the row agrees. The file-level default is INACTIVE, which suits
+      // the deactivate tests; since MOD-B1's second half the activate
+      // short-circuit confirms against the row, so leaving that default here
+      // would exercise the REPAIR path and this test would be asserting the
+      // opposite of its name.
+      (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue({
+        status: ModuleStatus.ACTIVE,
+      });
 
       const result = await activateModule(moduleId);
 
@@ -502,6 +846,86 @@ describe("module.actions", () => {
       expect(result.data?.status).toBe(ModuleStatus.ACTIVE);
       expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
       expect(prisma.automation.findMany).not.toHaveBeenCalled();
+      expect(emitEvent).not.toHaveBeenCalled();
+    });
+
+    it("short-circuits when the row is ABSENT, because the schema default is active (MOD-B1)", async () => {
+      // Mirror of the deactivate case, and deliberately the OPPOSITE outcome:
+      // `prisma/schema.prisma:606` defaults `status` to "active", so a missing
+      // row already means active and there is nothing to write. For
+      // deactivateModule an absent row DISAGREES and must fall through.
+      (moduleRegistry.get as jest.Mock).mockReturnValue({
+        ...makeRegisteredModule({ id: moduleId }),
+        status: ModuleStatus.ACTIVE,
+      });
+      (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue(
+        null,
+      );
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+    });
+
+    it("repairs the record when memory says ACTIVE but the row says inactive (MOD-B1)", async () => {
+      // The defect this half of MOD-B1 closes. `syncRegistryFromDb` latches on
+      // `dbSynced` and reads the table ONCE per process, and the table is
+      // deployment-global, so a row changed by another instance leaves this
+      // process asserting ACTIVE for its whole lifetime. Before the fix the
+      // short-circuit engaged on memory alone: `success: true`, no write, and
+      // the database untouched — silent success over a lost write.
+      (moduleRegistry.get as jest.Mock).mockReturnValue({
+        ...makeRegisteredModule({ id: moduleId }),
+        status: ModuleStatus.ACTIVE,
+      });
+      (prisma.moduleRegistration.findUnique as jest.Mock).mockResolvedValue({
+        status: ModuleStatus.INACTIVE,
+      });
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      // The decisive assertion: it WROTE rather than reporting a no-op.
+      expect(prisma.moduleRegistration.upsert).toHaveBeenCalled();
+      expect(moduleRegistry.setStatus).toHaveBeenCalledWith(
+        moduleId,
+        ModuleStatus.ACTIVE,
+      );
+    });
+
+    it("reports failure when the short-circuit's row read throws (MOD-B1)", async () => {
+      // The read is deliberately not caught: guessing which side is right is
+      // worse than saying the call did not succeed.
+      (moduleRegistry.get as jest.Mock).mockReturnValue({
+        ...makeRegisteredModule({ id: moduleId }),
+        status: ModuleStatus.ACTIVE,
+      });
+      (prisma.moduleRegistration.findUnique as jest.Mock).mockRejectedValue(
+        new Error("SQLITE_BUSY: database is locked"),
+      );
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("errors.activateModule");
+      expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+    });
+
+    it("leaves the in-memory registry untouched when the activation write fails (MOD-B1)", async () => {
+      // Symmetric twin of the deactivateModule case. Persisting first is the
+      // whole repair here: memory stays INACTIVE, so the
+      // `registered.status === ACTIVE` short-circuit above does NOT engage on
+      // the next call and the activation is retried.
+      (prisma.moduleRegistration.upsert as jest.Mock).mockRejectedValue(
+        new Error("SQLITE_BUSY: database is locked"),
+      );
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("errors.activateModule");
+      expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
       expect(emitEvent).not.toHaveBeenCalled();
     });
 

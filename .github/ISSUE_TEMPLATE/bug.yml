@@ -1,0 +1,165 @@
+name: Defect
+description: Schedule the fix for a defect that already has a row in docs/BUGS.md. Add the row first, then link it here.
+title: "[<BUGS.md ID>] <one-line summary>"
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **File the row first.** `docs/BUGS.md` is the single source of truth for defects (CLAUDE.md § Post-Work Checklist). Give the row an ID, severity, file and description, then open this issue to schedule the fix.
+
+        **Link, do not copy.** Point at the row and at code as `path:line@<sha>`. Copied evidence drifts; the row is kept up to date.
+
+        **One ID per issue.** To bundle several defects or register items, use the *Work package* form.
+
+        **Security.** If this defect could be exploited and is not fixed yet, stop. Do not file it here. Follow [SECURITY.md](https://github.com/rorar/jobsync/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: security
+    attributes:
+      label: Security sensitivity
+      description: "If an unfixed defect could be exploited, stop and use SECURITY.md instead. A public issue may name only the class of a security defect, never how to trigger it."
+      options:
+        - "Not security-relevant"
+        - "Security-relevant, but fixed or not exploitable; this issue names the class only"
+    validations:
+      required: true
+
+  - type: input
+    id: bugs-id
+    attributes:
+      label: BUGS.md ID
+      description: "The ID of the row in `docs/BUGS.md`, for example `W4-B2`, `GDPR-B1` or `E2E-B50`. New defect with no row yet: write `new` — the maintainer adds the row and fills this in. Every defect gets a row; the row, not this issue, is the evidence."
+      placeholder: "W4-B2  (or: new)"
+    validations:
+      required: true
+
+  - type: input
+    id: bugs-link
+    attributes:
+      label: Link to the row
+      description: "A permalink to the row at a PUSHED commit (leave empty for a new defect). A commit that exists only locally returns 404; check with `git branch -r --contains <sha>`."
+      placeholder: "https://github.com/rorar/jobsync/blob/<pushed-sha>/docs/BUGS.md#L<line>"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: "Copy it from the row. If you disagree, change the row, not only this field. Triage applies `severity:high`, `severity:medium` or `severity:low`; CRITICAL has no label of its own and gets `severity:high`."
+      options:
+        - CRITICAL
+        - HIGH
+        - MEDIUM
+        - LOW
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Triage turns each choice into the matching `area:*` label.
+      multiple: true
+      options:
+        - crm
+        - gdpr
+        - security
+        - api-v1
+        - ui-i18n-a11y
+        - e2e
+        - unit-tests
+        - spec-allium
+        - infra-ci
+        - docs
+        - module-lifecycle
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behaviour
+      description: What happens today. A short summary; the evidence stays in the row.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should happen instead, and which rule says so (spec rule, ADR, CLAUDE.md section, test, user-facing contract).
+    validations:
+      required: true
+
+  - type: textarea
+    id: where
+    attributes:
+      label: Where
+      description: "Files and symbols, as `path:line@<sha>`. The sha matters: line numbers move."
+      placeholder: "- `src/actions/jobStatus.actions.ts:357@<sha>` — `deleteJobStatus`"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how-found
+    attributes:
+      label: How it was found
+      options:
+        - "Failing unit or component test (bash scripts/test.sh)"
+        - "E2E run (./scripts/test-e2e.sh)"
+        - "Type check or build (typecheck-safe.sh, build-safe.sh)"
+        - "CI run"
+        - "Code reading or review"
+        - "Spec-vs-code check (allium:weed)"
+        - "Sweep or audit of earlier sessions"
+        - "Reported by a user"
+        - "Other (explain below)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: how-found-detail
+    attributes:
+      label: How it was found — details
+      description: "Command and its final `[<name>] EXIT=<rc>` line, CI run ID, reviewer, date. Optional."
+
+  - type: textarea
+    id: regression-test
+    attributes:
+      label: Regression test plan
+      description: "The test that fails on the unfixed code and passes after the fix (CLAUDE.md § Testing Requirements, Rules: a bug fix needs a regression test that reproduces the bug before fixing). For a data-scoping defect, assert the query's WHERE clause, not a mocked count."
+      value: |
+        - Test file:
+        - Test name:
+        - Asserts:
+        - Fails today because:
+    validations:
+      required: true
+
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: "Kept in the issue as a task list. Leave it unticked when filing; the implementer ticks each line when it is true."
+      value: |
+        - [ ] The regression test above fails on the unfixed code and passes with the fix.
+        - [ ] `docs/BUGS.md`: the row is marked fixed with the commit; the header totals reconcile with the block table.
+        - [ ] `bash scripts/typecheck-safe.sh` ended with `[typecheck-safe] EXIT=0`.
+        - [ ] `bash scripts/test.sh` ended with `[test.sh] EXIT=0`.
+        - [ ] `./scripts/test-e2e.sh` ended with `[test-e2e] EXIT=0` (only if the fix touches a UI flow or `e2e/`; name the specs run).
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: before-filing
+    attributes:
+      label: Before filing
+      options:
+        - label: "The row exists in `docs/BUGS.md` with ID, severity, file and description."
+          required: true
+        - label: "This issue links to the row and does not copy its evidence."
+          required: true
+        - label: "No exploitable detail of an unfixed security defect is in this issue."
+          required: true

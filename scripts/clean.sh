@@ -2,7 +2,9 @@
 # Flush the Next.js / Turbopack build + dev cache (.next/).
 #
 # Pure cache flush — does NOT stop or start the dev server. For the full
-# stop -> flush -> restart cycle use scripts/restart.sh (which calls this script).
+# stop -> flush -> restart cycle, run scripts/stop.sh, this script, then
+# scripts/dev.sh. scripts/restart.sh also does it but still kills EVERY
+# worktree's dev server (docs/BUGS.md INF-B2).
 # Fixes "Internal Server Error" caused by corrupted .next/ manifests.
 #
 # Usage:
@@ -14,8 +16,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # Warn if a dev server is live — deleting .next out from under it causes errors
 # until the next request recompiles. (restart.sh stops the server first, so this
 # never fires there.)
-if curl -fsS -o /dev/null http://localhost:3737/ 2>/dev/null; then
-  echo "[clean] WARNING: dev server is up on :3737 — flushing .next under a live"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-devserver.sh"
+CLEAN_PORT="$(devserver_port)"
+if curl -fsS -o /dev/null "http://localhost:${CLEAN_PORT}/" 2>/dev/null; then
+  echo "[clean] WARNING: dev server is up on :${CLEAN_PORT} — flushing .next under a live"
   echo "        server can cause errors. Restart it after, or use scripts/restart.sh."
 fi
 

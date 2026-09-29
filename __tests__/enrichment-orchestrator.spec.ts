@@ -93,6 +93,7 @@ function createMockRegistered(
     status?: ModuleStatus;
     healthStatus?: HealthStatus;
     circuitBreakerState?: CircuitBreakerState;
+    supportedDimensions?: string[];
   } = {},
 ) {
   return {
@@ -102,6 +103,11 @@ function createMockRegistered(
       manifestVersion: 1,
       connectorType: ConnectorType.DATA_ENRICHMENT,
       credential: { type: CredentialType.NONE, moduleId, required: false, sensitive: false },
+      // Every test in this file uses dimension "logo" (see testInput/testChain
+      // below); default here matches so the orchestrator's supportedDimensions
+      // guard (added when data-enrichment/registry.ts was deleted, CLAUDE.md §
+      // Data Enrichment Connector) does not skip every module in every test.
+      supportedDimensions: overrides.supportedDimensions ?? ["logo"],
     },
     status: overrides.status ?? ModuleStatus.ACTIVE,
     healthStatus: overrides.healthStatus ?? HealthStatus.HEALTHY,
@@ -225,6 +231,29 @@ describe("EnrichmentOrchestrator", () => {
 
     expect(result).not.toBeNull();
     // logo_dev was skipped, only google_favicon was called
+    expect(mockModuleRegistry.create).toHaveBeenCalledTimes(1);
+    expect(mockModuleRegistry.create).toHaveBeenCalledWith("google_favicon", undefined);
+  });
+
+  it("skips modules that do not declare support for the requested dimension", async () => {
+    const successConnector = createMockConnector({ source: "google_favicon" });
+
+    mockModuleRegistry.get.mockImplementation((id: string) => {
+      if (id === "logo_dev") {
+        // Chain declares logo_dev for "logo", but its manifest declares only
+        // "deep_link" — the misconfiguration this guard exists to catch
+        // (see orchestrator.ts, added when data-enrichment/registry.ts's
+        // getEnrichmentModuleByDimension() was deleted as unused).
+        return createMockRegistered("logo_dev", { supportedDimensions: ["deep_link"] });
+      }
+      return createMockRegistered(id);
+    });
+    mockModuleRegistry.create.mockReturnValue(successConnector);
+
+    const result = await orchestrator.execute("user-1", testInput, testChain);
+
+    expect(result).not.toBeNull();
+    // logo_dev was skipped for declaring the wrong dimension, only google_favicon was called
     expect(mockModuleRegistry.create).toHaveBeenCalledTimes(1);
     expect(mockModuleRegistry.create).toHaveBeenCalledWith("google_favicon", undefined);
   });

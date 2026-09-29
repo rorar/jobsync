@@ -1,0 +1,100 @@
+# Label definitions for rorar/jobsync, as data.
+#
+# Applied by scripts/sync-labels.sh (dry run by default, `--apply` to write).
+# The script creates missing labels and updates colour and description of
+# existing ones (`gh label create --force`). It never deletes a label.
+#
+# GitHub's nine default labels (bug, documentation, duplicate, enhancement,
+# help wanted, good first issue, invalid, question, wontfix) are deliberately
+# NOT listed here and are left untouched.
+#
+# Limits the script enforces: name at most 50 characters, description at most
+# 100 characters, color exactly six hex digits without '#'.
+#
+# The issue forms in .github/ISSUE_TEMPLATE/ apply the `type:*` labels (and,
+# for decisions, `needs-decision` and `owner:maintainer`). GitHub silently
+# drops a form label that does not exist in the repository, so run the sync
+# with `--apply` before, or together with, the merge that brings the forms to
+# the default branch.
+#
+# `area:*`, `owner:*`, `severity:*` and `status:blocked` are applied by hand at
+# triage. `severity:*` mirrors the severity of the docs/BUGS.md row; BUGS.md
+# also uses CRITICAL, which has no label of its own here — use `severity:high`
+# and say so in the issue.
+
+labels:
+  # --- area: where the work lives -------------------------------------------
+  - name: "area:crm"
+    color: "c5def5"
+    description: "CRM: Person, CrmInterview/Task/Note, JobContact, Inside Track (specs/crm.allium)"
+  - name: "area:gdpr"
+    color: "c5def5"
+    description: "Personal data: retention, erasure, export, consent (specs/crm-gdpr.allium)"
+  - name: "area:security"
+    color: "c5def5"
+    description: "Auth, IDOR, SSRF, encryption, rate limits (specs/security-rules.allium)"
+  - name: "area:api-v1"
+    color: "c5def5"
+    description: "Public REST API under /api/v1 (docs/architecture/public-api-v1.md)"
+  - name: "area:ui-i18n-a11y"
+    color: "c5def5"
+    description: "UI components, translations (en, de, fr, es), accessibility"
+  - name: "area:e2e"
+    color: "c5def5"
+    description: "Playwright suite in e2e/, run through ./scripts/test-e2e.sh"
+  - name: "area:unit-tests"
+    color: "c5def5"
+    description: "Jest suites in __tests__/, run through bash scripts/test.sh"
+  - name: "area:spec-allium"
+    color: "c5def5"
+    description: "Allium specs in specs/*.allium; edited only through allium:tend"
+  - name: "area:infra-ci"
+    color: "c5def5"
+    description: "CI workflows, Docker image, wrapper scripts, dev-server tooling"
+  - name: "area:docs"
+    color: "c5def5"
+    description: "Project documentation: docs/, ADRs, README, CLAUDE.md"
+  - name: "area:module-lifecycle"
+    color: "c5def5"
+    description: "Connector modules: manifests, registry, activation, health (specs/module-lifecycle.allium)"
+
+  # --- type: set by the issue form ------------------------------------------
+  - name: "type:bug"
+    color: "d73a4a"
+    description: "Defect with a row in docs/BUGS.md"
+  - name: "type:work-package"
+    color: "0e8a16"
+    description: "Agent-ready bundle of BUGS.md IDs and register items, with acceptance criteria"
+  - name: "type:decision"
+    color: "5319e7"
+    description: "Maintainer decision, tracked as a D item in the open-items register"
+  - name: "type:docs"
+    color: "0075ca"
+    description: "Documentation only: no code, spec or test behaviour changes"
+
+  # --- owner: who can act ---------------------------------------------------
+  - name: "owner:agent"
+    color: "fbca04"
+    description: "Can be done by an AI agent now, without a maintainer decision"
+  - name: "owner:maintainer"
+    color: "e99695"
+    description: "Needs the maintainer: a decision, credentials, repository settings or a push"
+
+  # --- flow -----------------------------------------------------------------
+  - name: "needs-decision"
+    color: "d4c5f9"
+    description: "Waits on a maintainer decision; the linked type:decision issue says which"
+  - name: "status:blocked"
+    color: "6a737d"
+    description: "Waits on another issue, decision or event named under Depends on"
+
+  # --- severity: copied from the docs/BUGS.md row ---------------------------
+  - name: "severity:high"
+    color: "b60205"
+    description: "BUGS.md row severity HIGH (or CRITICAL; there is no separate label)"
+  - name: "severity:medium"
+    color: "d93f0b"
+    description: "BUGS.md row severity MEDIUM"
+  - name: "severity:low"
+    color: "fef2c0"
+    description: "BUGS.md row severity LOW"

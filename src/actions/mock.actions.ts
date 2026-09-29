@@ -18,6 +18,10 @@ import {
   MOCK_VALUE_PREFIX,
 } from "@/lib/data/mockProfileData";
 import { subYears } from "date-fns";
+import {
+  collectOrphanCandidateNoteIds,
+  pruneOrphanedCrmNotesByIds,
+} from "@/lib/crm/orphan-targets";
 
 export const generateMockActivitiesAction = async (): Promise<ActionResult<Activity[]>> => {
   try {
@@ -486,14 +490,37 @@ export const clearMockProfileDataAction = async (): Promise<
       where: { value: { startsWith: MOCK_VALUE_PREFIX }, createdBy: user.id },
       select: { id: true },
     });
+    let orphanCandidates: string[] = [];
     if (mockCompanyIds.length > 0) {
       const companyIds = mockCompanyIds.map((c) => c.id);
-      // Delete notes first (FK cascade)
+      // W-D3: collect BEFORE the deletes below — the cascade removes the join
+      // rows that name these notes. A real note attached only to a mock job or
+      // company would otherwise be left unreachable (every note read filters by
+      // target). Tasks are left alone; see the orphan-targets module docs.
+      // F1/F5: resolve the job ids first rather than filtering through the
+      // `targetJob` relation. A nested relation filter cannot use any
+      // CrmNoteTarget target index, so it scans the user's whole target table;
+      // two `in` lists hit `targetJobId`/`targetCompanyId` directly.
+      const mockJobIds = (
+        await prisma.job.findMany({
+          where: { companyId: { in: companyIds }, userId: user.id },
+          select: { id: true },
+        })
+      ).map((j) => j.id);
+      orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
+        OR: [
+          { targetJobId: { in: mockJobIds } },
+          { targetCompanyId: { in: companyIds } },
+        ],
+      });
+      // Delete notes first (FK cascade). ADR-015: companyIds is already derived
+      // from this user's mock companies, but the filter is stated explicitly so
+      // the ownership bound does not depend on a caller two scopes up.
       await prisma.note.deleteMany({
-        where: { job: { companyId: { in: companyIds } } },
+        where: { userId: user.id, job: { companyId: { in: companyIds } } },
       });
       await prisma.job.deleteMany({
-        where: { companyId: { in: companyIds } },
+        where: { userId: user.id, companyId: { in: companyIds } },
       });
     }
 
@@ -519,6 +546,8 @@ export const clearMockProfileDataAction = async (): Promise<
           },
         }),
       ]);
+
+    await pruneOrphanedCrmNotesByIds(prisma, user.id, orphanCandidates);
 
     const companiesCount =
       deletedCompanies.status === "fulfilled"

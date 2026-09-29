@@ -55,12 +55,42 @@ export function Combobox({
 
   const [isPending, startTransition] = useTransition();
 
+  // Options this combobox created itself, kept HERE because `options` is a prop
+  // and the parent may replace the array at any time.
+  //
+  // E2E-B39: `handleCreateOption` used to make a created option visible by
+  // calling `options.unshift(result)` — mutating the parent's array in place —
+  // while the trigger below derives its displayed text from that same array. A
+  // parent that legitimately replaces the array (AddExperience refetches on
+  // mount) dropped the created row out of it, and since `field.value` still
+  // held the new id, `options.find(...)` missed and the trigger rendered the
+  // empty string. The row existed in the database the whole time; only the
+  // control disagreed.
+  //
+  // It presented as a flaky, order-dependent E2E failure because a loaded
+  // server widens the window between the create resolving and the parent's
+  // fetch landing — which is why it was tracked for days as a test-isolation
+  // problem rather than as the product defect it is.
+  const [createdOptions, setCreatedOptions] = useState<any[]>([]);
+
+  // The prop first: a parent that has caught up carries the authoritative row,
+  // and a locally-remembered copy must not shadow a later rename.
+  const knownOptions = useMemo(() => {
+    if (createdOptions.length === 0) return options;
+    const seen = new Set(options.map((o) => o.id));
+    return [...options, ...createdOptions.filter((o) => !seen.has(o.id))];
+  }, [options, createdOptions]);
+
   const handleCreateOption = (label: string) => {
     if (!label || !onCreateOption) return;
     startTransition(async () => {
       const result = await onCreateOption(label);
       if (result) {
-        options.unshift(result);
+        // Remember it locally instead of mutating the prop. The parent is free
+        // to replace `options`; what the trigger shows must not depend on that.
+        setCreatedOptions((prev) =>
+          prev.some((o) => o.id === result.id) ? prev : [result, ...prev],
+        );
         field.onChange(result.id);
         setIsPopoverOpen(false);
         setAnnouncement(t("forms.optionCreated").replace("{label}", result.label));
@@ -71,11 +101,11 @@ export function Combobox({
   const showCreate = creatable && !!onCreateOption;
 
   const filteredOptions = useMemo(() => {
-    if (!newOption) return options;
-    return options.filter((opt) =>
+    if (!newOption) return knownOptions;
+    return knownOptions.filter((opt) =>
       opt.value.toLowerCase().includes(newOption.toLowerCase())
     );
-  }, [options, newOption]);
+  }, [knownOptions, newOption]);
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && newOption.trim() && showCreate) {
@@ -110,7 +140,7 @@ export function Combobox({
             )}
           >
             {field.value
-              ? options.find((option) => option.id === field.value)?.label
+              ? knownOptions.find((option) => option.id === field.value)?.label
               : (placeholder ??
                 t("forms.selectPlaceholder").replace("{label}", resolvedLabel))}
 

@@ -1,5 +1,159 @@
-import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption } from "../helpers";
+import { expect, type Page } from "@playwright/test";
+import { testWithCleanup } from "../helpers/cleanup-fixture";
+import { expectToast, rowsByText, selectOrCreateComboboxOption, uniqueId } from "../helpers";
+import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
+import { deleteJobViaApi } from "../helpers/job-fixture";
+
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// `deleteJob` removes the Job. It does not remove the `JobTitle`, `Company` and
+// `Location` rows the AddJob comboboxes wrote on the way there, and neither
+// does anything else in this file — so seven green tests left 8 job titles,
+// 9 companies (the seventh test also creates a recruiting agency) and 8
+// locations in the 2026-09-05 run database. That run had two unexpected
+// results; neither of them was in this file. The leak is the GREEN path.
+//
+// The pattern is the one `keyboard-ux.spec.ts` documents, with the two shared
+// deleters now in `../helpers/admin-reference-cleanup`:
+//   1. ARRAYS, not scalars — one `createJob` writes three rows, and the
+//      recruiter test writes a fourth.
+//   2. Registration sits where the row is WRITTEN and BEFORE the call that
+//      writes it: a `selectOrCreateComboboxOption` that creates the row and then
+//      fails its follow-up assertion has still leaked one.
+//   3. De-registration only on a PROVEN delete — exactly one site, in the one
+//      test whose SUBJECT is deletion (see below).
+//   4. The afterEach swaps the registries out before its first await.
+//   5. It navigates itself, inside the sweep.
+//   6. Two tiers — the deleters swallow, the sweep re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+//
+// ---------------------------------------------------------------------------
+// THE JOB AND THE RESUME ARE DRAINED BY THE HOOK TOO (E2E-B38)
+// ---------------------------------------------------------------------------
+//
+// Both used to be the last two statements of every body:
+//
+//     await deleteJob(page, jobTitle);
+//     await deleteResume(page, resumeTitle);
+//
+// which is precisely the path a failed assertion skips. For the Job that is not
+// merely one more leaked row. `deleteJobTitleById` (jobtitle.actions.ts:110-145)
+// and `deleteCompanyById` (company.actions.ts:337-375) each COUNT the
+// referencing Jobs and refuse while one exists, so a surviving Job makes the
+// sweep below fail as well — and it fails naming JobTitle, Company and Location,
+// three models one causal layer away from the assertion that actually broke, and
+// none of them carrying the finding id that would explain them. One red test
+// therefore produced four red lines, three of them misleading.
+//
+// So the Job is drained FIRST in the hook, ahead of the sweep it unblocks. The
+// relative order is exactly what the bodies did — job, then resume, then the
+// reference rows — only the path it runs on changes.
+//
+// The Resume moves for the weaker of the two reasons (it blocks nothing), but
+// the same one that put `createdResumes` in job-detail-panels.spec.ts: it was
+// the line AFTER `deleteJob`, so a `deleteJob` that threw abandoned it, and
+// `Resume` is no longer carried as known debt by `scripts/check-e2e-residue.sh`.
+//
+// The exception is the test whose subject IS deletion. It still deletes inline,
+// because that is its assertion, and then de-registers — the hook must not chase
+// a row that is legitimately gone.
+let createdJobs: string[] = [];
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+let createdResumes: string[] = [];
+
+// Migrated from `test.afterEach` to a local `auto: true` fixture per
+// `specs/e2e-test-infrastructure.allium:868` (`FixtureOwnedTeardown`) — see
+// `../helpers/job-fixture.ts`'s header for why the Job step and the
+// reference-group sweep below must stay in this ONE fixture, in this order,
+// rather than the Job step moving into a fixture of its own: Playwright's
+// `afterEach` always runs before any fixture's teardown code, so splitting
+// them would silently break the ordering `deleteJobTitleById`/
+// `deleteCompanyById` require (both refuse while a Job still references
+// them).
+const test = testWithCleanup(async (page, testInfo) => {
+  // The after-hooks run on their OWN fresh budget — `max(project, test)`,
+  // not what the body left over (`playwright/lib/worker/workerMain.js:328-329`;
+  // corrected 2026-09-09, this comment used to claim the opposite). These bodies
+  // raise their own timeout by 60 s, and because the hook's budget is
+  // `max(project, testInfo.timeout)` that RAISES the hook's starting budget too
+  // rather than competing with it — the previous wording had this backwards.
+  // This one can visit three admin tables, which is why it still buys more on
+  // top; keep the number small enough that a genuinely slow teardown surfaces.
+  //
+  // 45_000 is UNCHANGED by the job and resume drains added below, and the
+  // arithmetic is worth stating because the number looks like the budget and is
+  // not. The hook's slot starts at `max(project.timeout, testInfo.timeout)` =
+  // max(60 s, 120 s) — every body here raises its own timeout by 60 s — so this
+  // call makes 165 s, against typical teardown work of ~30 s (three admin tabs)
+  // + ~2 s (one job, now a `DELETE /api/v1/jobs/:id` call instead of a UI flow)
+  // + ~8 s (one resume). The dominant term is the inherited 120 s floor, not N;
+  // raising N would buy slack that is already there.
+  testInfo.setTimeout(testInfo.timeout + 45_000);
+
+  // Swap the registries out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const jobs = createdJobs;
+  const resumes = createdResumes;
+  const groups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdJobs = [];
+  createdResumes = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+
+  // ORDER IS A REQUIREMENT, not tidiness: `deleteJobTitleById`
+  // (jobtitle.actions.ts:110-145) and `deleteCompanyById`
+  // (company.actions.ts:337-375) both count referencing Jobs first and refuse
+  // while one remains, so the Job goes before the sweep or the sweep reports
+  // failures of the wrong deleter.
+  //
+  // `deleteJobViaApi` THROWS per job (0 matches, 2+ matches, non-2xx/non-204)
+  // rather than swallowing and returning a boolean the way the UI-click
+  // `deleteJobTracked` it replaces did. The catch stays INSIDE the loop, per
+  // title, so one leaked job cannot abort cleanup of the ones after it in
+  // `jobs` — a hook/fixture that throws replaces the real test failure with
+  // its own.
+  for (const title of jobs) {
+    try {
+      await deleteJobViaApi(page, title);
+    } catch (error) {
+      // swallow-ok: cleanup net.
+      console.warn(`[job-crud] leaked job survived cleanup: ${title} — ${String(error)}`);
+    }
+  }
+
+  // Resumes after the jobs, which is the order the bodies used. NOT a
+  // dependency: `Job.resumeId` is an OPTIONAL relation with no `onDelete`
+  // (prisma/schema.prisma:436-437) and `deleteResumeById` guards only against
+  // Automations, never against Jobs (src/actions/profile.actions.ts:389-398),
+  // so a resume can go while its job is still there. `deleteResume` TOLERATES
+  // absence by contract (helpers/resume-fixture.ts), so on a red run this costs
+  // one navigation and reports nothing — it cannot turn a failing test into a
+  // differently-failing one.
+  for (const title of resumes) {
+    await deleteResume(page, title);
+  }
+
+  // The reference rows last, for the reason given above.
+  //
+  // The recruiting agency is the exception to the comment `deleteJob`'s caller
+  // used to carry ("left in place — there is no company hard-delete flow"):
+  // there is one, in the admin Companies tab, and it is what the sweep uses.
+  await sweepReferenceGroups(page, groups, "job-crud");
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,68 +183,42 @@ async function navigateToJobs(page: Page) {
  * (Kanban shows cards, no column header → no collision), and only `deleteJob`
  * — which queries `role="row"` and never `getByLabel` — switches to Table.
  *
- * Idempotent: clicking the already-active radio is a no-op, and the toggle is
- * absent in the empty state, so we guard with a short visibility probe.
+ * Idempotent: clicking the already-active radio is a no-op.
+ *
+ * RETURNS whether Table view is CONFIRMED (`aria-checked="true"` on the Table
+ * radio). `false` means we could not get there, and a caller that reads `tr`s
+ * must treat "no row" as "cannot see", not as "gone": in Kanban `MyJobsTable`
+ * is not rendered at all (`JobsContainer.tsx:437-445` is a ternary), so a row
+ * locator finds nothing about a job that is on screen as a card and present in
+ * the database. Never throws — this runs in teardown.
+ *
+ * The short visibility probe guards HYDRATION LAG, not the empty state. This
+ * comment used to claim the toggle "is absent in the empty state"; that is
+ * false. `KanbanViewModeToggle` sits in the `CardHeader`
+ * (`JobsContainer.tsx:366-368`) gated only on `mounted`, entirely outside the
+ * empty-state branch — so it renders for an empty list too, and the only window
+ * in which it is missing is before the client has mounted. That window is
+ * reachable from here because `navigateToJobs` waits on `add-job-btn`, which is
+ * not gated on `mounted`.
  */
-async function ensureTableView(page: Page) {
+async function ensureTableView(page: Page): Promise<boolean> {
   const tableRadio = page.getByRole("radio", { name: "Table" });
   try {
     await tableRadio.waitFor({ state: "visible", timeout: 3000 });
   } catch {
-    return; // toggle not rendered (e.g. empty state) — nothing to switch
+    return false; // toggle never mounted — a row read here would prove nothing
   }
-  if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
-    await tableRadio.click();
-    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
-  }
-}
-
-/**
- * Ensure at least one resume exists. The AddJob form defaults resume=""
- * which causes a P2003 FK violation when submitted. Having a resume
- * available lets us select it in the form to avoid this issue.
- */
-async function ensureResumeExists(page: Page, resumeTitle: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-
-  const existingRow = page.getByRole("row", {
-    name: new RegExp(resumeTitle, "i"),
-  });
   try {
-    await existingRow.first().waitFor({ state: "visible", timeout: 3000 });
-    return;
+    if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
+      await tableRadio.click();
+      await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+    }
+    return true;
   } catch {
-    // Resume does not exist yet — create one
-  }
-
-  await page.getByRole("button", { name: "New Resume" }).click();
-  await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  // exact: true — the form also has a "Save & Open" button; without exact the
-  // "Save" matcher is ambiguous (strict-mode violation).
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    page.getByText(/Resume created successfully/i).first(),
-  ).toBeVisible({ timeout: 10000 });
-}
-
-async function deleteResume(page: Page, title: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  const row = page
-    .getByRole("row", { name: new RegExp(title, "i") })
-    .first();
-  try {
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("resume-actions-menu-btn").click({ force: true });
-    await page.getByRole("menuitem", { name: "Delete" }).click({ force: true });
-    await expect(page.getByRole("alertdialog")).toBeVisible();
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Delete" })
-      .click({ force: true });
-  } catch {
-    // Resume may not exist — skip cleanup
+    // swallow-ok: the assertion is not discarded — a flip that did not take IS
+    // this function's `false`, and the caller reports it. Throwing instead
+    // would replace a real test failure with a teardown one.
+    return false;
   }
 }
 
@@ -121,6 +249,12 @@ async function createJob(
     .getByPlaceholder("Copy and paste job link here")
     .fill(opts.url ?? "https://example.com/careers/e2e-test");
 
+  // Each name is registered immediately BEFORE the call that can write it. The
+  // helper's create path calls the server action and only then closes the
+  // popover, so a run that dies between the two — or that fails the
+  // `toContainText` below — has already left the row behind. Registering after
+  // a successful assertion would clean up exactly the cases that do not need it.
+  createdJobTitles.push(opts.title);
   await selectOrCreateComboboxOption(
     page,
     "Title",
@@ -131,6 +265,7 @@ async function createJob(
     opts.title,
   );
 
+  createdCompanies.push(opts.company);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -141,6 +276,7 @@ async function createJob(
     opts.company,
   );
 
+  createdLocations.push(opts.location);
   await selectOrCreateComboboxOption(
     page,
     "Location",
@@ -199,7 +335,15 @@ async function createJob(
       .first()
       .click();
     if (opts.contactRole) {
-      await page.getByLabel("Role").fill(opts.contactRole);
+      // Role is a Select (SelectFormCtrl → Radix), not a text field: its
+      // trigger is a role="combobox" button carrying
+      // aria-label={t("forms.selectPlaceholder")} = "Select Role", which is why
+      // a substring getByLabel("Role") resolved to it and fill() then rejected
+      // it as "not an <input>". Pick the option instead.
+      await page.getByRole("combobox", { name: "Select Role" }).click();
+      await page
+        .getByRole("option", { name: opts.contactRole, exact: true })
+        .click();
     }
   }
 
@@ -209,6 +353,12 @@ async function createJob(
   // "Create:" affordance. handleCreateOption unshifts the result + calls
   // field.onChange, so the trigger immediately shows the new agency label.
   if (opts.recruitingCompany) {
+    // Registered before the popover opens. The catch branch below clicks
+    // "Create:", which writes a second `Company` row — one this file's
+    // `deleteJob` never touched and which used to be left behind deliberately
+    // (see the caller's old note about there being no hard-delete flow). The
+    // admin Companies tab is that flow, so the row is swept like any other.
+    createdCompanies.push(opts.recruitingCompany);
     await page.getByLabel("Recruiting Agency", { exact: true }).click();
     const rcSearch = page.getByPlaceholder("Create or search Recruiting Agency");
     await rcSearch.fill(opts.recruitingCompany);
@@ -240,6 +390,19 @@ async function createJob(
     );
   }
 
+  // Registered immediately before the click that writes the Job, and not
+  // earlier. The three reference registrations above sit at the combobox that
+  // writes THEIR row; this is the same rule applied to the Job, whose only
+  // write site is this submit — `addJob` is reachable from nowhere else. The
+  // sibling specs (kanban.spec.ts:111, job-status-crud.spec.ts:351) register
+  // the job up at the Title combobox instead, which is also "before the write"
+  // but over-broadly: a body that dies while filling the recruiter triangle
+  // registers a Job that was never created, and the hook then pays a full
+  // absence timeout chasing it. Deliberately not copied.
+  //
+  // The assertion after the click is NOT the registration point: a save that
+  // succeeds and then fails the dialog-close wait has still written the row.
+  createdJobs.push(opts.title);
   await page.getByTestId("save-job-btn").click();
 
   // Wait for the dialog to close (confirms save + redirect completed)
@@ -266,6 +429,37 @@ async function deleteJob(page: Page, jobTitle: string) {
     .getByRole("alertdialog")
     .getByRole("button", { name: "Delete" })
     .click();
+
+  // A click is not an outcome, and proving a deletion takes TWO assertions —
+  // the server's answer, then the view's (e2e/CONVENTIONS.md, "Proving deletion
+  // takes two assertions, one wrong locator"). The container reloads only on
+  // success, so a delete the server REFUSED leaves the row exactly where it was
+  // and this function still returned. That matters beyond the one test that
+  // asserts removal itself: `deleteJob` is the inline cleanup of seven tests
+  // here, and a silent refusal is how rows survive a run Playwright reported as
+  // green — which is why `scripts/check-e2e-residue.sh` still carries
+  // `Job:E2E-B38` in its known-debt list.
+  //
+  // This copy carried only the second half. The gap is not cosmetic: the two
+  // failures are indistinguishable from the row's side and have opposite causes
+  // —
+  //
+  //   no toast at all   → the round trip never happened; nothing was decided.
+  //   destructive toast → the server decided, and refused.
+  //
+  // `job-detail-panels.spec.ts:262` documents the measurement that made the
+  // distinction matter: a dev-server restart between the Delete click and the
+  // server action landing, with no audit line and no error anywhere, reported
+  // here as "the row is still there" and sent an investigation into cleanup
+  // code that had done nothing wrong.
+  //
+  // 15 s rather than the helper's 10 s default, for the same reason given
+  // there: the route can be cold behind a recompile, and a legitimate delete
+  // must not be called a failure for being slow.
+  await expectToast(page, /Job has been deleted successfully/, 15000);
+  // DOM locator, never `getByRole`, because this read happens as the
+  // AlertDialog closes (E2E-B40).
+  await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 15000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -282,15 +476,18 @@ test.describe("Job CRUD", () => {
     ]);
   });
 
-  test("should create a new job with all fields", async ({ page }) => {
-    test.setTimeout(120_000); // first crud job compiles the Add Job route on the dev server → >60s
-    const uid = Date.now().toString(36);
+  test("should create a new job with all fields", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // first crud job compiles the Add Job route on the dev server → >60s
+    const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
     // Ensure a resume exists (required to avoid FK violation on submit)
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     await navigateToJobs(page);
@@ -302,21 +499,24 @@ test.describe("Job CRUD", () => {
       page.getByText(jobTitle).first(),
     ).toBeVisible({ timeout: 15000 });
 
-    // Cleanup
-    await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
+    // Cleanup is in the afterEach — see the header. Deletion is not the subject
+    // of this test, so there is nothing to lose by moving it out and a whole
+    // failure mode to gain: an assertion above that fails no longer leaves a Job
+    // behind, and the reference sweep no longer reports three rows it cannot
+    // delete while that Job exists.
   });
 
   test("should create a job with a structured salary range (Welle 2 Phase 3)", async ({
     page,
-  }) => {
-    test.setTimeout(120_000); // Resume + full job + salary fields requires >60s on slow dev server
-    const uid = Date.now().toString(36);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Resume + full job + salary fields requires >60s on slow dev server
+    const uid = uniqueId();
     const jobTitle = `E2E Salary Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     await navigateToJobs(page);
@@ -332,22 +532,25 @@ test.describe("Job CRUD", () => {
     await navigateToJobs(page);
     await expect(page.getByText(jobTitle).first()).toBeVisible({ timeout: 15000 });
 
-    // Cleanup
-    await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
+    // Cleanup is in the afterEach — see the header. Deletion is not the subject
+    // of this test, so there is nothing to lose by moving it out and a whole
+    // failure mode to gain: an assertion above that fails no longer leaves a Job
+    // behind, and the reference sweep no longer reports three rows it cannot
+    // delete while that Job exists.
   });
 
   test("should edit the job description and verify updated values", async ({
     page,
-  }) => {
-    test.setTimeout(120_000); // Create + Edit requires >60s on slow dev server
-    const uid = Date.now().toString(36);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Create + Edit requires >60s on slow dev server
+    const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
     // Ensure a resume exists (required to avoid FK violation on submit)
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     // Create
@@ -402,20 +605,25 @@ test.describe("Job CRUD", () => {
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 15000 });
 
-    // Cleanup
-    await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
+    // Cleanup is in the afterEach — see the header. Deletion is not the subject
+    // of this test, so there is nothing to lose by moving it out and a whole
+    // failure mode to gain: an assertion above that fails no longer leaves a Job
+    // behind, and the reference sweep no longer reports three rows it cannot
+    // delete while that Job exists.
   });
 
-  test("should delete the job and verify removal", async ({ page }) => {
-    test.setTimeout(120_000); // Create + Delete requires >60s on slow dev server
-    const uid = Date.now().toString(36);
+  test("should delete the job and verify removal", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000); // Create + Delete requires >60s on slow dev server
+    const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
     // Ensure a resume exists (required to avoid FK violation on submit)
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     // Create first
@@ -432,26 +640,35 @@ test.describe("Job CRUD", () => {
     // Delete
     await deleteJob(page, jobTitle);
 
-    // Verify removed
-    await expect(
-      page.getByRole("row", { name: jobTitle }),
-    ).not.toBeVisible({ timeout: 10000 });
+    // Verify removed. `deleteJob` now proves this too, but the assertion stays
+    // here because removal is what THIS test is about — the helper's proof
+    // exists for the six tests whose cleanup runs in the afterEach.
+    await expect(rowsByText(page, jobTitle)).toHaveCount(0, { timeout: 10000 });
 
-    // Cleanup resume
-    await deleteResume(page, resumeTitle);
+    // De-register, and ONLY here. This is the one test whose subject is the
+    // delete, so it is the one place a delete has been PROVEN inside a body —
+    // by `deleteJob`'s toast + row-count pair and again by the assertion above.
+    // Without this line the hook would navigate to My Jobs and spend a full
+    // absence timeout chasing a row that is legitimately gone, on every run.
+    // Registrations are never dropped on an unproven delete: that is how a leak
+    // becomes invisible AND permanent (keyboard-ux.spec.ts, deleteResumeTracked).
+    createdJobs = createdJobs.filter((t) => t !== jobTitle);
+
+    // The resume is drained by the afterEach.
   });
 
   // F-AJ-04: due date is optional — a job can be created with no due date.
   test("should create a job with the due date cleared (F-AJ-04)", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
-    const uid = Date.now().toString(36);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
+    const uid = uniqueId();
     const jobTitle = `E2E NoDue ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     await navigateToJobs(page);
@@ -469,9 +686,11 @@ test.describe("Job CRUD", () => {
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 15000 });
 
-    // Cleanup
-    await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
+    // Cleanup is in the afterEach — see the header. Deletion is not the subject
+    // of this test, so there is nothing to lose by moving it out and a whole
+    // failure mode to gain: an assertion above that fails no longer leaves a Job
+    // behind, and the reference sweep no longer reports three rows it cannot
+    // delete while that Job exists.
   });
 
   // -------------------------------------------------------------------------
@@ -479,9 +698,9 @@ test.describe("Job CRUD", () => {
   // -------------------------------------------------------------------------
   test("should create a job with a point of contact and surface it on the contact's Related Jobs", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
-    const uid = Date.now().toString(36);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
+    const uid = uniqueId();
     const jobTitle = `E2E Contact Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -504,6 +723,7 @@ test.describe("Job CRUD", () => {
     await expect(page.getByText(fullName).first()).toBeVisible({ timeout: 10000 });
 
     // 2. Create a job and pick that person as point of contact.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
     await navigateToJobs(page);
     await createJob(page, {
@@ -524,13 +744,25 @@ test.describe("Job CRUD", () => {
     await page.getByRole("tab", { name: "Related Jobs" }).click();
     await expect(page.getByText(jobTitle).first()).toBeVisible({ timeout: 10000 });
 
-    // 4. Cleanup (job + resume; archive the person — GDPR design, no hard delete).
-    await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
+    // 4. Archive the person — GDPR design, no hard delete. The job and the
+    //    resume are drained by the afterEach; this step stays in the body
+    //    because there is no delete to pair it with and no registry to drain
+    //    it from (Person is structural known debt, `Person:E2E-B22`).
     await page.goto("/dashboard/contacts");
     await page.waitForLoadState("domcontentloaded");
     await page.getByText(fullName).first().click();
     await page.getByRole("button", { name: "Archive" }).click();
+    // A click is not an outcome, and this was the LAST line of the test: the
+    // page closes the moment the body returns, so the archive request was being
+    // abandoned in flight. Measured — `E2Emtov9xagw0 Recruiter` is still
+    // `status: "active"` in the 2026-09-05 run database, from a test that
+    // passed. "Reactivate" replacing "Archive" is the archived state's own
+    // control (PersonDetail), so waiting for it is both the proof and the thing
+    // that keeps the request alive. Same pattern as
+    // `contact-company-link.spec.ts:87-93`.
+    await expect(
+      page.getByRole("button", { name: "Reactivate" }),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   // -------------------------------------------------------------------------
@@ -547,15 +779,16 @@ test.describe("Job CRUD", () => {
   // round-trips through JOB_*_SELECT.
   test("should create a job with a recruiter triangle and prefill it on edit (F-AJ-08)", async ({
     page,
-  }) => {
-    test.setTimeout(120_000);
-    const uid = Date.now().toString(36);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 60_000);
+    const uid = uniqueId();
     const jobTitle = `E2E Recruiter Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
     const agency = `E2E Agency ${uid}`;
 
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle);
 
     await navigateToJobs(page);
@@ -604,9 +837,11 @@ test.describe("Job CRUD", () => {
       timeout: 10000,
     });
 
-    // Cleanup (job + resume). The agency company is left in place — there is no
-    // company hard-delete flow, and it carries no PII.
-    await deleteJob(page, jobTitle);
-    await deleteResume(page, resumeTitle);
+    // Cleanup is in the afterEach. The agency Company is NOT left in place:
+    // the claim that "there is no company hard-delete flow" was wrong — the
+    // admin Companies tab has one, and the sweep uses it. The JOB going first
+    // is what makes that possible, since `deleteCompanyById` refuses while a
+    // Job still references the row, and the hook is where that ordering now
+    // lives — including on the path where an assertion above fails.
   });
 });

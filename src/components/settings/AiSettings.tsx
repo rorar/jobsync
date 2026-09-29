@@ -283,7 +283,14 @@ function AiSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.aiModule")}</h3>
+          {/*
+            h2, not h3: the settings page renders its own h1 and exactly one of
+            these panels (src/app/dashboard/settings/page.tsx:54,63-81), so the
+            panel title is the page's second level. Every settings panel does
+            this; cards *inside* a panel keep the h3 CardTitle renders. Classes
+            are unchanged, so nothing moves visually.
+          */}
+          <h2 className="text-lg font-medium">{t("settings.aiModule")}</h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.aiModuleDesc")}
           </p>
@@ -299,7 +306,7 @@ function AiSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.aiModule")}</h3>
+        <h2 className="text-lg font-medium">{t("settings.aiModule")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.aiModuleDesc")}
         </p>

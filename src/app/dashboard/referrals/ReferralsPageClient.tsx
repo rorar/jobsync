@@ -134,7 +134,7 @@ export default function ReferralsPageClient() {
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <Network className="h-16 w-16 text-muted-foreground" aria-hidden="true" />
           <div className="text-center">
-            <h3 className="text-lg font-medium">{t("insideTrack.list.empty.title")}</h3>
+            <h2 className="text-lg font-medium">{t("insideTrack.list.empty.title")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {t("insideTrack.list.empty.description")}
             </p>

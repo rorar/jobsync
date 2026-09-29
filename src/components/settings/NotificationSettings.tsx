@@ -200,9 +200,9 @@ function NotificationSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">
+          <h2 className="text-lg font-medium">
             {t("settings.notificationSettings")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.notificationSettingsDesc")}
           </p>
@@ -219,9 +219,9 @@ function NotificationSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">
+          <h2 className="text-lg font-medium">
             {t("settings.notificationSettings")}
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {t("settings.notificationSettingsDesc")}
           </p>
@@ -246,9 +246,9 @@ function NotificationSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">
+        <h2 className="text-lg font-medium">
           {t("settings.notificationSettings")}
-        </h3>
+        </h2>
         <p className="text-sm text-muted-foreground">
           {t("settings.notificationSettingsDesc")}
         </p>

@@ -1,16 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast, safeWait } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast, rowsByText } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function navigateToCompanies(page: Page) {
   await page.goto("/dashboard/admin?tab=companies");
@@ -45,11 +38,12 @@ async function loadUntilCompanyVisible(page: Page, name: string) {
     const loadMoreVisible = await loadMoreBtn.isVisible().catch(() => false);
     if (!loadMoreVisible) break;
 
-    // Click "Load More" and wait for the table to update
+    // Click "Load More" and wait for the table to actually grow.
+    const rowsBefore = await page.getByRole("row").count();
     await loadMoreBtn.click();
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for the table to
-    // finish loading the next page rather than sleeping a fixed 1 000 ms.
-    await safeWait(page, { loadState: "networkidle" });
+    await expect
+      .poll(() => page.getByRole("row").count(), { timeout: 15000 })
+      .toBeGreaterThan(rowsBefore);
   }
 }
 
@@ -83,8 +77,11 @@ async function deleteCompany(page: Page, name: string) {
   const row = page.getByRole("row", { name: new RegExp(name, "i") }).first();
   await expect(row).toBeVisible({ timeout: 10000 });
 
-  // Click the delete button
-  await row.getByRole("button", { name: "Delete" }).click();
+  // Click the delete button, by TEST ID rather than by name. The button is now
+  // named after its row ("Delete E2E Company 1234", `common.deleteNamed`), and
+  // `getByRole`'s `name` matches the WHOLE accessible name rather than a
+  // substring, so `{ name: "Delete" }` would match nothing here.
+  await row.getByTestId("delete-row").click();
 
   // Confirm in the DeleteAlertDialog — click the last button (destructive action)
   await expect(page.getByRole("alertdialog")).toBeVisible();
@@ -189,8 +186,8 @@ test.describe("Company CRUD", () => {
       .getByRole("row", { name: new RegExp(companyName, "i") })
       .first();
 
-    // Click the delete button
-    await row.getByRole("button", { name: "Delete" }).click();
+    // Click the delete button (test id — see `deleteCompany` above for why).
+    await row.getByTestId("delete-row").click();
 
     // Confirm in the DeleteAlertDialog — last button is the destructive action
     await expect(page.getByRole("alertdialog")).toBeVisible();
@@ -199,9 +196,15 @@ test.describe("Company CRUD", () => {
     // Verify success toast
     await expectToast(page, /Company has been deleted/i);
 
-    // Verify the company is removed from the table
-    await expect(
-      page.getByRole("row", { name: new RegExp(companyName, "i") }),
-    ).not.toBeVisible({ timeout: 10000 });
+    // Verify the company is removed from the table.
+    //
+    // DOM locator (E2E-B40): `not.toBeVisible()` is one of the three phrasings
+    // a role locator satisfies for free while the AlertDialog holds
+    // `aria-hidden` on the table behind it — nothing to be visible is not the
+    // same as gone. The toast above already proves the SERVER answered; this
+    // proves the list agrees, and it could not before.
+    await expect(rowsByText(page, companyName)).not.toBeVisible({
+      timeout: 10000,
+    });
   });
 });

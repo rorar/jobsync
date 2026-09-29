@@ -3,7 +3,23 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Destructive colour: TWO tokens, deliberately.
+ *
+ * --destructive carries the surface role (button fill, border) and
+ * --destructive-text the text role. They were one token until 2026-09-08, and one
+ * token cannot satisfy both: the fill is read against near-white
+ * --destructive-foreground, the text against the page background, so making one
+ * pair pass pushes the other under. Sweeping the lightness at the old saturation
+ * shows the window is empty rather than narrow — at L=50% the text sits at
+ * 3.93:1, and by L=55% the button foreground has already fallen to 4.24:1.
+ *
+ * `text-destructive` still resolves to the text token because tailwind.config.ts
+ * overrides the textColor palette entry, so no call site changed. Both values are
+ * pinned by __tests__/destructive-contrast.spec.ts, which recomputes the WCAG
+ * ratios from this file. Change a number here and that test tells you which of
+ * the eight pairings you broke. UI-B4 in docs/BUGS.md.
+ */
+:root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -18,8 +34,15 @@
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    /* Surface role: the fill behind --destructive-foreground on a destructive
+       button, and the colour of border-destructive. Was 60.2%, which put white
+       text on it at 3.59:1 and the border against the page at 4.86:1 — the first
+       below the 4.5:1 AA needs, so it moved. */
+    --destructive: 0 84.2% 48%;
     --destructive-foreground: 210 40% 98%;
+    /* Text role, split out because one value cannot serve both: see the block
+       comment above :root. */
+    --destructive-text: 0 84.2% 42%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
@@ -46,8 +69,12 @@
     --muted-foreground: 215 20.2% 65.1%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 40.6%;
+    /* Was 40.6%: fine behind white text (6.71:1) but only 2.85:1 as a BORDER
+       against the dark page, under the 3:1 that WCAG 1.4.11 asks of non-text
+       contrast. 46% clears both (5.56:1 and 3.43:1). */
+    --destructive: 0 62.8% 46%;
     --destructive-foreground: 210 40% 98%;
+    --destructive-text: 0 62.8% 62%;
     --border: 217.2 32.6% 23.5%;
     --input: 217.2 32.6% 21.5%;
     --ring: 224.3 76.3% 48%;

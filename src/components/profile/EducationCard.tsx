@@ -59,7 +59,7 @@ function EducationCard({
 
   return (
     <div>
-      <CardTitle className="pl-6 py-3">{sectionTitle}</CardTitle>
+      <CardTitle as="h2" className="pl-6 py-3">{sectionTitle}</CardTitle>
       <div className="space-y-3">
         {educations?.map(
           ({
@@ -102,9 +102,9 @@ function EducationCard({
                 </div>
               </CardHeader>
               <CardContent>
-                <h3>
+                <h4>
                   {degree}, {fieldOfStudy}
-                </h3>
+                </h4>
                 <CardDescription>
                   {formatMonthYear(startDate, locale)} -{" "}
                   {endDate ? formatMonthYear(endDate, locale) : t("profile.present")}
@@ -129,7 +129,7 @@ function EducationCard({
         </button>
       </div>
       <DeleteAlertDialog
-        pageTitle={t("profile.deleteEducation")}
+        pageTitle={t("profile.deleteTargetEducation")}
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onDelete={handleDeleteConfirm}

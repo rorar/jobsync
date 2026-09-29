@@ -7,6 +7,12 @@ import {
   isValidPersonTransition,
   isValidInterviewTransition,
   isValidTaskTransition,
+  isValidDataSource,
+  DATA_SOURCES,
+  isValidInterviewOutcome,
+  INTERVIEW_OUTCOMES,
+  isValidSocialPlatform,
+  SOCIAL_PLATFORMS,
   validateExactlyOneTarget,
   validateAtMostOnePrimaryCompany,
   validateCompanyAssociations,
@@ -29,6 +35,59 @@ import {
 // =============================================================================
 // State Machine: Person
 // =============================================================================
+
+describe("isValidDataSource", () => {
+  it("accepts every declared DataSource value including quick_capture", () => {
+    for (const source of DATA_SOURCES) {
+      expect(isValidDataSource(source)).toBe(true);
+    }
+    // quick_capture is the fourth provenance value (crm.allium DataSource enum)
+    expect(DATA_SOURCES).toContain("quick_capture");
+    expect(isValidDataSource("quick_capture")).toBe(true);
+  });
+
+  it("rejects unknown strings and non-strings", () => {
+    expect(isValidDataSource("scraped")).toBe(false);
+    expect(isValidDataSource("")).toBe(false);
+    expect(isValidDataSource(undefined)).toBe(false);
+    expect(isValidDataSource(null)).toBe(false);
+    expect(isValidDataSource(42)).toBe(false);
+  });
+});
+
+describe("isValidInterviewOutcome", () => {
+  it("accepts every declared InterviewOutcome value", () => {
+    for (const outcome of INTERVIEW_OUTCOMES) {
+      expect(isValidInterviewOutcome(outcome)).toBe(true);
+    }
+    expect(INTERVIEW_OUTCOMES).toEqual(["pending", "passed", "rejected", "waitlisted"]);
+  });
+
+  it("rejects unknown strings and non-strings (ADR-019 erased-union guard, W-B2)", () => {
+    expect(isValidInterviewOutcome("failed")).toBe(false);
+    expect(isValidInterviewOutcome("")).toBe(false);
+    expect(isValidInterviewOutcome(undefined)).toBe(false);
+    expect(isValidInterviewOutcome(null)).toBe(false);
+    expect(isValidInterviewOutcome(1)).toBe(false);
+  });
+});
+
+describe("isValidSocialPlatform", () => {
+  it("accepts every declared SocialPlatform value", () => {
+    for (const platform of SOCIAL_PLATFORMS) {
+      expect(isValidSocialPlatform(platform)).toBe(true);
+    }
+    expect(SOCIAL_PLATFORMS).toEqual(["linkedin", "xing", "github", "twitter", "other"]);
+  });
+
+  it("rejects unknown strings and non-strings (ADR-019 erased-union guard, W-H3)", () => {
+    expect(isValidSocialPlatform("facebook")).toBe(false);
+    expect(isValidSocialPlatform("")).toBe(false);
+    expect(isValidSocialPlatform(undefined)).toBe(false);
+    expect(isValidSocialPlatform(null)).toBe(false);
+    expect(isValidSocialPlatform(42)).toBe(false);
+  });
+});
 
 describe("isValidPersonTransition", () => {
   const validTransitions: [PersonStatus, PersonStatus][] = [

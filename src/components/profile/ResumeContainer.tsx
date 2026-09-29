@@ -62,7 +62,7 @@ function ResumeContainer({ resume }: { resume: Resume }) {
     <>
       <Card>
         <CardHeader className="flex-row justify-between items-center">
-          <CardTitle>Resume</CardTitle>
+          <CardTitle as="h1">Resume</CardTitle>
           <CardDescription>
             {resume.FileId && resume.File?.fileName
               ? <DownloadFileButton
@@ -80,7 +80,7 @@ function ResumeContainer({ resume }: { resume: Resume }) {
       {!hasContent && (
         <div className="text-center py-12 text-muted-foreground">
           <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <h3 className="text-lg font-medium">{t("profile.startBuilding")}</h3>
+          <h2 className="text-lg font-medium">{t("profile.startBuilding")}</h2>
           <p className="text-sm mb-4">{t("profile.startBuildingDesc")}</p>
         </div>
       )}

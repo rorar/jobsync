@@ -864,9 +864,23 @@ surface ConflictWarning {
     exposes:
         state.active_runs.count
 
-    provides:
-        ProceedAnyway(viewer)
-        CancelRun(viewer)
+    -- This surface provided ProceedAnyway(viewer) and CancelRun(viewer) until
+    -- 2026-09-05, and no rule listened for either. They were the only `provides`
+    -- entries in this entire spec, which is the more telling half of the defect:
+    -- RequestRun -- the trigger DoubleRunPrevention and ManualRunGuard both
+    -- consume, and the one user-initiated operation this spec exists to govern
+    -- -- is offered by no surface at all.
+    --
+    -- CancelRun was doubly wrong. Dismissing this warning starts nothing and so
+    -- changes nothing any rule governs, and the NAME collides with the domain's
+    -- own meaning of cancelling a run, which is ExternalStopSignal (see rule
+    -- ExternalStop). A reader meeting `CancelRun` here would reasonably expect
+    -- it to stop the run that is already going.
+    --
+    -- ProceedAnyway did have an effect, but not one of its own: confirming
+    -- issues an ordinary RequestRun that happens to be made despite contention.
+    -- It is not a second operation. See the open question on where RequestRun
+    -- should be provided.
 
     @guarantee OnlyWhenRelevant
         -- The warning is hidden entirely when no conflicts exist. It appears only
@@ -999,3 +1013,5 @@ surface RunHistoryEnhancement {
 -- RESOLVED: Module-level singleton (lazy on first import). Startup reconciliation
 -- (reconcileOrphanedRuns) runs in instrumentation.ts before startScheduler().
 -- RunCoordinator is a publisher, not a consumer — no EventBus registration needed.
+
+open question "Which surface provides RequestRun? No surface does today, yet RequestRun is the trigger DoubleRunPrevention and ManualRunGuard both consume and the only user-initiated operation this spec governs. ConflictWarning is the natural home for the confirmed case, but it cannot state it as written: its context binds only SchedulerState, and its own guidance says the automation id arrives as a component parameter rather than being derived from that state. So the choice is between giving ConflictWarning an automation binding in context, or declaring a separate manual-run surface that owns RequestRun and treating ConflictWarning as a pure warning that gates it. Both are boundary-shape decisions, not corrections, so neither was picked here."

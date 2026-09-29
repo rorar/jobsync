@@ -58,7 +58,7 @@ async function waitForUrl(cdp, pattern, timeoutMs = 30000, pollMs = 1000) {
     try {
       const url = await cdp.evaluate('document.location.href');
       if (url?.includes(pattern)) return url;
-    } catch (_) {}
+    } catch (_) { /* evaluate races navigation; poll again */ }
     await new Promise(r => setTimeout(r, pollMs));
   }
   throw new Error(`Timeout waiting for URL containing "${pattern}"`);
@@ -114,7 +114,7 @@ async function waitForAndClick(cdp, { selector, textMatch, log, timeoutMs = 2000
         log('Geklickt (.click())');
         return true;
       }
-    } catch (_) {}
+    } catch (_) { /* evaluate races navigation; poll again */ }
   }
 
   // Last resort: .click() fallback
@@ -125,7 +125,7 @@ async function waitForAndClick(cdp, { selector, textMatch, log, timeoutMs = 2000
     await cdp.evaluate(`(function() { const btn = ${findExpr}; if (btn) btn.click(); })()`);
     log('Geklickt (Fallback .click())');
     return true;
-  } catch (_) {}
+  } catch (_) { /* fallback click failed; report not-clicked below */ }
 
   return false;
 }

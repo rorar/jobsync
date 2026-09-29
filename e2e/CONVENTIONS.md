@@ -49,7 +49,7 @@ async function deleteItem(page: Page, title: string) {
 
 test.describe("MyAggregate CRUD", () => {
   test("should create and verify an item", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();  // NOT Date.now() inline: uniqueId adds the worker index
     const title = `E2E Item ${uid}`;
 
     await navigateToMyPage(page);
@@ -67,7 +67,7 @@ test.describe("MyAggregate CRUD", () => {
 
 ### Key Rules
 
-1. **Unique data per test**: Always use `Date.now().toString(36)` for unique names. Never hardcode test data names like "Test Job 1".
+1. **Unique data per test**: Always use `uniqueId()` from `e2e/helpers/` (timestamp base-36 plus the worker index — the timestamp alone collided across parallel workers, E2E-B29) for unique names. Never hardcode test data names like "Test Job 1".
 
 2. **Cleanup in every test**: Every test that creates data must delete it. If the test can fail before cleanup, use the pattern:
    ```typescript
@@ -85,7 +85,7 @@ test.describe("MyAggregate CRUD", () => {
 
 5. **No `test.beforeEach` with login or navigation to dashboard**: Each test navigates to its own page via its own `navigateTo*()` helper.
 
-6. **Import shared helpers**: Don't duplicate `selectOrCreateComboboxOption`, `expectToast`, `login`, or `uniqueId`. Import from `../helpers`.
+6. **Import shared helpers**: Don't duplicate `selectOrCreateComboboxOption`, `expectToast`, `ensureEnglishLocale`, or `uniqueId`. Import from `../helpers`.
 
 7. **Keep aggregate-specific helpers local**: `navigateToJobs()`, `createJob()`, `deleteJob()` stay in `job-crud.spec.ts`. Only truly generic helpers go in `helpers/index.ts`.
 
@@ -96,7 +96,10 @@ Smoke tests go in `e2e/smoke/`. They test auth flows or unauthenticated pages. T
 ```typescript
 import { test, expect, type Page } from "@playwright/test";
 
-// Smoke tests may define their own login() since they TEST the auth flow
+// Smoke tests define their own login() since they TEST the auth flow. There is
+// deliberately no shared one: `helpers/index.ts` exported a `login()` that no
+// spec ever imported (T3) — both smoke specs and `global-setup.ts` had each
+// inlined their own, because each needs a different assertion about the flow.
 async function login(page: Page) {
   await page.getByPlaceholder("id@example.com").fill("admin@example.com");
   await page.getByLabel("Password").fill("password123");
@@ -116,13 +119,141 @@ Available imports:
 
 | Helper | Purpose |
 |---|---|
-| `uniqueId()` | `Date.now().toString(36)` — unique test data suffix |
-| `login(page)` | UI login — only for smoke tests |
+| `uniqueId()` | timestamp base-36 + worker index (E2E-B29: the timestamp alone collided across parallel workers) — unique test data suffix |
+| `ensureEnglishLocale(page)` | Set the `NEXT_LOCALE=en` cookie so the app renders in the language every CRUD assertion is written in. Was copied privately into 16 specs before T4 consolidated it |
 | `expectToast(page, pattern, timeout?)` | Assert toast notification visible |
 | `selectOrCreateComboboxOption(page, label, placeholder, text, timeout?)` | 3-step combobox: exact → partial → create |
 | `safeWait(page, options, timeout?)` | Deterministic wait — replaces `waitForTimeout`. See below. |
+| `rowsByText(page, text)` | Table rows from the DOM, not the accessibility tree — the locator for "the row is gone". See below. |
 
 **Adding a new shared helper**: Only add helpers used by 3+ spec files. If it's aggregate-specific, keep it local.
+
+### Proving a deletion takes two assertions, and one wrong locator
+
+A modal makes the page invisible to `getByRole`. Radix's Dialog and AlertDialog
+call `hideOthers()` (`@radix-ui/react-dialog/dist/index.mjs:137`), which sets
+`aria-hidden="true"` on every child of `document.body` outside the dialog
+portal. Role locators consult the accessibility tree, so for as long as a
+confirm dialog is open or animating out they match **nothing** — and every
+phrasing of "the row is gone" passes against a row that is still on screen:
+
+```ts
+// WRONG — all three are satisfied by aria-hidden rather than by a deletion
+await expect(page.getByRole("row", { name: title })).toHaveCount(0);
+await expect(row).not.toBeVisible();
+await row.waitFor({ state: "detached" });
+```
+
+```ts
+// RIGHT — the server's answer, then the view's
+await expectToast(page, /Task has been deleted/);      // came from the round trip
+await expect(rowsByText(page, title)).toHaveCount(0);  // DOM, immune to the modal
+```
+
+Both halves are load-bearing. `rowsByText` reads the DOM, which only refreshes
+once the container's reload lands, so on its own it says nothing about whether
+the SERVER answered — without the toast the helper returns while the action is
+still in flight and the page closes under the request. And the toast on its own
+does not prove the list updated.
+
+This cost six leaked tasks per run, plus three resumes and their children,
+invisible behind a green suite (E2E-B40) — including one fix for the same
+symptom in another table that used the blinded locator and therefore changed
+nothing. `expectToast` is already immune for the same reason and documents it
+at length.
+
+
+## Shared Fixtures (`e2e/helpers/*.ts`)
+
+`helpers/index.ts` holds *generic* primitives. A **fixture** — a page flow one aggregate owns but
+several others need as a precondition — gets its own file next to it and is imported directly.
+
+| Fixture | Import from | Used by |
+|---|---|---|
+| `ensureResumeExists(page, title, { confirmWith? })` / `deleteResume(page, title)` | `../helpers/resume-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `automation-crud`, `automation-wizard-modules`, `keyboard-ux` |
+| `sweepReferenceGroups(page, groups, specName)` / `ADMIN_TAB` / `loadUntilAdminRowVisible` | `../helpers/admin-reference-cleanup` | eleven specs — every one that mints a JobTitle, Company, Location, Tag or ActivityType |
+| `deleteJobViaApi(page, title)` | `../helpers/job-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `kanban`, `job-status-crud` (ADR-046) |
+| `E2E_JOB_TEARDOWN_API_KEY` | `../helpers/api-key-fixture` | `job-fixture` and `prisma/seed-e2e.ts` — the one plaintext both sides must agree on; that file's header says why it is a constant and not an env var |
+| `activityRows(page, name)` / `deleteActivity(page, name)` / `purgeActivity(page, name)` | `../helpers/activity-fixture` | `activity-crud`, `task-crud` |
+
+Two of these are not page flows and sit here for findability rather than by the
+definition above: `api-key-fixture` is a shared constant, and `cleanup-fixture`
+(below) is a mechanism.
+
+| Mechanism | Import from | Used by |
+|---|---|---|
+| `testWithCleanup(cleanup)` — returns a `test` whose every test runs `cleanup` afterwards | `../helpers/cleanup-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `kanban`, `job-status-crud` |
+
+`testWithCleanup` replaces the `base.extend<{ cleanup: void }>({ cleanup: [...,
+{ auto: true }] })` boilerplate that the five Job specs each carried a verbatim
+copy of after ADR-046. It takes the whole teardown body and gives a caller no way
+to pass half of one — see the ordering trap below for why that matters. Its
+header also records the scope boundary: it is internal E2E infrastructure, not
+Module SDK surface, and `playwright.config.ts:47-54` pins `testDir` such that a
+connector module could not import it even if someone wanted to.
+
+There is one file in `helpers/` that is NOT there to be shared: `helpers/console-oracle.ts` has a
+single caller (`crud/keyboard-ux.spec.ts`) and lives outside the spec so that **Jest** can import
+it. `jest.config.ts:214-218` refuses to look for tests under `e2e/`, which does not stop a test in
+`__tests__/` importing from it — and `__tests__/console-oracle.spec.ts` is the only automatic gate
+the console oracle's classification rules have, since Playwright does not run in CI and Jest does.
+The module therefore imports nothing, `@playwright/test` least of all. Do not move it back into the
+spec on the strength of rule 7 above; that would delete the test with it.
+
+**Never copy a fixture into a spec.** Six private copies of the resume fixture is how `898a5119`
+— one commit that added a second submit button to the Create Resume dialog and renamed the
+success toast — stayed half-repaired for five months: the fix had to be found six times and was
+found twice.
+
+If your spec needs a different post-state, add a **named option** to the shared fixture rather
+than a copy (`confirmWith: "toast" | "row"` exists for exactly that reason). If the difference is
+not a post-state but a different *contract* — e.g. `profile-crud` asserts that deletion succeeded
+instead of tolerating a missing row — keep a local function and give it a name that says so
+(`deleteResumeAndVerifyGone`), so nobody later unifies the two by name.
+
+## Converting `afterEach` to a Playwright fixture — the ordering trap (2026-09-13)
+
+Not to be confused with the "Shared Fixtures" above (`*-fixture.ts` helper files) — this is about
+Playwright's own native `test.extend()` fixture mechanism, `specs/e2e-test-infrastructure.allium`'s
+`FixtureOwnedTeardown` rule ("ownership belongs to a Playwright fixture..., not a hand-written
+`test.afterEach`"), and a real bug this project almost shipped while acting on it.
+
+**The trap:** `test.afterEach` hooks and Playwright's test-scoped fixture teardown are NOT
+interleaved on request. Hooks always run first, THEN fixtures tear down
+(`node_modules/playwright/lib/worker/workerMain.js:339` vs. `:345` — no exception, no
+configuration flag). If a spec's `afterEach` does ORDERED cleanup across several related models —
+this project's Job specs delete the Job first, then sweep JobTitle/Company/Location, because the
+reference-table deletes refuse while a Job still points at them — converting only the FIRST step
+(Job) into its own `test.extend()` fixture silently breaks the order: the fixture's teardown runs
+*after* the whole `afterEach`, so the reference sweep now runs against a Job that still exists,
+every single time. Playwright's own docs confirm this is expected, not a bug to report: sibling
+fixtures with no declared dependency have no guaranteed order either, and the framework explicitly
+does not promise any fixed interleaving between a bare `afterEach` and a fixture's teardown phase.
+
+**The fix, matching Playwright's own recommendation** ("if an after-hook tears down what a
+before-hook created, turn it into a fixture"): don't split ordered cleanup across a hook and a
+fixture, or across several fixtures with an implied-but-undeclared order. Move the **entire**
+existing `afterEach` body — every step, in the same order — into ONE local, `auto: true`
+test-scoped fixture:
+
+```ts
+const test = base.extend<{ cleanup: void }>({
+  cleanup: [async ({ page }, use) => {
+    await use();
+    // exact same steps, same order, as the afterEach it replaces
+  }, { auto: true }],
+});
+```
+
+`auto: true` makes the fixture run for every test in the file without any test destructuring it —
+the same implicit, file-wide behavior `test.afterEach` already has. `test.setTimeout()`'s extra-time
+bump still works identically inside fixture teardown: `afterEach` and fixture teardown share the
+same timeout slot (`workerMain.js:329,339,345`, `afterHooksSlot`).
+
+**Rule of thumb before converting any `afterEach` to a fixture:** if it does more than one thing,
+convert the whole thing at once, in place, rather than one step at a time. A partially-migrated
+`afterEach` is not "safer" — it's the specific shape that breaks silently, because the still-hooked
+steps and the newly-fixtured step stop being one atomic sequence.
 
 ## No `waitForTimeout` Policy (M-T-04)
 
@@ -150,7 +281,10 @@ await safeWait(page, { selector: '[data-testid="staging-list-item"]' });
 await safeWait(page, { responseUrl: /\/api\/staging/ });
 
 // GOOD — wait for full page load:
-await safeWait(page, { loadState: "networkidle" });
+await safeWait(page, { loadState: "domcontentloaded" });
+
+// NEVER on a /dashboard/* page — see "networkidle is unreachable" below:
+// await safeWait(page, { loadState: "networkidle" });
 
 // GOOD — arbitrary Playwright assertion:
 await safeWait(page, {
@@ -159,6 +293,29 @@ await safeWait(page, {
   },
 });
 ```
+
+### `networkidle` is unreachable on every `/dashboard/*` page
+
+Do not wait for `loadState: "networkidle"` anywhere behind the dashboard shell.
+`src/components/Header.tsx` mounts `<SchedulerStatusBar/>`, whose
+`useSchedulerStatus()` hook opens an `EventSource("/api/scheduler/status")`. The
+route holds that stream open for ten minutes and the client reconnects
+immediately when it closes, so there is always a pending request and Playwright's
+"no network connections for 500 ms" condition never becomes true. The wait does
+not merely run slowly — it can only ever time out.
+
+`e2e/crud/job-crud.spec.ts` has carried this note since before the M-T-04 sweep;
+the sweep nevertheless introduced 13 `networkidle` waits, which is where 9 of the
+38 failures in the 2026-08-31 baseline came from.
+
+Wait for the thing you actually mean instead:
+
+| You meant | Wait for |
+|---|---|
+| "the page shell is interactive" | the landmark control, e.g. `getByTestId("add-job-btn")` |
+| "the server action finished" | its success toast (`expectToast`) |
+| "the list reloaded" | the row you expect, or a change in `getByRole("row").count()` |
+| "the async options arrived" | `getByRole("option").first().waitFor(...).catch(() => null)` |
 
 ### Acceptable exceptions
 
@@ -186,12 +343,65 @@ comment with the reason.
 | Cleanup only at end of test body | `test.afterEach` for critical cleanup | If assert fails, inline cleanup never runs |
 | Tests that read other tests' data | Each test creates own data | Cross-test dependency = flaky in parallel |
 
+## Reading a failure's artefacts
+
+**`test-results/<test>/error-context.md` is NOT a snapshot of the moment the assertion
+failed.** It is taken during teardown: `_takePageSnapshot` (`node_modules/playwright/lib/index.js:577`)
+is called only from `willCloseBrowserContext` (`:575`) and `didFinishTest` (`:615`), never from the
+failing action. By then this file's `test.afterEach` has navigated the page to
+`/dashboard/admin?tab=…` to delete its reference rows, so the snapshot shows the ADMIN page and
+says nothing about the state the assertion saw.
+
+This has already produced one wrong diagnosis: E2E-B43 was first written up as "the shape of a
+`TagInput` remount — no chips, popover closed", read out of a snapshot whose `heading "Skills Tags"`
+is `admin.skillsTags` (`src/components/admin/TagsContainer.tsx`), i.e. a different page entirely.
+
+What to use instead: **a trace**. `--trace=on` (or `retain-on-failure`) records a DOM snapshot per
+action with timings, so the state BEFORE and AFTER the failing step is inspectable. Note that
+tracing changes timing and can mask a race — if a flake stops reproducing under `--trace=on`, that
+is itself information, not a fix.
+
+**To learn whether the server was ever asked, sample the run database DURING the run.**
+`E2E_DB_WATCH=1 ./scripts/test-e2e.sh` starts `scripts/e2e-db-watch.sh` once the run database is
+provisioned and keeps its log beside the JSON report; it records every row that appears or
+disappears, with a timestamp on the same clock as the server log. Querying AFTER the run cannot
+answer the question: every spec deletes what it created, and
+`e2e/helpers/admin-reference-cleanup.ts` treats a row that was never written as already gone, so
+"the browser never sent the request" and "the server refused it" both leave the same empty table.
+Read the three artefacts together — the test's `window=` from the report, the `+`/`-` lines in the
+watch log, and `approaching the used memory threshold` in the kept server log — and the failure
+usually attributes itself. That is how E2E-B43 was separated from E2E-B42, and how
+`job-detail-panels.spec.ts:440` was attributed under E2E-B35: the status change was in the
+database 0.9 s before the watchdog line, and the next navigation got `ERR_CONNECTION_REFUSED`.
+
 ## Environment Constraints
 
-- **8 GB RAM, no swap** (until infra-issue #11 is resolved): Long serial runs (>10 min) can crash the dev server. Run tests in batches if needed.
-- **NixOS**: Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium`
-- **Dev server**: Agents may start it (`bun run dev`) but must **never stop it**. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
-- **SQLite**: Shared `dev.db` with no per-test isolation. Unique test data names are your only protection against collision.
+- **The host is not fixed**, so no RAM or swap figures are stated here (CLAUDE.md § "Using these scripts"). Read them when you need them (`nproc && free -h && swapon --show`), and run the suite only through `./scripts/test-e2e.sh`: it refuses to start while the container is already busy (exit 75, `scripts/test-e2e.sh:155`) and aborts a run that is measuring the machine (see below).
+- **Chromium**: the wrapper picks it, never the spec — an explicit `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`, else the NixOS system chromium if it is executable, else the build pinned by `playwright-core`, else the newest cached build with a WARNING (`scripts/test-e2e.sh:80-87,119-148`). If a failure looks like browser behaviour, check the `chromium=` banner line first.
+- **Port**: one per worktree. The main checkout keeps 3737; a linked worktree derives its own (`scripts/lib-devserver.sh`), so two checkouts can run suites at the same time. Never hardcode 3737 in a spec or a helper — read `baseURL` from the Playwright config, which follows `E2E_BASE_URL`.
+- **Dev server**: **Subagents** may start it (`bun run dev`) and must **never stop it** — parallel subagents once killed each other's server mid-run, and a worker cannot tell whether the process on :3737 belongs to a sibling three minutes into a suite. The orchestrator and the wrappers may stop it deliberately; they are the only parties that know nothing else is running. Read as a blanket ban the rule protects orphaned processes nobody owns. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
+- **Production build is the DEFAULT (since 2026-09-08)**: `./scripts/test-e2e.sh` runs the suite
+  against `next build` + `next start` (`scripts/prod-e2e.sh`, build via `scripts/e2e-prod-build.sh`
+  into `.next-e2e/`; the build is skipped when nothing changed). `E2E_PROD=0` opts into the dev
+  server, which is worth it only while you edit app code and iterate one spec. The default moved
+  because the dev server retains ~2,749 objects per request in React's development Flight bundle
+  and Next's watchdog then restarts it mid-run, abandoning requests silently (`E2E-B42`) — on the
+  fixed single-worker order that restart lands inside `job-detail-panels.spec.ts:440` every run
+  (`E2E-B35`) — and because `E2E-B43` was a real defect that only the production build exposed.
+  What a spec author needs to know: **there is no auth bypass under production** — it is inert
+  under `NODE_ENV=production` by design — so a run's signin budget is real. `global-setup.ts`
+  mints the session cookie instead of signing in, leaving the two smoke tests as the only signins.
+  If you add a spec that signs in, count it against 5 per 15 minutes per IP.
+- **The wrapper aborts a run that is measuring the machine** (exit 124, reports still written):
+  wall clock past `E2E_MAX_MINUTES` (90), or `E2E_ABORT_CONSECUTIVE_TIMEOUTS` (3) failed results
+  in a row that each ran into a test timeout. The second shape is ALSO what a broken shared helper
+  looks like; the banner says so, and a single-spec run tells them apart.
+- **SQLite**: every run gets its **own** database, copied from a seeded template (`scripts/e2e-db.sh`); `prisma/dev.db` is never opened by the suite. Within a run the workers still share that copy, so unique test-data names remain your protection against collision — but nothing survives into the next run.
+- **There is no stale-data purge any more, and none is needed.** It used to run in `globalSetup`
+  only, which meant UI mode, watch mode and the test-runner MCP silently skipped it. The database
+  is now provisioned per run by `./scripts/test-e2e.sh`, so a mode that bypasses `globalSetup`
+  cannot inherit residue — but a mode that bypasses the WRAPPER runs against whatever
+  `DATABASE_URL` your shell has, which is `prisma/dev.db`. Use the wrapper.
 
 ## One Spec Per Aggregate
 

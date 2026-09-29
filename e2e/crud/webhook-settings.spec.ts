@@ -1,16 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
 // ---------------------------------------------------------------------------
-
-/** Set NEXT_LOCALE=en cookie so the app renders in English. */
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 /** Navigate to Settings > Webhooks section. */
 async function navigateToWebhooks(page: Page) {
@@ -27,7 +20,45 @@ async function navigateToWebhooks(page: Page) {
     .getByText("Webhooks", { exact: true })
     .first()
     .waitFor({ state: "visible", timeout: 15000 });
+
+  // ...and then for the panel's own data, which the heading does NOT prove.
+  // WebhookSettings.tsx:281 early-returns a loading block that renders the very
+  // same heading, so the wait above is satisfied while the form is still
+  // unmounted. Wait for the spinner to go, as navigateToSmtp already does.
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
+  await page
+    .getByRole("main")
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 15000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
+
+/**
+ * URLs of the endpoints created by the test currently running.
+ *
+ * Load-bearing, not tidiness. A user may hold at most 10 endpoints
+ * (MAX_ENDPOINTS_PER_USER in webhook.actions.ts, MAX_ENDPOINTS in
+ * WebhookSettings.tsx), and at the cap the create form renders DISABLED. Each
+ * test below deletes its endpoint inline as its last statement, so a test that
+ * throws before that line leaks a row — and after ten leaks EVERY webhook test
+ * fails in EVERY later run until someone deletes rows by hand. That happened
+ * on 2026-09-01.
+ *
+ * `createWebhookEndpoint` registers here itself so no caller can forget, and
+ * `deleteWebhookEndpoint` de-registers on success, so the afterEach below only
+ * ever deletes what genuinely leaked. An ARRAY, not a scalar: a test that
+ * creates two endpoints (the obvious missing one — "form disables at the cap" —
+ * would create ten) must not leak all but the last. Module scope is per-worker
+ * (workers are separate processes running their tests serially) and the hook
+ * swaps the reference out, so nothing bleeds into the next test.
+ */
+let createdEndpointUrls: string[] = [];
 
 /**
  * Create a webhook endpoint with the given URL and at least one event selected.
@@ -38,6 +69,10 @@ async function createWebhookEndpoint(
   webhookUrl: string,
   eventLabel: string,
 ) {
+  // Register BEFORE creating: a create that fails after the row was written
+  // has still leaked one.
+  createdEndpointUrls.push(webhookUrl);
+
   // Fill the URL input
   await page.getByLabel("Endpoint URL").fill(webhookUrl);
 
@@ -67,17 +102,57 @@ async function createWebhookEndpoint(
 }
 
 /**
+ * The length above which WebhookSettings.tsx:520-523 shortens the displayed
+ * URL. That truncation is done in JAVASCRIPT (`endpoint.url.slice(0, 47) +
+ * "..."`), not by CSS, so past this point the tail is not in the DOM AS TEXT and
+ * no text matcher can see it. (The full URL does remain in the DOM as the
+ * `title` attribute at WebhookSettings.tsx:533 — invisible to `hasText`, which
+ * reads text content, but present, so do not read this as "the string is gone".) (The `truncate` class on the same element,
+ * WebhookSettings.tsx:533, is cosmetic on top of that JS cut — CSS never
+ * removes text from the DOM, so it alone would not have hidden anything from
+ * Playwright.)
+ */
+const URL_JS_TRUNCATION_LIMIT = 50;
+
+/**
  * Find the endpoint card containing the given URL.
- * The URL may be truncated in the display, so match on the first 40 chars.
+ *
+ * Matches the FULL URL. The URLs built by the tests below are 41 characters
+ * (`https://example.com/webhooks/e2e-` = 33 + an 8-char `uniqueId()`), i.e.
+ * under URL_JS_TRUNCATION_LIMIT, so they are rendered whole and `hasText` sees
+ * all of them. Matching a PREFIX — what this helper used to do, first 40 chars
+ * — dropped exactly the last character of the uid, which is the only thing
+ * distinguishing one test's endpoint from another's: two endpoints created
+ * within the same 36 ms `Date.now().toString(36)` tick would have been
+ * indistinguishable, and the `.first()` in `deleteWebhookEndpoint` / the
+ * afterEach net could then have deleted the OTHER test's card while
+ * de-registering its own URL. Inert under `scripts/test-e2e.sh` (--workers=1),
+ * live for a bare `npx playwright test`.
+ *
+ * The guard is not paranoia: without it a longer URL would match nothing and
+ * surface as an unexplained 5 s timeout inside a `catch` that swallows it.
+ *
+ * Container: one EndpointRow's <Card>. `div.rounded-lg.border` is the Card base
+ * class from src/components/ui/card.tsx:12 (nothing here renders `rounded-xl`,
+ * and Badge/Button/Switch use `rounded-md`/`rounded-full`), scoped to the
+ * endpoint list — the aria-live region at WebhookSettings.tsx:411 — which
+ * excludes the create-form Card structurally instead of relying on the text
+ * filter to do it.
  */
 function getEndpointCard(page: Page, webhookUrl: string) {
-  // Match on the domain part of the URL since long URLs are truncated
-  const urlPrefix = webhookUrl.length > 40
-    ? webhookUrl.slice(0, 40)
-    : webhookUrl;
+  if (webhookUrl.length > URL_JS_TRUNCATION_LIMIT) {
+    throw new Error(
+      `[webhook-settings] URL is ${webhookUrl.length} chars, over the ` +
+        `${URL_JS_TRUNCATION_LIMIT}-char limit at WebhookSettings.tsx:520 — the ` +
+        `component renders it truncated, so the full string is not in the DOM ` +
+        `and this locator cannot match it. Shorten the test URL.`,
+    );
+  }
   return page
-    .locator(".rounded-lg, .rounded-xl")
-    .filter({ hasText: urlPrefix });
+    .getByRole("main")
+    .locator('[aria-live="polite"]')
+    .locator("div.rounded-lg.border")
+    .filter({ hasText: webhookUrl });
 }
 
 /** Delete a webhook endpoint by its URL. */
@@ -101,7 +176,16 @@ async function deleteWebhookEndpoint(page: Page, webhookUrl: string) {
 
     // Wait for the AlertDialog to close
     await alertDialog.waitFor({ state: "hidden", timeout: 5000 });
+
+    // Deleted for real (toast seen, dialog closed) — drop it from the tracking
+    // so the afterEach does not re-delete a row that is already gone. Anything
+    // that threw above skips this line and stays tracked, which is exactly the
+    // case the net exists for.
+    createdEndpointUrls = createdEndpointUrls.filter((u) => u !== webhookUrl);
   } catch {
+    // swallow-ok: teardown helper, called for an endpoint the test may never have
+    // created. It asserts through `expectToast`, and a throw here would fail the
+    // test on its cleanup rather than on its subject.
     // Endpoint may not exist — skip cleanup
   }
 }
@@ -115,6 +199,48 @@ async function deleteWebhookEndpoint(page: Page, webhookUrl: string) {
 test.describe("Webhook Settings", () => {
   test.beforeEach(async ({ page }) => {
     await ensureEnglishLocale(page);
+  });
+
+  // Safety net for the inline deletes at the end of each test — see
+  // `createdEndpointUrls` above. On a green test this list is already empty
+  // (deleteWebhookEndpoint de-registers), so the hook costs nothing and stays
+  // silent; a warning here therefore means a REAL leak, not routine noise.
+  test.afterEach(async ({ page }) => {
+    // Swap the reference out BEFORE the first await: clearing afterwards would
+    // keep entries alive into the next test if a delete throws, and clearing in
+    // a beforeEach would not run at all under test.skip.
+    const leaked = createdEndpointUrls;
+    createdEndpointUrls = [];
+    if (leaked.length === 0) return;
+
+    try {
+      // deleteWebhookEndpoint assumes the Webhooks panel is open. A test that
+      // failed inside createWebhookEndpoint leaves the browser on the secret
+      // dialog, so navigate first — and keep it inside the try, because a hook
+      // that throws replaces the real test failure in the report.
+      await navigateToWebhooks(page);
+      for (const url of leaked) {
+        await deleteWebhookEndpoint(page, url);
+        // deleteWebhookEndpoint swallows every error, so calling it proves
+        // nothing — look again. Without this the hook's catch below only fires
+        // when navigateToWebhooks throws, and a row the net FAILED to delete
+        // would pass in silence, which is the opposite of what this net is for.
+        if ((await getEndpointCard(page, url).count()) > 0) {
+          console.warn(
+            `[webhook-settings] leaked endpoint survived cleanup: ${url} ` +
+              `— it counts against MAX_ENDPOINTS_PER_USER for the REST OF ` +
+              `THIS RUN. The next run copies the seed template again, and ` +
+              `that holds no WebhookEndpoint rows (scripts/e2e-db.sh).`,
+          );
+        }
+      }
+    } catch (error) {
+      // swallow-ok: afterEach cleanup net — a throwing hook would replace the real
+      // test failure with its own; the warning below names what may be left behind.
+      console.warn(
+        `[webhook-settings] afterEach cleanup failed: ${String(error)}`,
+      );
+    }
   });
 
   test("should display webhook settings section with create form", async ({
@@ -147,16 +273,17 @@ test.describe("Webhook Settings", () => {
 
   test("should create a webhook endpoint and display it in the list", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 
     await navigateToWebhooks(page);
     await createWebhookEndpoint(page, webhookUrl, "Module Deactivated");
 
-    // Verify the endpoint appears in the list
-    // The URL should be visible (possibly truncated)
+    // Verify the endpoint appears in the list. The full URL is in the DOM:
+    // WebhookSettings.tsx:520 only shortens URLs over 50 chars and this one is
+    // 41 — see URL_JS_TRUNCATION_LIMIT above.
     await expect(
       page.getByText(new RegExp(`example\\.com/webhooks/e2e-${uid}`)).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -170,8 +297,10 @@ test.describe("Webhook Settings", () => {
     await deleteWebhookEndpoint(page, webhookUrl);
   });
 
-  test("should toggle webhook endpoint active state", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should toggle webhook endpoint active state", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 
@@ -194,16 +323,21 @@ test.describe("Webhook Settings", () => {
     // The card gets opacity-60 class when inactive
     await expect(card.first()).toHaveClass(/opacity-60/, { timeout: 5000 });
 
-    // Toggle it back on
+    // Toggle it back on. The toast CANNOT discriminate here: webhook.updated is
+    // one string for both directions ("Webhook endpoint updated", webhook.ts:6),
+    // and the first toast is still on screen inside its 5 s life. Assert the
+    // state instead — without this the second click could miss entirely and the
+    // test would still pass on the first action's toast.
     await toggle.click();
     await expectToast(page, /updated/i);
+    await expect(card.first()).not.toHaveClass(/opacity-60/, { timeout: 5000 });
 
     // Cleanup
     await deleteWebhookEndpoint(page, webhookUrl);
   });
 
-  test("should delete a webhook endpoint", async ({ page }) => {
-    test.setTimeout(90_000);
+  test("should delete a webhook endpoint", async ({ page }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 
@@ -228,8 +362,8 @@ test.describe("Webhook Settings", () => {
 
   test("should expand endpoint details to show subscribed events", async ({
     page,
-  }) => {
-    test.setTimeout(90_000);
+  }, testInfo) => {
+    test.setTimeout(testInfo.timeout + 30_000);
     const uid = uniqueId();
     const webhookUrl = `https://example.com/webhooks/e2e-${uid}`;
 

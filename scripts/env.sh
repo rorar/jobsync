@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Shared environment for all jobsync scripts (NixOS workarounds)
+# Shared environment for all jobsync scripts.
+# The Prisma engine setup below is a NixOS workaround; on a glibc host it is
+# redundant but harmless.
 source ~/.bash_profile 2>/dev/null
 
 # Auto-setup Prisma engines if missing (survives /tmp clears)

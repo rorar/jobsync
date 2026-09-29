@@ -78,9 +78,29 @@ export type ContactChannelType = "work" | "home" | "other";
 
 export type PersonStatus = "active" | "archived" | "anonymized";
 
-export type SocialPlatform = "linkedin" | "xing" | "github" | "twitter" | "other";
+export const SOCIAL_PLATFORMS = ["linkedin", "xing", "github", "twitter", "other"] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
-export type DataSource = "manual" | "auto_created" | "imported";
+/** Runtime membership check for the erased SocialPlatform union (ADR-019, W-H3). */
+export function isValidSocialPlatform(value: unknown): value is SocialPlatform {
+  return typeof value === "string" && (SOCIAL_PLATFORMS as readonly string[]).includes(value);
+}
+
+/**
+ * How a Person record entered the system — ONE provenance axis (crm.allium
+ * DataSource enum). `quick_capture` is a minimal inline create from an entity
+ * picker: behaviourally distinct from `manual` (knowingly incomplete at birth)
+ * and from `auto_created` (a user chose to create it). Consumers that must treat
+ * a knowingly-incomplete contact differently read THIS value — deriving origin
+ * from field emptiness is wrong, the first edit that fills a field erases it.
+ */
+export const DATA_SOURCES = ["manual", "auto_created", "imported", "quick_capture"] as const;
+export type DataSource = (typeof DATA_SOURCES)[number];
+
+/** Runtime membership check for the erased DataSource union (ADR-019). */
+export function isValidDataSource(value: unknown): value is DataSource {
+  return typeof value === "string" && (DATA_SOURCES as readonly string[]).includes(value);
+}
 
 export type ProcessingBasis = "legitimate_interest" | "consent" | "contract";
 
@@ -95,7 +115,13 @@ export type ActorSource =
 
 export type InterviewStatus = "scheduled" | "completed" | "cancelled" | "rescheduled";
 
-export type InterviewOutcome = "pending" | "passed" | "rejected" | "waitlisted";
+export const INTERVIEW_OUTCOMES = ["pending", "passed", "rejected", "waitlisted"] as const;
+export type InterviewOutcome = (typeof INTERVIEW_OUTCOMES)[number];
+
+/** Runtime membership check for the erased InterviewOutcome union (ADR-019, W-B2). */
+export function isValidInterviewOutcome(value: unknown): value is InterviewOutcome {
+  return typeof value === "string" && (INTERVIEW_OUTCOMES as readonly string[]).includes(value);
+}
 
 export type CrmTaskStatus = "pending" | "in_progress" | "done" | "cancelled";
 
@@ -116,7 +142,10 @@ export type ActivityType =
   | "follow_up_sent"
   | "application_submitted"
   | "contact_deleted"
-  | "automation_degraded";
+  | "automation_degraded"
+  // Inside Track referrals (spec: crm.allium, inside-track.allium)
+  | "referral_recorded"
+  | "referral_status_changed";
 
 // Welle 3 (Gap-6): "pattern" enables glob (`*`) handle matching alongside exact
 // (email/phone) and domain-suffix (domain) suppression.

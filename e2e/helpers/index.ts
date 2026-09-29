@@ -1,26 +1,193 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Generate a unique identifier for test data (e.g. "m1abc2d"). */
+/**
+ * Generate a unique identifier for test data (e.g. "m1abc2dw0").
+ *
+ * Millisecond timestamp plus the WORKER that produced it. The timestamp alone
+ * was the whole identifier until 2026-09-02 (E2E-B29), which is safe only while
+ * one worker runs: `playwright.config.ts` sets `fullyParallel: true` with
+ * `workers: 3` locally and CLAUDE.md documents `E2E_WORKERS=4`, so three
+ * workers entering this function in the same millisecond produced the same
+ * name — and the suite's protection against collision IS the name
+ * (e2e/CONVENTIONS.md, and `UniqueTestData` in the spec).
+ *
+ * `process.env.TEST_PARALLEL_INDEX` rather than `test.info().parallelIndex`:
+ * the env var is set by the worker process (playwright/lib/worker/workerMain.js)
+ * and is therefore readable from module scope, where `test.info()` throws.
+ * Outside a Playwright worker it is absent, and "0" is then correct — there is
+ * no second worker to collide with.
+ */
 export function uniqueId(): string {
-  return Date.now().toString(36);
+  const worker = process.env.TEST_PARALLEL_INDEX ?? "0";
+  return `${Date.now().toString(36)}w${worker}`;
 }
 
-/** Perform UI login. Only needed in tests that don't use storageState. */
-export async function login(page: Page) {
-  await page.getByPlaceholder("id@example.com").click();
-  await page.getByPlaceholder("id@example.com").fill("admin@example.com");
-  await page.getByLabel("Password").click();
-  await page.getByLabel("Password").fill("password123");
-  await page.getByRole("button", { name: "Login" }).click();
+/**
+ * Set the NEXT_LOCALE=en cookie so the app renders in English.
+ *
+ * Every CRUD spec asserts on English strings — role names, toast text, column
+ * headers — so a run that renders in another language fails on the selector
+ * rather than on the behaviour, and the failure names the wrong thing.
+ *
+ * What this actually pins is the SECOND of three priorities.
+ * `getUserLocale()` (src/lib/locale.ts:14) resolves
+ * `UserSettings.display.locale` → this cookie → `DEFAULT_LOCALE`. So it makes
+ * the fallback deterministic; it does NOT override a display locale already
+ * stored for the seeded user. If a spec ever renders in the wrong language
+ * despite calling this, the DB row is where to look, not the cookie.
+ *
+ * Consolidated here from SIXTEEN byte-identical private copies (T4,
+ * `docs/handoff-2026-09-08-open-items.md`), which is five times the "3+ spec
+ * files" bar for a shared helper in e2e/CONVENTIONS.md. It is generic rather
+ * than aggregate-specific — rule 7's test — because it names no page, no route
+ * and no aggregate, only the cookie the whole app reads.
+ *
+ * `domain: "localhost"` is not incidental. `addCookies` requires either
+ * url OR domain+path, and the suite's `baseURL` is a localhost port
+ * (`playwright.config.ts`, `scripts/lib-devserver.sh`). A run pointed at a
+ * different host via `E2E_BASE_URL` would need the domain to follow; the
+ * sixteen copies all hardcoded it, and consolidating does not change that —
+ * it just means there is now one line to edit instead of sixteen.
+ */
+export async function ensureEnglishLocale(page: Page) {
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
 }
 
-/** Wait for a toast notification matching the given pattern. */
+/**
+ * Wait for a toast notification matching the given pattern.
+ *
+ * E2E-B20: the match is scoped to the Radix toast viewport, not to the page.
+ * `page.getByText()` matches anywhere in the document, so this helper was
+ * routinely satisfied by the row the test had just created, by a heading, or by
+ * a status badge — the assertion went green without a toast ever appearing. Two
+ * call sites were provably in that state: `module-settings.spec.ts` asserts
+ * /Active|activated/i on a page that renders an "Active"/"Inactive" badge for
+ * every module row (ApiKeySettings.tsx:416), and `settings-api-keys.spec.ts`
+ * asserts /revoked/i on a page that renders a "Revoked" badge
+ * (PublicApiKeySettings.tsx:274).
+ *
+ * The anchor is the viewport's landmark role. `<ToastViewport />` in
+ * src/components/ui/toaster.tsx:34 passes no `label`, so Radix applies its own
+ * default `"Notifications ({hotkey})"` with `hotkey = ["F8"]`
+ * (@radix-ui/react-toast/dist/index.mjs:69-70, :176-177). That literal never
+ * passes through our i18n, so the anchor is stable in all four locales. Toasts
+ * portal into the `<ol>` nested inside that region (index.mjs:79, :193), so
+ * every visible toast is a descendant of it.
+ *
+ * The trailing " (" is load-bearing: NotificationDropdown.tsx:352 renders a
+ * SECOND `role="region"` whose accessible name is exactly "Notifications"
+ * (notifications.title, en). Anchoring on /^Notifications/ alone would also
+ * select the notification dropdown whenever a test leaves it open.
+ *
+ * It is an ATTRIBUTE selector rather than getByRole, and that is deliberate.
+ * getByRole consults the accessibility tree. Radix's modal Dialog calls
+ * hideOthers() (@radix-ui/react-dialog/dist/index.mjs:137), whose aria-hidden
+ * helper walks document.body's children and sets aria-hidden="true" on every
+ * one that is not an ancestor of the portal — with no exemption for live
+ * regions. Our <ToastViewport/> is rendered IN PLACE inside the app root
+ * (toaster.tsx:34, dashboard/layout.tsx:47) and is never portalled: react-toast
+ * uses Portal only for the sr-only announce clone (index.mjs:480), while the
+ * viewport itself is a plain DismissableLayer.Branch (:171-180). So it is
+ * exactly such a sibling, and under getByRole it would be invisible to
+ * Playwright for as long as any modal is open — a timeout for every toast
+ * asserted before its dialog has closed, while the toast sits there on screen.
+ * CSS attribute matching never consults that tree.
+ *
+ * The trade-off is real rather than free: this also gives up the role engine's
+ * implicit "is in the accessibility tree" filter. Here that is exactly what we
+ * want, but it is a semantic change, not a pure refactor.
+ *
+ * A page-wide `getByRole("status")` is the obvious alternative and is wrong: a
+ * dozen sr-only live regions in src/ carry that role and announce the very text
+ * these tests match on (ComboBox.tsx:195, StatusStageCombobox.tsx:179,
+ * ContactPicker.tsx:248, CompanyPicker.tsx:235, skeleton.tsx:75, ...), and Radix
+ * additionally portals a VisuallyHidden role="status" announce copy of each
+ * toast to document.body, outside the viewport (index.mjs:365-372).
+ *
+ * Known limitation this helper cannot fix: it narrows WHERE we look, not WHAT
+ * we match. A pattern is safe only if it can match NEITHER of two things:
+ *
+ *   (a) the NEIGHBOURING action's success message — toasts live 5 s
+ *       (toaster.tsx), so a test that acts twice in quick succession can be
+ *       satisfied by the first toast. This is the visible hazard; it costs you
+ *       a missed assertion.
+ *
+ *   (b) any FAILURE message the SAME action can produce. This one is worse: it
+ *       turns a broken flow green rather than merely skipping a check. Today
+ *       every call site is clear of it, but by luck rather than design —
+ *       `handleError` (src/lib/utils.ts:60-90) discards the thrown
+ *       `error.message` and returns the caller's generic key, so a rejection
+ *       surfaces as e.g. "Failed to delete API key" (no "deleted"). The moment
+ *       anyone surfaces the real message, `/deleted/i` at
+ *       settings-api-keys.spec.ts:136 becomes a false positive the same day,
+ *       because `api.keyMustBeRevoked` already reads "API key must be revoked
+ *       before it can be deleted".
+ * Toasts live for 5 s (toaster.tsx:19), so a test that fires two
+ * actions in quick succession can still be satisfied by the PREVIOUS toast,
+ * which is still on screen. Telling two simultaneous toasts apart is inherent
+ * to text matching, so the obligation sits with the caller: pass a pattern that
+ * cannot match the neighbouring action's message.
+ *
+ * Worked example for (a): `module-settings.spec.ts` matched /Active/i against
+ * "Inactive" and /activated/i against "deactivated". Fixed by moving to
+ * /Module activated\./i and /Module deactivated\./i, mutually exclusive because
+ * the discriminating "de" sits between "Module " and "activated". Use that shape
+ * for any toggle-style assertion; the short generic patterns — /deleted/i,
+ * /updated/i, /revoked/i — are the ones to check first.
+ */
 export async function expectToast(
   page: Page,
   pattern: RegExp,
   timeout = 10000,
 ) {
-  await expect(page.getByText(pattern).first()).toBeVisible({ timeout });
+  await expect(
+    page
+      .locator('[role="region"][aria-label^="Notifications ("]')
+      .getByText(pattern)
+      .first(),
+  ).toBeVisible({ timeout });
+}
+
+/**
+ * Table rows containing `text`, read from the DOM rather than the accessibility
+ * tree — the locator to use when the answer must survive an open modal.
+ *
+ * Use this for every assertion that a row is GONE. `getByRole("row", …)` is the
+ * better default everywhere else and stays so; it is wrong specifically here,
+ * and the reason is the same mechanism `expectToast` above gave up the role
+ * engine for.
+ *
+ * Radix's Dialog and AlertDialog call `hideOthers()`
+ * (@radix-ui/react-dialog/dist/index.mjs:137), which walks document.body's
+ * children and sets `aria-hidden="true"` on every one that is not an ancestor
+ * of the dialog portal. The table is such a sibling. Role locators consult the
+ * accessibility tree, so for as long as that attribute is set they match
+ * NOTHING — and every phrasing of "the row is gone" is then satisfied by a row
+ * that is still on screen and still in the database:
+ *
+ *   toHaveCount(0)                  0 matches
+ *   not.toBeVisible()               nothing to be visible
+ *   waitFor({ state: "detached" })  also true of a locator matching nothing
+ *
+ * This is E2E-B40, and it is not a hypothetical: measured against the kept run
+ * database, six of the seven task-crud tests that create a task left it behind
+ * after a run Playwright reported as passed. The teardown net read the same
+ * empty accessibility tree and warned about nothing.
+ *
+ * A CSS locator never consults that tree. `hasText` on a string is a
+ * case-insensitive substring match, so it needs no regex escaping — which also
+ * removes the `escapeRegExp` dance the role-based call sites needed.
+ *
+ * Necessary but NOT sufficient. It proves what the DOM holds, and the DOM is
+ * only refreshed once the container's reload lands, so a row that is gone from
+ * the table still says nothing about the SERVER having answered. Pair it with
+ * `expectToast` on the action's own success message, which is the only signal
+ * in this suite that comes from the round trip rather than from the view.
+ */
+export function rowsByText(page: Page, text: string) {
+  return page.locator("tr", { hasText: text });
 }
 
 /**
@@ -115,30 +282,49 @@ export async function selectOrCreateComboboxOption(
   await searchInput.click();
   await searchInput.fill(text);
 
-  // M-T-04: replaced waitForTimeout(600) — wait for the options list to
-  // react to the typed text instead of a fixed 600 ms pause.
-  await page
-    .getByRole("option")
-    .first()
-    .waitFor({ state: "visible", timeout: 5000 })
-    .catch(() => null); // list may stay empty if "Create:" is the only entry
-
   const exactOption = page.getByRole("option", { name: text, exact: true });
   const partialOption = page
     .getByRole("option", { name: new RegExp(text, "i") })
     .first();
   const createOption = page.getByText(`Create: ${text}`);
 
-  try {
-    await exactOption.waitFor({ state: "visible", timeout });
-    await exactOption.click();
-  } catch {
+  // M-T-04: replaced waitForTimeout(600) — wait for the options list to react
+  // to the typed text instead of a fixed 600 ms pause.
+  //
+  // Race the "Create:" entry against the option list. Waiting only for an
+  // option burns the FULL 5 s whenever creation is the only possible outcome,
+  // because the create entry is not an option (see the popover-close comment
+  // below). That was free while the suite ran against a database full of
+  // leftovers, where almost every value already existed. Since every run now
+  // starts from a seeded template, creating is the common case, not the rare
+  // one: profile-crud's multi-section test creates four values and went from
+  // 14.2 s to a 60 s timeout on the first run against a fresh database.
+  await Promise.race([
+    page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }),
+    createOption.waitFor({ state: "visible", timeout: 5000 }),
+  ]).catch(() => null);
+
+  // Fast path for the create case. The race above already proves the list has
+  // settled, so a snapshot is safe here — and it skips two 3 s waits that can
+  // only ever expire. Falls through to the original chain when anything is
+  // ambiguous, so the slow path still governs every case it used to.
+  if (
+    (await createOption.isVisible().catch(() => false)) &&
+    (await page.getByRole("option").count()) === 0
+  ) {
+    await createOption.click();
+  } else {
     try {
-      await partialOption.waitFor({ state: "visible", timeout });
-      await partialOption.click();
+      await exactOption.waitFor({ state: "visible", timeout });
+      await exactOption.click();
     } catch {
-      await createOption.waitFor({ state: "visible", timeout });
-      await createOption.click();
+      try {
+        await partialOption.waitFor({ state: "visible", timeout });
+        await partialOption.click();
+      } catch {
+        await createOption.waitFor({ state: "visible", timeout });
+        await createOption.click();
+      }
     }
   }
 

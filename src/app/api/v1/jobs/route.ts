@@ -41,11 +41,20 @@ export const GET = withApiAuth(async (req, { userId }) => {
   }
 
   if (search) {
+    // No `mode: "insensitive"` — that option is Postgres-only in Prisma and
+    // this project runs SQLite (CLAUDE.md: "Prisma (SQLite)"). Prisma's
+    // client validates the option per-provider and throws "Unknown argument
+    // `mode`" rather than ignoring it, so this endpoint 500'd on every call
+    // that reached it — found 2026-09-13 by an E2E fixture that was the
+    // first real caller of `search` this project ever exercised. SQLite's
+    // own `LIKE` (what `contains` compiles to) is already case-insensitive
+    // for ASCII, which is what every test title/company/location here is, so
+    // dropping the option is not a behavior regression on this database.
     whereClause.OR = [
-      { JobTitle: { label: { contains: search, mode: 'insensitive' } } },
-      { Company: { label: { contains: search, mode: 'insensitive' } } },
-      { Location: { label: { contains: search, mode: 'insensitive' } } },
-      { description: { contains: search, mode: 'insensitive' } },
+      { JobTitle: { label: { contains: search } } },
+      { Company: { label: { contains: search } } },
+      { Location: { label: { contains: search } } },
+      { description: { contains: search } },
     ];
   }
 

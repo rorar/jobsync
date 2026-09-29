@@ -1,5 +1,50 @@
-import { test, expect, type Page } from "@playwright/test";
-import { expectToast } from "../helpers";
+import { expect, type Page } from "@playwright/test";
+import { testWithCleanup } from "../helpers/cleanup-fixture";
+import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
+import {
+  ADMIN_TAB,
+  sweepReferenceGroups,
+} from "../helpers/admin-reference-cleanup";
+import { deleteJobViaApi } from "../helpers/job-fixture";
+
+// ---------------------------------------------------------------------------
+// WHY THIS FILE NOW CREATES A JOB
+// ---------------------------------------------------------------------------
+//
+// It used to create nothing and assert `locator("table")`. That worked only
+// because `job-status-crud.spec.ts` — the file immediately before this one in
+// path order, and therefore the last thing to touch the Jobs table before it —
+// leaked the two jobs it created. Its own header records the measurement:
+//
+//     "Both tests below passed on the 2026-09-05 run and left behind, per the
+//      kept run database: 2 Jobs, 1 JobStatus, 2 JobTitles, 2 Companies,
+//      2 Locations."
+//
+// `cad321fb` repaired that leak. The residue this file was standing on
+// disappeared with it and both table-shaped assertions here failed on the very
+// next run — not because anything about the view toggle changed, but because
+// this file had an order dependency on another spec's garbage, which
+// e2e/CONVENTIONS.md:18 forbids in as many words: "Every test is
+// self-contained: it creates its own data, asserts, and cleans up. No test
+// depends on another test's data."
+//
+// The dependency is not incidental to the assertion, it is the whole of it.
+// With zero jobs the two views are INDISTINGUISHABLE in the DOM: the table
+// branch renders `<KanbanEmptyState>` (JobsContainer.tsx:448-450) and so does
+// the kanban branch (KanbanBoard.tsx:392-393, which returns the empty state
+// INSTEAD of the `role="region"` board). No `<table>`, no board region, no
+// columns — nothing to tell the two apart but the radio, which
+// `switchViewMode` already asserts. So there is no version of "assert
+// something else" that saves the toggle test; it needs a job, and it now makes
+// one.
+//
+// The repair is deliberately NOT "make job-status-crud put the jobs back".
+// Restoring state a spec found is still two specs sharing one row.
+
+let createdJobs: string[] = [];
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
 
 // ---------------------------------------------------------------------------
 // Helpers (kanban-specific)
@@ -8,86 +53,187 @@ import { expectToast } from "../helpers";
 async function navigateToMyJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
+  // The toolbar carries both the view toggle and `add-job-btn`, and it renders
+  // in either view. Waiting on it here means every test below starts from a
+  // page that has actually mounted, rather than racing `domcontentloaded`.
+  await page
+    .getByTestId("add-job-btn")
+    .waitFor({ state: "visible", timeout: 15000 });
+}
+
+/**
+ * Create one job through the AddJob dialog, registering every row it writes
+ * BEFORE the call that writes it.
+ *
+ * Registration order matters: `selectOrCreateComboboxOption`'s create path
+ * calls the server action and only then closes the popover, so a run that dies
+ * in between has already leaked the reference row. Same reason the job itself
+ * is registered before the form can be submitted.
+ *
+ * Mirrors the flow in `enrichment.spec.ts:26-83` and `job-crud.spec.ts`, which
+ * both run green, rather than inventing a sixth variant.
+ */
+async function createTrackedJob(
+  page: Page,
+  opts: { title: string; company: string; location: string },
+) {
+  await navigateToMyJobs(page);
+  await page.getByTestId("add-job-btn").click();
+  await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+
+  await page
+    .getByPlaceholder("Copy and paste job link here")
+    .fill("https://example.com/careers/e2e-kanban");
+
+  createdJobs.push(opts.title);
+  createdJobTitles.push(opts.title);
+  await selectOrCreateComboboxOption(page, "Title", "Create or Search title", opts.title);
+  createdCompanies.push(opts.company);
+  await selectOrCreateComboboxOption(page, "Company", "Create or Search company", opts.company);
+  createdLocations.push(opts.location);
+  await selectOrCreateComboboxOption(page, "Location", "Create or Search location", opts.location);
+
+  await page.getByLabel("Job Source").click();
+  await page.getByRole("option", { name: "Indeed" }).click();
+  await page.locator(".tiptap").click();
+  await page.locator(".tiptap").fill("E2E kanban view-toggle job description.");
+
+  // Pick a resume (FK requirement — the form submits `resume=""` otherwise and
+  // the server answers P2003). The seeded "Test Resume" is guaranteed by
+  // prisma/seed.ts, so this file creates no resume of its own.
+  await page.getByLabel("Select Resume").click();
+  const firstResume = page.getByRole("option").first();
+  await firstResume.waitFor({ state: "visible", timeout: 10000 });
+  await firstResume.click();
+
+  await page.getByTestId("save-job-btn").click();
+  await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({
+    timeout: 15000,
+  });
+}
+
+/**
+ * Switch the Jobs view.
+ *
+ * `isVisible()` does not wait, so the previous `if (await radio.isVisible())`
+ * silently did nothing whenever the toolbar had not rendered yet — leaving the
+ * page in the other view and failing a later `locator("table")` wait with an
+ * error that pointed nowhere near the cause. Per e2e/CONVENTIONS.md we wait and
+ * throw rather than skip, and we confirm the toggle actually flipped.
+ */
+async function switchViewMode(page: Page, mode: "table" | "kanban") {
+  const radio = page.getByRole("radio", {
+    name: mode === "table" ? /table/i : /kanban/i,
+  });
+  await radio.waitFor({ state: "visible", timeout: 10000 });
+  await radio.click();
+  await expect(radio).toHaveAttribute("aria-checked", "true");
 }
 
 async function switchToKanbanView(page: Page) {
-  const kanbanRadio = page.getByRole("radio", { name: /kanban/i });
-  if (await kanbanRadio.isVisible()) {
-    await kanbanRadio.click();
-  }
+  await switchViewMode(page, "kanban");
 }
 
 async function switchToTableView(page: Page) {
-  const tableRadio = page.getByRole("radio", { name: /table/i });
-  if (await tableRadio.isVisible()) {
-    await tableRadio.click();
-  }
+  await switchViewMode(page, "table");
 }
 
-/**
- * Create a job via the Add Job form. Returns the title for cleanup.
- */
-async function createTestJob(page: Page, uid: string): Promise<string> {
-  const title = `E2E Kanban ${uid}`;
-
-  // Switch to table view to use the existing Add Job flow
-  await switchToTableView(page);
-
-  // Click Add Job button
-  await page.getByRole("button", { name: /add job/i }).click();
-
-  // Wait for dialog
-  await page.waitForSelector('[role="dialog"]', { state: "visible" });
-
-  // Fill in job title
-  const titleInput = page.locator('input[name="title"]').first();
-  if (await titleInput.isVisible()) {
-    await titleInput.fill(title);
-  }
-
-  // Fill in company
-  const companyInput = page.locator('input[name="company"]').first();
-  if (await companyInput.isVisible()) {
-    await companyInput.fill(`Company ${uid}`);
-  }
-
-  // Submit
-  const submitBtn = page.getByRole("button", { name: /save|create|add/i }).last();
-  await submitBtn.click();
-
-  // Wait for dialog to close (indicates successful creation)
-  await page.waitForSelector('[role="dialog"]', { state: "hidden", timeout: 5000 });
-
-  return title;
-}
-
-/**
- * Delete a job by title from the table view
- */
-async function deleteTestJob(page: Page, title: string) {
-  await switchToTableView(page);
-  await page.locator("table").first().waitFor({ state: "visible", timeout: 5000 });
-
-  const row = page.getByRole("row", { name: new RegExp(title, "i") }).first();
-  if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
-    const menuBtn = row.getByTestId("job-actions-menu-btn");
-    await menuBtn.click();
-    const deleteItem = page.getByRole("menuitem", { name: /delete/i });
-    await deleteItem.click();
-    // Confirm deletion dialog
-    const confirmBtn = page.getByRole("button", { name: /delete/i }).last();
-    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await confirmBtn.click();
-    }
-  }
-}
+// NOTE: an earlier `createTestJob` / `deleteTestJob` pair lived here and was
+// deleted (E2E-B19 close-out). They had no call sites at the time and could not
+// have worked if wired up — which is why `createTrackedJob` above is written
+// from the green flow in enrichment/job-crud rather than resurrected from them.
+// `createTestJob` switched to
+// the TABLE view first, and there its trigger `getByRole("button", { name:
+// /add job/i })` matches nothing: the table toolbar's button is `jobs.newJob` =
+// "New Job" (AddJob.tsx:397, jobs.ts:20). An "Add Job" button DOES exist in the
+// app — KanbanEmptyState.tsx:18-23 renders `jobs.kanbanEmptyBoardAction` =
+// "Add Job" — but only in the kanban branch (JobsContainer.tsx:437,449), which
+// this helper had just navigated away from. The decisive half of the argument
+// needs none of that: the fields they
+// filled, `input[name="title"]` / `input[name="company"]`, do not exist —
+// both are <Combobox> (AddJob.tsx:445,472) and those `name` values are
+// react-hook-form FormField props, erased before the DOM.
+//
+// Deleted rather than repaired: the flow every other spec already uses —
+// getByTestId("add-job-btn"), selectOrCreateComboboxOption(page,
+// "Title"|"Company", ...), then getByTestId("save-job-btn") — is what
+// `createTrackedJob` follows. See job-crud.spec.ts:73-93.
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
+// FixtureOwnedTeardown (specs/e2e-test-infrastructure.allium:868): the whole
+// per-file cleanup chain — Job deletion via the API, then the reference-group
+// sweep — lives in ONE local `auto: true` fixture rather than a hand-written
+// `afterEach`. Playwright's own `afterEach` hooks ALWAYS run before any
+// fixture's teardown code, with no guaranteed interleaving otherwise, so
+// splitting "delete the Job" into its own fixture while the reference sweep
+// stayed in `afterEach` would silently break the required order (Job first,
+// because `deleteJobTitleById`/`deleteCompanyById` refuse while a Job still
+// references them). See `e2e/helpers/job-fixture.ts` for the full rationale.
+const test = testWithCleanup(async (page, testInfo) => {
+  testInfo.setTimeout(testInfo.timeout + 60_000);
+
+  const jobs = createdJobs;
+  const referenceGroups = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdJobs = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+
+  // ORDER IS A REQUIREMENT, not tidiness: `deleteJobTitleById` /
+  // `deleteCompanyById` count referencing Jobs and refuse while one exists,
+  // so the job goes first or the reference sweep reports failures of the
+  // wrong deleter.
+  for (const title of jobs) {
+    try {
+      await deleteJobViaApi(page, title);
+    } catch (error) {
+      console.warn(`[kanban] cleanup failed for "${title}": ${String(error)}`);
+    }
+  }
+
+  // Navigates itself and never throws.
+  await sweepReferenceGroups(page, referenceGroups, "kanban");
+});
+
 test.describe("Kanban Board", () => {
-  test("should toggle between table and kanban view", async ({ page }) => {
+  test.beforeEach(async ({ context }) => {
+    // The teardown below drives the admin tables through
+    // `sweepReferenceGroups`, whose Delete control is selected by
+    // aria-label="Delete" (`common.delete`, en). Under another NEXT_LOCALE the
+    // sweep would fail SILENTLY and report a leak that is really a label
+    // mismatch. The bodies are English-only too (/table/i, /kanban/i).
+    await context.addCookies([
+      { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+    ]);
+  });
+
+  test("should toggle between table and kanban view", async ({ page }, testInfo) => {
+    // The 60 s default (playwright.config.ts:22) was sized for a test that only
+    // clicked a toggle. Creating a job through the AddJob dialog costs 17-25 s
+    // on a warm server and the whole dialog is three combobox CREATE round
+    // trips; on the 2026-09-05 00:26 run the equivalent block in
+    // job-status-crud spent ~50 s before it even reached the resume field. Buy
+    // the headroom explicitly rather than let this start failing on its setup.
+    test.setTimeout(testInfo.timeout + 60_000);
+
+    // Precondition, established here rather than inherited. See the file
+    // header: with zero jobs both views render the same empty state, so
+    // neither half of this test can pass without a job and neither half is
+    // meaningful. This is the only test in the file that needs one.
+    const uid = uniqueId();
+    await createTrackedJob(page, {
+      title: `E2E KanbanJob ${uid}`,
+      company: `E2E KanbanCo ${uid}`,
+      location: `E2E KanbanLoc ${uid}`,
+    });
+
     await navigateToMyJobs(page);
 
     // Look for the view mode toggle
@@ -163,20 +309,47 @@ test.describe("Kanban Board", () => {
 
     // Switch to table view
     await switchToTableView(page);
-    await page.locator("table").first().waitFor({ state: "visible", timeout: 5000 });
+
+    // Prove the preference was WRITTEN before reloading, without needing a job
+    // to exist. What stood here was a wait on `locator("table")`, which is only
+    // rendered when the user has at least one job (JobsContainer.tsx:451,
+    // `jobs.length > 0 &&`) — so this test silently depended on rows another
+    // spec had leaked, and started failing the moment that leak was fixed.
+    //
+    // The persisted key is the actual mechanism under test
+    // (useKanbanState.ts:78,87-90), so asserting it is stronger than the
+    // render-side proxy it replaces, not weaker: reading it back after the
+    // reload below is what makes the round trip complete.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            window.localStorage.getItem("jobsync-myjobs-view-mode"),
+          ),
+        { timeout: 5000 },
+      )
+      .toBe("table");
 
     // Reload the page
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    // Check that table radio is selected
+    // Assert, don't probe. This assertion IS the test: persistence is only
+    // proven by the reloaded toggle coming back checked. `isVisible()` does not
+    // wait, so the `.catch(() => false)` guard this replaces turned a slow
+    // post-reload render into a silent skip — green while verifying nothing.
+    // switchToTableView above already resolved this exact radio, so its absence
+    // after a reload is a real failure and worth seeing.
     const tableRadio = page.getByRole("radio", { name: /table/i });
-    if (await tableRadio.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await expect(tableRadio).toHaveAttribute("aria-checked", "true");
-    }
+    await expect(tableRadio).toBeVisible({ timeout: 10000 });
+    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
 
-    // Switch back to kanban for future tests
-    await switchToKanbanView(page);
+    // The trailing `switchToKanbanView(page)` that stood here was annotated
+    // "switch back to kanban for future tests" — an inter-test dependency in
+    // as many words, and one that could never have worked: the view mode lives
+    // in localStorage (useKanbanState.ts:78) and `e2e/.auth/user.json` stores
+    // `"origins": []`, i.e. no localStorage at all, so every test starts from
+    // the "kanban" default no matter what this one leaves behind.
   });
 
   test("should support keyboard navigation on view mode toggle", async ({ page }) => {

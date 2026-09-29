@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast, safeWait } from "../helpers";
+import { ensureEnglishLocale, uniqueId, expectToast, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Inside Track (Referral) — lifecycle happy path (Welle 5, Task 5.5)
@@ -19,12 +19,6 @@ import { uniqueId, expectToast, safeWait } from "../helpers";
 //
 // No hard delete exists for a Referral (GDPR design, mirrors Person) — cleanup
 // terminalises the tip via Decline.
-
-async function ensureEnglishLocale(page: Page) {
-  await page.context().addCookies([
-    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
-  ]);
-}
 
 async function createTipster(page: Page, fullName: string) {
   await page.goto("/dashboard/contacts");

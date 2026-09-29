@@ -15,10 +15,16 @@
 -- Dependencies:
 --   - Job, Company from shared-entities.allium
 --   - JobStatusChanged from event-bus.allium
---   - DataSubjectRequest from crm-gdpr.allium
+-- W-H1 (2026-08-25): this module NO LONGER depends on crm-gdpr.allium — the
+-- dependency direction was flipped. crm-gdpr.allium now does `use "./crm.allium"
+-- as crm` and references crm/Person et al. directly instead of keeping its own
+-- `external entity` hand-copies of them. The old `use "./crm-gdpr.allium" as
+-- gdpr` line here had ZERO qualified references (every cross-spec link in this
+-- file is a prose comment), so removing it costs nothing and clears what would
+-- otherwise have been a real import cycle. Do NOT re-add it: crm.allium is the
+-- lower layer and must not import its own GDPR consumer.
 
 use "./crm-workflow.allium" as workflow
-use "./crm-gdpr.allium" as gdpr
 use "./event-bus.allium" as events
 use "./shared-entities.allium" as shared
 use "./notification-dispatch.allium" as notifications
@@ -99,6 +105,9 @@ value CompanyAssociation {
 value SocialProfile {
     -- A link to a social/professional network profile.
     platform: SocialPlatform
+    -- W-H3: url must be a web link (http/https scheme only) — a domain-level
+    -- constraint validated at the create/update boundary. platform membership is
+    -- enforced by the SocialPlatform enum type.
     url: String
 }
 
@@ -200,7 +209,7 @@ enum ActivityType {
     | email_sent | email_received | call_logged
     | document_attached | reminder_triggered
     | follow_up_sent | application_submitted
-    | vacancy_promoted | automation_degraded
+    | automation_degraded
     -- Inside Track referrals (spec: inside-track.allium). Deliberately NOT
     -- folded into status_changed, which means "a Job's status changed": a
     -- referral runs its own lifecycle, and merging them would make the two
@@ -250,6 +259,17 @@ entity Person {
     data_source: DataSource
     processing_basis: ProcessingBasis
     retention_expires_at: Timestamp?
+    -- Art. 7(3): the moment consent was withdrawn, or null if it never was.
+    -- Only meaningful together with processing_basis = consent; a withdrawal
+    -- marker on a legitimate_interest or contract record would be meaningless,
+    -- since those bases are unaffected by withdrawal (crm-gdpr.allium
+    -- ConsentBlockOnlyOnConsentBasis). Processing performed BEFORE withdrawal
+    -- stays lawful and is not undone. Reversible — see crm-gdpr.allium rules
+    -- WithdrawConsent / ReinstateConsent. Prisma: Person.consentWithdrawnAt.
+    -- W-H1: lived on crm-gdpr's PersonGdprExtension until 2026-08-25; it was
+    -- the one governance field that existed in Prisma and in code but had no
+    -- home on this entity.
+    consent_withdrawn_at: Timestamp?
 
     created_by: ActorMetadata
     updated_by: ActorMetadata
@@ -268,6 +288,11 @@ entity Person {
     primary_company: companies where is_primary = true -> company
     is_auto_created: data_source = auto_created
     is_retention_expired: retention_expires_at != null and retention_expires_at <= now
+    -- Art. 7(3): a consent-based record whose consent has been withdrawn is
+    -- processing-restricted. Records on other legal bases are never blocked.
+    -- The restriction itself (what may and may not act on such a record) is
+    -- specified in crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted.
+    is_consent_blocked: processing_basis = consent and consent_withdrawn_at != null
 
     transitions status {
         active -> archived
@@ -277,6 +302,53 @@ entity Person {
         terminal: anonymized
     }
 
+    -- W-B3: the retention clock this invariant guarantees exists is a
+    -- LAST-ACTIVITY clock, not a creation clock — the period tracks necessity
+    -- instead of approximating it. A qualifying interaction re-bases
+    -- retention_expires_at to now + the operator's configured period
+    -- (src/lib/crm/retention-policy.ts touchPersonRetention /
+    -- touchPersonsRetention), and changing the configured period re-bases every
+    -- existing deadline by the delta, so shortening the period takes effect
+    -- immediately rather than at each contact's next edit.
+    --
+    -- WHAT COUNTS AS ACTIVITY (decided 2026-08-30; the W-B3 follow-up open
+    -- question this replaces asked for exactly this decision):
+    --
+    --   The clock advances when a deliberate act by the AUTHENTICATED USER
+    --   creates a NEW DURABLE ASSOCIATION with that specific Person — or
+    --   refreshes the Person record itself. System-driven writes never count.
+    --   Acts that END or wind down the association never count.
+    --
+    -- Both limbs are load-bearing under Art. 5(1)(e). An interaction is
+    -- admissible evidence that the controller still NEEDS the data only if it
+    -- is intentional (otherwise it measures system churn, not necessity) and
+    -- constitutive (it advances the purpose rather than merely observing the
+    -- record). Stated as a PRINCIPLE rather than a list because an enumeration
+    -- drifts the moment a new action lands and gives no way to classify it.
+    --
+    -- Qualifying rules: UpdatePerson, ReactivatePerson, AddJobContact,
+    -- CreateNote and CreateTask (for each person target), ScheduleInterview
+    -- (when a person is attached), AddPersonConnection (both endpoints), and
+    -- inside-track RecordInsiderTip / RecordNetworkTip (every Person named).
+    --
+    -- NOT qualifying, deliberately: ArchivePerson (archiving asserts the
+    -- OPPOSITE of still-needed, so advancing the clock there would let filing a
+    -- contact away extend its retention); WithdrawConsent / ReinstateConsent
+    -- (consent is the LAWFULNESS limb, Art. 6/7 — orthogonal to necessity, and
+    -- overloading Art. 7(3) machinery with a retention effect would couple two
+    -- independent tests); lifecycle transitions and removals (completing or
+    -- cancelling a task or interview is as consistent with "we are done here"
+    -- as with "still working" — AMBIGUOUS evidence, and the recorded tie-break
+    -- for ambiguity is to err toward erasure, see the last_activity_at note
+    -- below); and read-only views, which leave no write at all and are evidence
+    -- of curiosity rather than necessity (counting them would additionally mean
+    -- a framework link-prefetch could advance the clock with no user intent).
+    --
+    -- ReactivatePerson is included even though it is not an association-creating
+    -- act, for the symmetric reason ArchivePerson is excluded, and because
+    -- ExpireAutoCreatedPersons erases ARCHIVED Persons too — without the touch,
+    -- restoring a Person the day before their deadline would erase them the day
+    -- after, contradicting the intent just expressed.
     invariant AutoCreatedHasRetention {
         data_source = auto_created implies retention_expires_at != null
     }
@@ -438,18 +510,38 @@ entity ConnectedAccount {
 ------------------------------------------------------------
 
 config {
-    -- GDPR retention
+    -- GDPR retention.
+    -- W-B3 (2026-08-26): this is now the DEFAULT, not a constant. It is the
+    -- period used when the operator has not chosen one. PrivacySettings
+    -- (src/models/userSettings.model.ts) exposes a bounded choice of
+    -- 180 / 365 / 730 / 1095 days, defaulting to this value so an operator who
+    -- never opens the setting keeps exactly the policy declared here. There is
+    -- no "unlimited" member: Art. 5(1)(e) does not permit indefinite retention.
+    -- The 1095-day ceiling matches the timeline-retention window, so a Person is
+    -- never retained longer than its own timeline.
     auto_created_retention: Duration = 730.days
-    timeline_retention: Duration = 1095.days
+    -- W-H1 (2026-08-25): `timeline_retention: Duration = 1095.days` was DELETED
+    -- here. No rule in this module consumed it — W-E6 had already found the
+    -- duplication and settled for a "kept for reference only" comment, which is
+    -- the same symptom-patching W-H1 exists to undo: a value two files must
+    -- manually keep in step is a drift mechanism, not documentation. Timeline
+    -- retention is specified where its rule lives. Note the owner is currently
+    -- CONTESTED between crm-gdpr.allium (ExpireOldTimelineActivities) and
+    -- gdpr-data-rights.allium (PurgeOldCrmActivityLogs), which disagree on
+    -- anonymise-vs-hard-delete — see the open question at the end of
+    -- crm-gdpr.allium. Do not re-add a third copy here to resolve that.
 
     -- Reminders
     interview_reminder_before: Duration = 24.hours
+    -- W-E6: reserved for a future follow-up-scheduling rule; no rule consumes it yet.
     follow_up_default_delay: Duration = 7.days
 
     -- Limits
     max_persons_per_user: Integer = 10000
     max_tasks_per_user: Integer = 5000
     max_blocklist_entries: Integer = 1000
+    -- W-E6: the connected-accounts cap is enforced in inside-track.allium's own
+    -- config; this member is unused here.
     max_connected_accounts: Integer = 5
 }
 
@@ -540,6 +632,10 @@ rule AutoCreatePersonFromEmail {
     requires: not exists Blocklist{user_id: user.id, handle: email_handle, type: email}
     requires: not exists Blocklist{user_id: user.id, type: domain,
         handle: extract_domain(email_handle)}
+    -- W-F4: also suppress on a `pattern`-type glob entry that matches the handle.
+    -- Glob matching is algorithmic, so it is a black box here. The `phone` mode
+    -- does not apply to an email-triggered creation (no phone is present).
+    requires: not matches_blocked_pattern(user.id, email_handle)
     requires: not exists Person{user_id: user.id, primary_email: email_handle}
 
     let domain = extract_domain(email_handle)
@@ -573,10 +669,24 @@ rule UpdatePerson {
 
     requires: person.user_id = user.id
     requires: person.status = active
+    -- W-H1 FOLLOW-UP (2026-08-25) — Art. 7(3) processing restriction, now
+    -- EXPRESSIBLE. This guard could not be written before the crm-gdpr.allium
+    -- dependency flip: the predicate lived on that module's PersonGdprExtension
+    -- stub, and importing crm-gdpr from here would have closed a cycle. With
+    -- consent_withdrawn_at and the derived is_consent_blocked on Person itself,
+    -- the constraint states locally. The property it enforces is specified by
+    -- crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted, which asserted
+    -- it in prose because it had no way to reach these rules.
+    -- Enforced at src/actions/person.actions.ts:320 (updatePerson) — rejects
+    -- with crm.errors.consentWithdrawn.
+    requires: not person.is_consent_blocked
 
     ensures: person.updated_by = ActorMetadata(source: manual, name: user.name)
     ensures: person.updated_at = now
-    ensures: ContactUpdated(person: person)
+    -- W-E3: ContactUpdated has ONE shape everywhere — {person_id, user_id, job_id?}.
+    -- job_id is present only at the JobContact sites, where it routes the entry
+    -- onto the Job/Company timelines as well; a plain person edit omits it.
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
 
     @guidance
         -- When the update originates from a sync connector (email/calendar),
@@ -653,7 +763,13 @@ rule AnonymizePerson {
             if person.emails.any(e => e.email = bl.handle) or person.emails.any(e => extract_domain(e.email) = bl.handle):
                 not exists bl
 
-    ensures: ContactDeleted(person_id: person.id, user_id: person.user_id, reason: anonymized)
+    -- W-B3: the reason is supplied by the CALLER, so the audit row distinguishes
+    -- a user-initiated erasure (`anonymized`) from an automatic retention expiry
+    -- (`retention_expired`, from ExpireAutoCreatedPersons). The projection that
+    -- consumes this event is PII-free by construction — it nulls both the person
+    -- reference and linked_record_name — so the reason is the only thing that
+    -- survives to say WHY the record went.
+    ensures: ContactDeleted(person_id: person.id, user_id: person.user_id, reason: reason)
 
     @guidance
         -- Implementation should also anonymize MessageParticipant
@@ -697,6 +813,12 @@ rule MergePersons {
     -- cascade-delete them, losing data a merge is supposed to preserve.
     ensures: PersonsMerged(winner: winner, loser: loser)
 
+    -- W-E2: the loser Person ceases to exist here, which RecordContactDeletion
+    -- projects onto the timeline as a merge (reason: merged) — the same
+    -- ContactDeleted trigger AnonymizePerson emits. Announced before removal so
+    -- the projection can still resolve the loser.
+    ensures: ContactDeleted(person_id: loser.id, user_id: loser.user_id, reason: merged)
+
     ensures: not exists loser
 
     @guidance
@@ -721,6 +843,13 @@ rule AddJobContact {
     requires: job.user_id = user.id
     requires: person.user_id = user.id
     requires: not exists JobContact{job, person}
+    -- W-H1 FOLLOW-UP — Art. 7(3): a new link that NAMES a consent-blocked record
+    -- is new processing. Enforced at src/actions/jobContact.actions.ts:38
+    -- (addJobContact). The inverse RemoveJobContact deliberately carries NO such
+    -- guard, in the spec and in the code: unlinking reduces processing, and
+    -- blocking it would strand existing links on a record the user is trying to
+    -- disentangle. See UpdatePerson for why this became expressible.
+    requires: not person.is_consent_blocked
 
     ensures: JobContact.created(
         user_id: user.id,
@@ -729,7 +858,7 @@ rule AddJobContact {
         role: role,
         created_at: now
     )
-    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id, job_id: job.id)
 }
 
 rule RemoveJobContact {
@@ -739,23 +868,62 @@ rule RemoveJobContact {
     requires: job_contact.user_id = user.id
 
     ensures: not exists job_contact
-    ensures: ContactUpdated(person_id: job_contact.person.id, user_id: user.id)
+    ensures: ContactUpdated(person_id: job_contact.person.id, user_id: user.id, job_id: job_contact.job.id)
 }
 
 rule ExpireAutoCreatedPersons {
-    -- Temporal: auto-archive Persons whose retention has elapsed.
-    when: person: Person.retention_expires_at <= now
+    -- Temporal: ERASE Persons whose retention has elapsed.
+    --
+    -- W-B3 (2026-08-26): this rule used to end in `archived`. That was not a
+    -- retention outcome — an archived Person is still stored, still listed,
+    -- still searched, still emitted by the Art. 15 export, and one click from
+    -- restoration. Expiry that archives never ends the processing, so it did not
+    -- discharge Art. 5(1)(e) storage limitation and the system could not
+    -- demonstrate enforcement of its own declared policy under Art. 5(2).
+    when: person: Person.is_retention_expired
 
-    requires: person.status = active
+    requires: person.status != anonymized
     requires: person.is_auto_created
 
-    ensures: person.status = archived
-    ensures: person.updated_at = now
-    ensures: ReminderTriggered(
-        user_id: person.user_id,
-        reason: retention_expired,
-        target_person: person
-    )
+    -- Delegate to the erasure rule rather than restating its post-state here.
+    -- AnonymizePerson owns the cascade (and already records a system actor via
+    -- person.updated_by = ActorMetadata(source: system, name: null)); copying it
+    -- into this rule would be a second owner and therefore a drift mechanism.
+    ensures: AnonymizePerson(system, person, reason: retention_expired)
+
+    @guidance
+        -- Idempotency is STRUCTURAL, not guarded: `anonymized` is a terminal
+        -- status and this rule's `requires` excludes it, so the rule cannot fire
+        -- twice on one Person.
+        --
+        -- W-B3 replaces the former W-E4 note, which described a timeline entry
+        -- the implementation wrote as an idempotency guard. That entry has been
+        -- DELETED: it carried `linked_record_name` — the person's full name —
+        -- on a row whose happened_at defaulted to the erasure instant, so it
+        -- started a fresh timeline-retention clock on exactly the name the
+        -- expiry existed to retire. Expiry EXTENDED the name's life. The
+        -- accountability row is now produced by the ContactDeleted projection,
+        -- which is PII-free by construction.
+        --
+        -- PER-USER GATE, deliberately NOT expressed as a `requires:` above.
+        -- The implementation skips a user whose PrivacySettings.crm_retention_enabled
+        -- is false (src/lib/scheduler/crm-cron.ts via
+        -- src/lib/crm/retention-policy.ts). It is stated here as prose rather
+        -- than as a rule predicate because NO user-configurable setting has a
+        -- spec representation anywhere in this codebase — the account-deletion
+        -- cooling-off period is equally unspec'd — and minting a bespoke
+        -- predicate form for this one rule would create spec machinery with no
+        -- precedent to keep it honest. See the open question at the end of this
+        -- module.
+        --
+        -- Disabled means the automatic erasure is SUSPENDED — NOT that retention
+        -- is unlimited. The period remains the operator's declared policy,
+        -- retention_expires_at is still written and still advanced by the
+        -- last-activity clock, and the record keeps showing when it fell due;
+        -- only the unattended act stops. The offered periods are bounded with no
+        -- "never" member, because Art. 5(1)(e) does not permit indefinite
+        -- retention and a menu item saying otherwise would re-create as a
+        -- configuration the exact defect W-B3 removed.
 }
 
 -- ==========================================================
@@ -766,6 +934,12 @@ rule ScheduleInterview {
     when: ScheduleInterview(user, job, interview_date, person?, location?, notes?)
 
     requires: job.user_id = user.id
+    -- W-H1 FOLLOW-UP — Art. 7(3). The interviewee is optional, so the guard is
+    -- conditional: an interview with no Person attached is unaffected. Enforced
+    -- at src/actions/crmInterview.actions.ts:75 (scheduleInterview), inside the
+    -- `if (input.personId)` branch — the same shape. See UpdatePerson for why
+    -- this became expressible.
+    requires: person != null implies not person?.is_consent_blocked
 
     ensures:
         let interview = Interview.created(
@@ -837,7 +1011,11 @@ rule RescheduleInterview {
 
     ensures: interview.status = rescheduled
     ensures: interview.interview_date = new_date
-    ensures: interview.location = new_location
+    -- W-B3: an omitted new_location preserves the current one (matches UpdateNote),
+    -- rather than nulling it.
+    ensures:
+        if new_location != null:
+            interview.location = new_location
     ensures: interview.updated_at = now
 }
 
@@ -846,6 +1024,12 @@ rule InterviewReminder {
     when: interview: Interview.interview_date - config.interview_reminder_before <= now
 
     requires: interview.status in {scheduled, rescheduled}
+    -- W-H1 FOLLOW-UP — Art. 7(3): an automated reminder is active processing, so
+    -- a consent-blocked interviewee is excluded. Enforced at
+    -- src/lib/scheduler/crm-cron.ts:184. This was previously stated only in the
+    -- W-E5 @guidance below, because the predicate was unreachable from this
+    -- module; it is now a real guard and the guidance records that.
+    requires: interview.person != null implies not interview.person?.is_consent_blocked
 
     ensures: ReminderTriggered(
         user_id: interview.user_id,
@@ -860,9 +1044,19 @@ rule InterviewReminder {
         happened_at: now,
         target_job: interview.job,
         target_person: interview.person,
-        details: null,
+        details: interview.id,
         linked_record_name: interview.job.title
     )
+
+    @guidance
+        -- W-E4: details carries the interview id; the temporal sweep queries it
+        -- as an idempotency guard so a reminder fires at most once per 24h window.
+        -- W-E5: the implementation additionally skips consent-blocked interviewees
+        -- (crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted) — a person
+        -- whose consent is withdrawn is excluded from this active flow.
+        -- W-H1 FOLLOW-UP: that skip is no longer only prose — it is the
+        -- `interview.person != null implies not ...is_consent_blocked` guard
+        -- above. Kept here for the pointer to the owning invariant.
 }
 
 -- ==========================================================
@@ -874,6 +1068,13 @@ rule CreateTask {
 
     requires: targets.count > 0
     requires: Tasks where user_id = user.id -> count < config.max_tasks_per_user
+    -- W-H1 FOLLOW-UP — Art. 7(3). Targets are polymorphic; only the person-typed
+    -- ones can be consent-blocked, and ANY blocked target rejects the whole
+    -- creation rather than being silently dropped. Enforced at
+    -- src/actions/crmTask.actions.ts:81, in the per-target ownership loop, which
+    -- returns crm.errors.consentWithdrawn for the first blocked target. See
+    -- UpdatePerson for why this became expressible.
+    requires: targets.all(t => t.person != null implies not t.person?.is_consent_blocked)
 
     ensures:
         let task = Task.created(
@@ -962,6 +1163,10 @@ rule TaskOverdueReminder {
     when: task: Task.due_date <= now
 
     requires: task.status = pending or task.status = in_progress
+    -- W-H1 FOLLOW-UP — Art. 7(3), the TaskOverdueReminder half of the same rule
+    -- as InterviewReminder above. Enforced at src/lib/scheduler/crm-cron.ts:261,
+    -- which skips the task if ANY of its targets is a consent-blocked person.
+    requires: task.targets.all(tt => tt.target_person != null implies not tt.target_person?.is_consent_blocked)
 
     ensures: ReminderTriggered(
         user_id: task.user_id,
@@ -973,9 +1178,17 @@ rule TaskOverdueReminder {
         user_id: task.user_id,
         activity_type: reminder_triggered,
         happened_at: now,
-        details: null,
+        details: task.id,
         linked_record_name: task.title
     )
+
+    @guidance
+        -- W-E4: details carries the task id; the temporal sweep queries it as an
+        -- idempotency guard so an overdue reminder fires at most once per 24h window.
+        -- W-E5: the implementation additionally skips consent-blocked task targets
+        -- (crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted).
+        -- W-H1 FOLLOW-UP: now expressed as the `task.targets.all(...)` guard
+        -- above rather than only in prose.
 }
 
 -- ==========================================================
@@ -986,6 +1199,15 @@ rule CreateNote {
     when: CreateNote(user, title?, body, targets)
 
     requires: targets.count > 0
+    -- W-H1 FOLLOW-UP — Art. 7(3), same shape as CreateTask. Enforced at
+    -- src/actions/crmNote.actions.ts:69. NOTE the asymmetry with UpdateNote and
+    -- DeleteNote, which are NOT guarded here because the code does not guard
+    -- them either (crmNote.actions.ts checks consent only in createNote). That
+    -- may be a real gap — editing a note that names a consent-blocked person is
+    -- arguably further processing — but it is a CODE gap, and inventing spec
+    -- coverage for it would re-create exactly the spec-ahead-of-code drift W-H1
+    -- was cleaning up. Raised as an open question below instead.
+    requires: targets.all(t => t.person != null implies not t.person?.is_consent_blocked)
 
     ensures:
         let note = Note.created(
@@ -1060,6 +1282,42 @@ rule RecordStatusChange {
         -- previous_status and new_status for rendering.
 }
 
+rule RecordContactCreation {
+    -- W-E1: project ContactCreated events into the Activity Timeline. The linked
+    -- record name is the Person's own name, so it is erased together with the
+    -- Person by the anonymise cascade (crm-gdpr.allium timeline treatment) —
+    -- there is no separate retention obligation on this field.
+    when: ContactCreated(person, source)
+
+    ensures: ActivityLog.created(
+        user_id: person.user_id,
+        activity_type: contact_created,
+        happened_at: now,
+        actor_id: person.user_id,
+        target_person: person,
+        details: null,
+        linked_record_name: person.name.first_name
+    )
+}
+
+rule RecordContactUpdate {
+    -- W-E1: project ContactUpdated events into the Activity Timeline. A job↔person
+    -- link/unlink carries job_id, which also surfaces the entry on the Job and
+    -- Company timelines; a plain person edit omits it (target_job stays null).
+    when: ContactUpdated(person_id, user_id, job_id?)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: contact_updated,
+        happened_at: now,
+        actor_id: user_id,
+        target_person: Person{id: person_id},
+        target_job: if job_id != null: Job{id: job_id} else: null,
+        details: null,
+        linked_record_name: null
+    )
+}
+
 rule RecordContactDeletion {
     -- Project ContactDeleted events into the Activity Timeline.
     -- Fired by AnonymizePerson (reason: anonymized) and
@@ -1084,12 +1342,16 @@ rule RecordContactDeletion {
 }
 
 rule RecordVacancyPromotion {
-    -- Project VacancyPromoted events into the Activity Timeline.
+    -- Project VacancyPromoted events into the Activity Timeline. Promoting a
+    -- discovered vacancy into a tracked Job IS the application-submitted moment,
+    -- so the timeline entry is application_submitted (there is no separate
+    -- vacancy_promoted activity type — that name belongs only to the
+    -- notification channel, a different concern).
     when: VacancyPromoted(staged_vacancy_id, job_id, user_id)
 
     ensures: ActivityLog.created(
         user_id: user_id,
-        activity_type: vacancy_promoted,
+        activity_type: application_submitted,
         happened_at: now,
         actor_id: user_id,
         target_job: Job{id: job_id},
@@ -1253,6 +1515,32 @@ invariant ExactlyOneNoteTarget {
 -- not two synchronised copies. crm.allium still ENFORCES the property, in
 -- AutoCreatePersonFromEmail's `requires` guards; it just no longer restates it.
 
+invariant NoteHasAtLeastOneTarget {
+    -- W-D3/W-D6: a Note is always ABOUT something — it has no standalone
+    -- identity, and every read of a note reaches it through one of its targets.
+    -- CreateNote establishes this (`requires: targets.count > 0`) and the delete
+    -- side upholds it: when a Person, Company or Job is deleted its NoteTargets
+    -- go with it, and a note left with no target at all is removed in the same
+    -- transaction rather than surviving as a body no surface can render.
+    --
+    -- Unlike the converted-referral guarantee (W-D2 on inside-track's
+    -- TipReifiesToJob), this IS a single-moment, falsifiable predicate over
+    -- current state, so it is expressed rather than left as prose.
+    --
+    -- There is deliberately NO Task counterpart. A Task may legitimately hold
+    -- zero targets: TaskBoard lists a user's tasks unfiltered and renders the
+    -- targetless case, the overdue reminder still fires for it, and DeleteTask
+    -- permits a hard delete only from a terminal status. A task that loses its
+    -- last target keeps existing as a commitment; it just loses its link.
+    -- A NoteTarget whose three polymorphic references are all null is a ghost,
+    -- not a target: databases seeded before migration 20260512224224 (when the
+    -- FKs were still ON DELETE SET NULL) can hold such rows. It must not count.
+    for note in Notes:
+        note.targets where (target_person != null
+            or target_company != null
+            or target_job != null) -> count > 0
+}
+
 invariant AtMostOnePrimaryCompany {
     -- A Person may have zero or one primary company association.
     for person in Persons:
@@ -1263,6 +1551,14 @@ invariant PersonOwnedByUser {
     -- ADR-015: all Person records must have an owner.
     for person in Persons:
         person.user_id != null
+}
+
+invariant SubdivisionRequiresCountry {
+    -- W-H2: an ISO 3166-2 subdivision code is namespaced by its country, so it
+    -- is meaningless without one. Enforced at create AND update (a partial update
+    -- must not null the country while leaving a subdivision set).
+    for person in Persons:
+        person.address?.subdivision_code != null implies person.address?.country_code != null
 }
 
 ------------------------------------------------------------
@@ -1362,6 +1658,12 @@ surface PersonDetail {
         person.data_source
         person.processing_basis
         person.retention_expires_at
+        -- W-H1 FOLLOW-UP: a surface whose `provides` guards read
+        -- is_consent_blocked must also expose it, or the boundary hides WHY
+        -- three controls are unavailable. crm-gdpr.allium surface
+        -- ConsentManagement — rendered inside this one — exposes the same
+        -- predicate alongside the withdraw/reinstate actions.
+        person.is_consent_blocked
         person.created_at
         person.updated_at
 
@@ -1384,8 +1686,26 @@ surface PersonDetail {
             jc.role
 
     provides:
+        -- W-H1 FOLLOW-UP (2026-08-25) — the `not person.is_consent_blocked`
+        -- halves below mirror the rules' new Art. 7(3) guards, so the boundary
+        -- states the same condition the rule enforces rather than only hiding a
+        -- control. Which operations carry it is NOT uniform, and the asymmetry
+        -- is deliberate — it tracks what the code actually enforces:
+        --   guarded   UpdatePerson, AddJobContact, CreateNote  (edits and new
+        --             links = further processing)
+        --   unguarded ArchivePerson, ReactivatePerson, AnonymizePerson,
+        --             RemoveJobContact, UpdateNote, DeleteNote
+        -- Anonymize and Archive must stay reachable on a blocked record — they
+        -- are how a withdrawal is honoured, and crm-gdpr.allium
+        -- ConsentBlockedRecordIsProcessingRestricted names erasure, export and
+        -- reinstatement as the permitted operations. RemoveJobContact reduces
+        -- processing. UpdateNote / DeleteNote are unguarded only because the
+        -- code does not guard them — see the open question at the end of this
+        -- file; do not "fix" that here without fixing the code in the same
+        -- change.
         UpdatePerson(user, person, changes)
             when person.status = active
+                and not person.is_consent_blocked
         ArchivePerson(user, person)
             when person.status = active
         ReactivatePerson(user, person)
@@ -1394,10 +1714,12 @@ surface PersonDetail {
             when person.status != anonymized
         AddJobContact(user, job, person, role?)
             when person.status = active
+                and not person.is_consent_blocked
         RemoveJobContact(user, job_contact)
             when person.status = active
         CreateNote(user, title?, body, targets)
             when person.status = active
+                and not person.is_consent_blocked
         UpdateNote(user, note, title?, body?)
             when person.status = active
         DeleteNote(user, note)
@@ -1466,6 +1788,11 @@ surface TaskBoard {
             when task.status in {pending, in_progress}
         CancelTask(user, task)
             when task.status in {pending, in_progress}
+        -- W-A2: DeleteTask is intentionally NOT surfaced here. Cancel is the
+        -- terminal user action on the board; the DeleteTask rule remains a
+        -- callable repository capability (terminal-guarded) for future bulk /
+        -- API consumers, but no board button renders it today, so claiming it on
+        -- this surface would over-state the boundary.
 
     timeout:
         TaskOverdueReminder
@@ -1623,6 +1950,16 @@ open question "No surface provides AutoCreatePerson. This trigger depends on ema
 --     imported contacts are minimal too and must reuse THIS fact rather than
 --     minting a second "incomplete contact" concept).
 
-open question "Retention for quick_capture Persons. ExpireAutoCreatedPersons guards on is_auto_created, and AutoCreatedHasRetention constrains only auto_created — so a quick_capture Person today gets no retention_expires_at and never auto-archives, i.e. it is governed exactly like a full manual create. Is that the intent? A quick capture is a deliberate user act (unlike email-sync auto-creation), which argues for manual-like treatment; but it is also knowingly incomplete and may be a contact the user never returns to, which argues for a shorter leash. Decide in crm-gdpr.allium before quick-capture volume accumulates, since retro-fitting an expiry to existing records is a data-minimisation judgement made after the fact."
+open question "Retention for quick_capture Persons. ExpireAutoCreatedPersons guards on is_auto_created, and AutoCreatedHasRetention constrains only auto_created — so a quick_capture Person today gets no retention_expires_at and never auto-archives, i.e. it is governed exactly like a full manual create. Is that the intent? A quick capture is a deliberate user act (unlike email-sync auto-creation), which argues for manual-like treatment; but it is also knowingly incomplete and may be a contact the user never returns to, which argues for a shorter leash. Decide in crm-gdpr.allium before quick-capture volume accumulates,  W-B3 (2026-08-26) makes this easier to answer without resolving it: retention is now a LAST-ACTIVITY clock rather than a creation clock, and a last-activity leash is a defensible default for BOTH sources — a quick capture the user keeps working with never falls due, and one they never return to is exactly the record the balancing test says should not still be held. That removes the sharpest edge of the question (a deliberate user act being erased on an arbitrary anniversary) but does not answer whether quick_capture should carry a leash at all."
 
 open question "A referral timeline entry cannot deep-link to its Referral. ActivityLog has target_person / target_company / target_job only, and gaining a target_referral field would make crm.allium depend on inside-track.allium — the wrong direction (inside-track imports crm, not the reverse). RecordReferralRecorded / RecordReferralStatusChange therefore carry the referral identity in `details`, following RecordStatusChange's precedent, which means a timeline consumer must parse `details` to navigate. Acceptable, or is a polymorphic target seam on ActivityLog (mirroring TaskTarget/NoteTarget's nullable-FK pattern) worth introducing so any spec can project onto the timeline without crm knowing about it?"
+
+open question "W-H1 FOLLOW-UP — Art. 7(3) coverage is UNEVEN across note lifecycle, and the spec now says so rather than papering over it. CreateNote rejects a consent-blocked target (src/actions/crmNote.actions.ts:69) but UpdateNote and DeleteNote do not check at all, so a note that names a consent-blocked person can still be edited after withdrawal. crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted says 'no field edits and no automated activity may act on a consent-blocked record', which reads as covering an edit to a note ABOUT that person; but it also says the restriction is 'a guard on the creating ACTION, not a standing predicate over existing links', which reads as excluding it. Both readings are available, which is the actual problem. Decide which, then make code and spec agree in ONE change: either add the guard to updateNote/deleteNote and to the rules here, or state explicitly in the invariant that edits to pre-existing notes stay permitted because the processing was already lawful when it began. Note DeleteNote is the awkward case for the strict reading — refusing to delete a note about a person who withdrew consent is the opposite of what Art. 7(3) wants."
+
+open question "W-H1 FOLLOW-UP — three further consent-block enforcement sites are NOT reflected in any spec, and they are not this module's to add: src/actions/referral.actions.ts:51, src/actions/personConnection.actions.ts:56 and src/actions/warmPath.actions.ts:82,113,114 all call isConsentBlocked, and all three belong to inside-track.allium (Referral, PersonConnection, warm-path traversal), which imports crm.allium rather than the reverse. The warm-path ones are the interesting case: they `continue` past a blocked person rather than rejecting, i.e. a consent-blocked contact silently vanishes from warm-path results instead of producing an error — a different enforcement SHAPE from every other site, and one whose absence from the spec means nobody has judged whether silent omission is the right behaviour. Whoever next tends inside-track.allium should add the guards there; the predicate is crm/Person.is_consent_blocked and it is importable today."
+
+open question "W-B3 FOLLOW-UP, RESOLVED 2026-08-30 — kept as a record of the decision and its rejected alternatives, because the reasoning is the part a future reader will need. The clock was wired at ONE site (UpdatePerson), so an auto-created contact worked with through notes, tasks and interviews for two years was still erased on the anniversary of the last NAME edit. The set is now decided and stated on invariant AutoCreatedHasRetention above: a deliberate act by the authenticated user that creates a new durable association with the Person, or refreshes the Person record. Wired at UpdatePerson, ReactivatePerson, AddJobContact, CreateNote, CreateTask, ScheduleInterview, AddPersonConnection, RecordInsiderTip and RecordNetworkTip. Deliberately NOT wired at ArchivePerson (regression-tested), consent withdraw/reinstate, lifecycle transitions, removals, or read-only views. ONE candidate was rejected as a touch site and needs its own decision: MergePersons. The winner absorbs the loser's interviews, notes, tasks and job contacts, so it arguably ought to inherit their recency too — but the correct operation is max(winner.retention_expires_at, loser.retention_expires_at), NOT now + period. Touching would set the winner a deadline LATER than either input, i.e. de-duplication would extend retention, the same class of defect as walking the clock forward from the settings page. That is a different mechanism from the last-activity touch and was not guessed. Decide whether MergePersons should carry the later of the two deadlines, and if so state it as an ensures on the rule."
+
+open question "W-B3 FOLLOW-UP, RESOLVED 2026-08-30 — DECIDED AGAINST a dedicated Person.last_activity_at column; kept as the record of why, since 'add a column' is the obvious suggestion and will be re-proposed otherwise. retention_expires_at is already a LOSSLESS encoding of last activity given the period: last_activity = retention_expires_at - period. rebaseCrmRetention relies on exactly that identity (it shifts stored deadlines by the period DELTA rather than recomputing, which is also what keeps it idempotent — recomputing from updated_at would let repeated visits to the settings page walk the clock forward, since the re-base write itself bumps updated_at). Every write path preserves the identity: initial computeRetentionExpiry, each touch, and the delta re-base; toggling crm_retention_enabled shifts nothing. A column would therefore be REDUNDANT DERIVED STATE — a second source of truth for a fact the first already carries exactly — requiring a double write at every touch site. This module already rejects a second owner in those words for the anonymise cascade (see ExpireAutoCreatedPersons: copying it in 'would be a second owner and therefore a drift mechanism'). The only thing a column would fix is rebaseCrmRetention's null-deadline fallback, which uses Person.updated_at as a proxy and so errs toward retaining LONGER — but that branch is reachable only for a row that already VIOLATES this module's AutoCreatedHasRetention invariant, so it is defence in depth for a forbidden state, not a live path. Trade-off accepted and stated: without a column no surface can render 'last interaction: <date>' directly; it must be derived, and no UI asks for it today. RE-OPEN IF: a UI needs the raw instant, or a second retention clock with a different period appears, at which point the single materialised deadline stops being sufficient."
+
+open question "W-B3 FOLLOW-UP — user-configurable settings have NO representation in any Allium module, so two live behavioural gates are invisible to allium check. ExpireAutoCreatedPersons is skipped entirely for a user whose PrivacySettings.crm_retention_enabled is false, and the retention period itself is a per-user choice of 180/365/730/1095 days rather than config.auto_created_retention; both are stated only in that rule's @guidance. The account-deletion cooling-off period (PrivacySettings.cooling_off_days, specs/gdpr-data-rights.allium) is equally unspec\u0027d, so this is a pattern, not a one-off. Minting a bespoke predicate form for a single rule was rejected as spec machinery with no precedent to keep it honest. The real question is whether Allium should model UserSettings as an entity that rules may read — which would make every settings-gated behaviour checkable — or whether user configuration is deliberately out of scope for these specs, in which case say so once, centrally, instead of leaving each gate to prose."

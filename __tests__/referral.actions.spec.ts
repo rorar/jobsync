@@ -35,8 +35,18 @@ jest.mock("@/lib/crm/resolve-applied-status", () => ({ resolveAppliedStatusId: j
 jest.mock("@/lib/events", () => ({
   emitEvent: jest.fn(),
   createEvent: jest.fn((type: string, payload: unknown) => ({ type, payload })),
-  DomainEventTypes: { JobStatusChanged: "JobStatusChanged" },
+  DomainEventTypes: {
+    JobStatusChanged: "JobStatusChanged",
+    ReferralRecorded: "ReferralRecorded",
+    ReferralStatusChanged: "ReferralStatusChanged",
+  },
 }));
+
+/** Find the single emitted event of a given type (or undefined). */
+function emittedEvent(type: string) {
+  const calls = (jest.requireMock("@/lib/events").emitEvent as jest.Mock).mock.calls;
+  return calls.map((c) => c[0]).find((e) => e?.type === type);
+}
 jest.mock("@/lib/audit/data-audit", () => ({ writeDataAuditLog: jest.fn() }));
 
 const prisma = new PrismaClient();
@@ -62,6 +72,25 @@ describe("recordInsiderTip", () => {
         data: expect.objectContaining({ userId: "user-1", kind: "insider_relay", status: "open", tipsterId: "p1" }),
       }),
     );
+  });
+
+  it("emits ReferralRecorded carrying the tipster + company links", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "c1" });
+    (prisma.referral.create as jest.Mock).mockResolvedValue({ id: "r1" });
+
+    await recordInsiderTip({ tipsterId: "p1", targetCompanyId: "c1" });
+
+    const ev = emittedEvent("ReferralRecorded");
+    expect(ev).toBeTruthy();
+    expect(ev.payload).toEqual({
+      referralId: "r1",
+      userId: "user-1",
+      kind: "insider_relay",
+      tipsterPersonId: "p1",
+      targetCompanyId: "c1",
+    });
   });
 
   it("rejects a consent-blocked tipster (GDPR Art. 7(3))", async () => {
@@ -93,6 +122,24 @@ describe("recordNetworkTip", () => {
     expect(prisma.referral.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ kind: "network_path", status: "open" }) }),
     );
+  });
+
+  it("emits ReferralRecorded with kind network_path and no company for a pure market tip", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.referral.create as jest.Mock).mockResolvedValue({ id: "r2" });
+
+    await recordNetworkTip({ tipsterId: "p1" });
+
+    const ev = emittedEvent("ReferralRecorded");
+    expect(ev).toBeTruthy();
+    expect(ev.payload).toEqual({
+      referralId: "r2",
+      userId: "user-1",
+      kind: "network_path",
+      tipsterPersonId: "p1",
+      targetCompanyId: undefined,
+    });
   });
 
   // invariant NetworkPathViaConnectsTipsterToInsider (specs/inside-track.allium):
@@ -184,6 +231,39 @@ describe("status transitions", () => {
     expect(data.lastActivityAt).toBeInstanceOf(Date);
   });
 
+  it("emits ReferralStatusChanged with the pre-update previousStatus and systemInitiated false", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.referral.findFirst as jest.Mock).mockResolvedValue({
+      id: "r1",
+      status: "open",
+      tipsterId: "p1",
+      targetCompanyId: "c1",
+    });
+    (prisma.referral.update as jest.Mock).mockResolvedValue({ id: "r1" });
+
+    await engageReferral("r1");
+
+    const ev = emittedEvent("ReferralStatusChanged");
+    expect(ev).toBeTruthy();
+    expect(ev.payload).toEqual({
+      referralId: "r1",
+      userId: "user-1",
+      previousStatus: "open",
+      newStatus: "engaged",
+      systemInitiated: false,
+      tipsterPersonId: "p1",
+      targetCompanyId: "c1",
+    });
+  });
+
+  it("does not emit ReferralStatusChanged when the transition is rejected", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.referral.findFirst as jest.Mock).mockResolvedValue({ id: "r1", status: "open" });
+    const { relayReferral } = await import("@/actions/referral.actions");
+    await relayReferral("r1");
+    expect(emittedEvent("ReferralStatusChanged")).toBeUndefined();
+  });
+
   it("rejects an illegal transition (open -> relayed)", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(user);
     (prisma.referral.findFirst as jest.Mock).mockResolvedValue({ id: "r1", status: "open" });
@@ -221,7 +301,7 @@ describe("status transitions", () => {
 describe("commitReferralToApply (TipReifiesToJob)", () => {
   it("creates a Job in the resolved applied status and converts the referral", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(user);
-    (prisma.referral.findFirst as jest.Mock).mockResolvedValue({ id: "r1", status: "in_review", targetCompanyId: "c1" });
+    (prisma.referral.findFirst as jest.Mock).mockResolvedValue({ id: "r1", status: "in_review", targetCompanyId: "c1", tipsterId: "p2" });
     (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "c1", label: "Acme" });
     (resolveAppliedStatusId as jest.Mock).mockResolvedValue("applied-1");
     (prisma.jobTitle.upsert as jest.Mock).mockResolvedValue({ id: "jt1" });
@@ -240,10 +320,23 @@ describe("commitReferralToApply (TipReifiesToJob)", () => {
     expect((res as { success: true; data: { jobId: string } }).data.jobId).toBe("job-1");
     expect(resolveAppliedStatusId).toHaveBeenCalledWith("user-1");
     // Mirrors addJob: emits JobStatusChanged + writes the GDPR job.create audit.
-    expect(jest.requireMock("@/lib/events").emitEvent).toHaveBeenCalledTimes(1);
+    // TipReifiesToJob ALSO emits ReferralStatusChanged (in_review -> converted).
+    expect(jest.requireMock("@/lib/events").emitEvent).toHaveBeenCalledTimes(2);
     expect(jest.requireMock("@/lib/audit/data-audit").writeDataAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "job.create", targetId: "job-1" }),
     );
+
+    const ev = emittedEvent("ReferralStatusChanged");
+    expect(ev).toBeTruthy();
+    expect(ev.payload).toEqual({
+      referralId: "r1",
+      userId: "user-1",
+      previousStatus: "in_review",
+      newStatus: "converted",
+      systemInitiated: false,
+      tipsterPersonId: "p2",
+      targetCompanyId: "c1",
+    });
   });
 
   it("rejects when the referral is not in_review (illegal -> converted)", async () => {

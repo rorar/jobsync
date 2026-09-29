@@ -31,6 +31,16 @@ jest.mock("@prisma/client", () => {
     job: {
       count: jest.fn(),
     },
+    crmNote: {
+      deleteMany: jest.fn(),
+    },
+    crmNoteTarget: {
+      findMany: jest.fn(),
+    },
+    crmTask: {
+      deleteMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
     logoAsset: {
       findFirst: jest.fn(),
     },
@@ -574,6 +584,20 @@ describe("Company Actions", () => {
   });
 
   describe("deleteCompanyById", () => {
+    // W-D3: deleting the Company cascades away its CrmNoteTarget rows, so a note
+    // that ONLY targeted it is left unreachable. Delete + prune run as one
+    // transaction, prune last. Tasks are not pruned (still visible on the board).
+    beforeEach(() => {
+      (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([
+        { noteId: "note-1" },
+      ]);
+      (prisma.$transaction as jest.Mock).mockImplementation(
+        async (ops: unknown) => Promise.all(ops as Promise<unknown>[]),
+      );
+    });
+
     it("should delete a company successfully", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
@@ -588,6 +612,81 @@ describe("Company Actions", () => {
       expect(prisma.company.delete).toHaveBeenCalledWith({
         where: { id: "company-id", createdBy: mockUser.id },
       });
+    });
+
+    it("scopes both delete guards to this user (ADR-015)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(0);
+      (prisma.logoAsset.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.company.delete as jest.Mock).mockResolvedValue({ id: "company-id" });
+
+      await deleteCompanyById("company-id");
+
+      // Counting unscoped let another user's resume or job block this delete,
+      // and the error message leaked that count back to the caller.
+      expect(prisma.workExperience.count).toHaveBeenCalledWith({
+        where: {
+          companyId: "company-id",
+          ResumeSection: { Resume: { profile: { userId: mockUser.id } } },
+        },
+      });
+      expect(prisma.job.count).toHaveBeenCalledWith({
+        where: { companyId: "company-id", userId: mockUser.id },
+      });
+    });
+
+    it("does not leak the job count in the error message (ADR-015)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(7);
+
+      const result = await deleteCompanyById("company-id");
+
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("7");
+      expect(prisma.company.delete).not.toHaveBeenCalled();
+    });
+
+    it("prunes notes orphaned by the cascade, in one transaction (W-D3)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(0);
+      (prisma.logoAsset.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.company.delete as jest.Mock).mockResolvedValue({ id: "company-id" });
+
+      await deleteCompanyById("company-id");
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const ops = (prisma.$transaction as jest.Mock).mock.calls[0][0];
+      expect(Array.isArray(ops)).toBe(true);
+      expect(ops).toHaveLength(2);
+
+      // Scoped to the notes that actually pointed at THIS company.
+      expect(prisma.crmNoteTarget.findMany).toHaveBeenCalledWith({
+        where: { targetCompanyId: "company-id", note: { userId: mockUser.id } },
+        select: { noteId: true },
+      });
+      expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ["note-1"] },
+          userId: mockUser.id,
+          targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
+        },
+      });
+      expect(prisma.crmTask.deleteMany).not.toHaveBeenCalled();
+      // The prune must be the LAST op in the array.
+      expect(ops[ops.length - 1]).toBe(
+        (prisma.crmNote.deleteMany as jest.Mock).mock.results[0].value,
+      );
     });
 
     it("should return error for unauthenticated user", async () => {

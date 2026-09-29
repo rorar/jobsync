@@ -8,6 +8,8 @@ import { handleError } from "@/lib/utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { isValidJobContactRole } from "@/models/job.model";
+import { isConsentBlocked } from "@/models/person.model";
+import { touchPersonRetention } from "@/lib/crm/retention-policy";
 
 export async function addJobContact(
   jobId: string,
@@ -32,6 +34,12 @@ export async function addJobContact(
     const person = await prisma.person.findFirst({ where: { id: personId, userId: user.id } });
     if (!person) return { success: false, message: "crm.errors.personNotFound" };
 
+    // GDPR Art. 7(3): linking a blocked Person to a Job is new processing (and
+    // emits ContactUpdated → a fresh timeline entry) — forbid it (W-C5).
+    if (isConsentBlocked(person)) {
+      return { success: false, message: "crm.errors.consentWithdrawn" };
+    }
+
     const contact = await prisma.jobContact.create({
       data: {
         userId: user.id,
@@ -40,6 +48,13 @@ export async function addJobContact(
         role: role ?? null,
       },
     });
+
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // linking a contact to a Job puts them to work on a live application — the
+    // strongest available evidence that the contact is still needed for the
+    // purpose they were collected for (Art. 5(1)(e)). No-op for manual /
+    // quick_capture Persons; never throws, so it cannot fail the link.
+    await touchPersonRetention(user.id, personId);
 
     // Welle 3 (Task 1.5): carry jobId so the activity projection writes
     // targetJobId (+ resolves targetCompanyId) — link shows on Job/Company timelines.

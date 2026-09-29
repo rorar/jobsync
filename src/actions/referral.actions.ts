@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { isConsentBlocked } from "@/models/person.model";
+import { touchPersonsRetention } from "@/lib/crm/retention-policy";
 import {
   type ReferralKind,
   type ReferralStatus,
@@ -91,6 +92,24 @@ export async function recordInsiderTip(
       },
       select: { id: true },
     });
+
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // a referral names its participants as live actors in an ongoing search, so
+    // every Person it names re-bases. Ownership + consent were proven above by
+    // assertUsablePerson; nullish ids are dropped by the helper.
+    await touchPersonsRetention(user.id, [input.tipsterId, input.forwardedToId]);
+
+    // RecordInsiderTip ensures ReferralRecorded (inside-track.allium). Snapshot
+    // the tipster + company links so the CRM timeline can place the entry.
+    emitEvent(
+      createEvent(DomainEventTypes.ReferralRecorded, {
+        referralId: referral.id,
+        userId: user.id,
+        kind: "insider_relay",
+        tipsterPersonId: input.tipsterId,
+        targetCompanyId: input.targetCompanyId ?? undefined,
+      }),
+    );
     return { success: true, data: { id: referral.id } };
   } catch (error) {
     return handleError(error);
@@ -153,6 +172,22 @@ export async function recordNetworkTip(
       },
       select: { id: true },
     });
+
+    // Last-activity retention clock — see recordInsiderTip. `viaId` is a
+    // PersonConnection, not a Person, and its endpoints are the same
+    // tipster/insider pair already touched here.
+    await touchPersonsRetention(user.id, [input.tipsterId, input.insiderId]);
+
+    // RecordNetworkTip ensures ReferralRecorded (inside-track.allium).
+    emitEvent(
+      createEvent(DomainEventTypes.ReferralRecorded, {
+        referralId: referral.id,
+        userId: user.id,
+        kind: "network_path",
+        tipsterPersonId: input.tipsterId,
+        targetCompanyId: input.targetCompanyId ?? undefined,
+      }),
+    );
     return { success: true, data: { id: referral.id } };
   } catch (error) {
     return handleError(error);
@@ -174,13 +209,16 @@ async function transitionReferral(
 
     const referral = await prisma.referral.findFirst({
       where: { id: referralId, userId: user.id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, tipsterId: true, targetCompanyId: true },
     });
     if (!referral) return { success: false, message: "crm.errors.referralNotFound" };
 
     if (!isValidReferralTransition(referral.status, to)) {
       return { success: false, message: "crm.errors.invalidTransition" };
     }
+
+    // Read BEFORE the update so the event carries the true previous status.
+    const previousStatus = referral.status as ReferralStatus;
 
     await prisma.referral.update({
       where: { id: referralId },
@@ -191,6 +229,20 @@ async function transitionReferral(
         updatedById: user.id,
       },
     });
+    // Each user-driven transition ensures ReferralStatusChanged (system_initiated
+    // false — a person acted). inside-track.allium DeclineReferral / ReviveReferral
+    // / the three happy-path transitions.
+    emitEvent(
+      createEvent(DomainEventTypes.ReferralStatusChanged, {
+        referralId: referral.id,
+        userId: user.id,
+        previousStatus,
+        newStatus: to,
+        systemInitiated: false,
+        tipsterPersonId: referral.tipsterId ?? undefined,
+        targetCompanyId: referral.targetCompanyId ?? undefined,
+      }),
+    );
     return { success: true, data: { id: referralId } };
   } catch (error) {
     return handleError(error);
@@ -232,9 +284,12 @@ export async function commitReferralToApply(
 
     const referral = await prisma.referral.findFirst({
       where: { id: referralId, userId: user.id },
-      select: { id: true, status: true, targetCompanyId: true },
+      select: { id: true, status: true, targetCompanyId: true, tipsterId: true },
     });
     if (!referral) return { success: false, message: "crm.errors.referralNotFound" };
+
+    // Snapshot the pre-conversion status for the ReferralStatusChanged event.
+    const previousStatus = referral.status as ReferralStatus;
 
     // requires: status = in_review (validated against the lifecycle graph)
     if (!isValidReferralTransition(referral.status, "converted")) {
@@ -262,9 +317,12 @@ export async function commitReferralToApply(
     });
 
     // Atomic: create the Job (linked back via sourceReferralId) + its initial
-    // JobStatusHistory + convert the referral, so a converted referral always
-    // has its Job (ConvertedReferralHasJob) and the new Job is consistent with
-    // every other Job (addJob also seeds history + emits JobStatusChanged).
+    // JobStatusHistory + convert the referral, so every conversion produces a
+    // Job, and the new Job is consistent with every other Job (addJob also seeds
+    // history + emits JobStatusChanged). This transaction IS the discharge of
+    // that guarantee — see the TipReifiesToJob guidance in
+    // specs/inside-track.allium for why it is prose there and not an invariant
+    // (the Job may later be deleted without un-converting the referral).
     const result = await prisma.$transaction(async (tx) => {
       const newJob = await tx.job.create({
         data: {
@@ -311,6 +369,20 @@ export async function commitReferralToApply(
         newStatusValue: result.statusValue,
         note: undefined,
         historyEntryId: result.historyId,
+      }),
+    );
+    // TipReifiesToJob ensures ReferralStatusChanged (in_review -> converted). The
+    // reified Job carries its own JobStatusChanged above; this records the
+    // referral's own terminal transition on the CRM timeline.
+    emitEvent(
+      createEvent(DomainEventTypes.ReferralStatusChanged, {
+        referralId: referral.id,
+        userId: user.id,
+        previousStatus,
+        newStatus: "converted",
+        systemInitiated: false,
+        tipsterPersonId: referral.tipsterId ?? undefined,
+        targetCompanyId: referral.targetCompanyId ?? undefined,
       }),
     );
     writeDataAuditLog({

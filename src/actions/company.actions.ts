@@ -9,6 +9,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { collectOrphanCandidateNoteIds, withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
 import { deleteFileAndPruneEmptyParents } from "@/lib/assets/file-cleanup";
 import { logoAssetService, LOGO_PRUNE_LEVELS } from "@/lib/assets/logo-asset-service";
 
@@ -343,9 +344,14 @@ export const deleteCompanyById = async (
       throw new Error("errors.notAuthenticated");
     }
 
+      // ADR-015: a WorkExperience is owned through its resume chain
+      // (ResumeSection -> Resume -> Profile -> userId). Counting unscoped made
+      // another user's resume block this delete, and leaked its existence.
+      // Rows with no section belong to no resume and cannot surface anywhere.
     const experiences = await prisma.workExperience.count({
       where: {
         companyId,
+        ResumeSection: { Resume: { profile: { userId: user.id } } },
       },
     });
     if (experiences > 0) {
@@ -353,15 +359,17 @@ export const deleteCompanyById = async (
         `Company cannot be deleted due to its use in experience section of one of the resume! `,
       );
     }
+    // ADR-015: scope the guard to this user's jobs.
     const jobs = await prisma.job.count({
       where: {
         companyId,
+        userId: user.id,
       },
     });
 
     if (jobs > 0) {
       throw new Error(
-        `Company cannot be deleted due to ${jobs} number of associated jobs! `,
+        `Company cannot be deleted while jobs still reference it! `,
       );
     }
 
@@ -378,12 +386,24 @@ export const deleteCompanyById = async (
       }
     }
 
-    const res = await prisma.company.delete({
-      where: {
-        id: companyId,
-        createdBy: user.id,
-      },
+    // W-D3: deleting the Company cascades away its CrmNoteTarget rows, leaving a
+    // note targeted ONLY at this company unreachable. Prune it in the same
+    // transaction; withOrphanedCrmPrune keeps the prune last, after the cascade.
+    // Collect BEFORE the delete — the cascade removes the join rows.
+    const orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
+      targetCompanyId: companyId,
     });
+
+    const [res] = await prisma.$transaction(
+      withOrphanedCrmPrune(prisma, user.id, orphanCandidates, [
+        prisma.company.delete({
+          where: {
+            id: companyId,
+            createdBy: user.id,
+          },
+        }),
+      ]),
+    );
     return { data: res, success: true };
   } catch (error) {
     const msg = "errors.deleteFailed";

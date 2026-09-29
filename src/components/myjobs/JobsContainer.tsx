@@ -181,25 +181,36 @@ function JobsContainer({
   const loadJobs = useCallback(
     async (page: number, filter?: string, search?: string) => {
       setLoading(true);
-      const { success, data, total, message } = await getJobsList(
-        page,
-        jobsPerPage,
-        filter,
-        search,
-      );
-      if (success && data) {
-        setJobs((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalJobs(total ?? 0);
-        setPage(page);
-        setLoading(false);
-      } else {
+      try {
+        const { success, data, total, message } = await getJobsList(
+          page,
+          jobsPerPage,
+          filter,
+          search,
+        );
+        if (success && data) {
+          setJobs((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalJobs(total ?? 0);
+          setPage(page);
+        } else {
+          toast({
+            variant: "destructive",
+            title: t("jobs.error"),
+            description: message ? t(message) : undefined,
+          });
+        }
+      } catch (error) {
+        // A rejected server action (aborted request, transport error) used to
+        // skip both setLoading(false) calls, leaving the list stuck on its
+        // spinner for the rest of the page's life — no table, no empty state,
+        // no error. Recover to a rendered state instead.
+        console.error("Error loading jobs:", error);
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: message ? t(message) : undefined,
         });
+      } finally {
         setLoading(false);
-        return;
       }
     },
     [jobsPerPage],
@@ -350,7 +361,7 @@ function JobsContainer({
     <>
       <Card x-chunk="dashboard-06-chunk-0">
         <CardHeader className="flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <CardTitle>{t("jobs.title")}</CardTitle>
+          <CardTitle as="h1">{t("jobs.title")}</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             {mounted && (
               <KanbanViewModeToggle value={viewMode} onChange={setViewMode} />
@@ -464,16 +475,26 @@ function JobsContainer({
               )}
               {jobs.length < totalJobs && (
                 <div className="flex justify-center p-4">
+                  {/*
+                    The label stays put: with aria-disabled the button no
+                    longer vanishes from the focus model when it goes inert,
+                    and the <Loading /> region above already announces the
+                    load.
+                  */}
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      loadJobs(page + 1, filterKey, searchTerm || undefined)
-                    }
-                    disabled={loading}
-                    className="btn btn-primary"
+                    onClick={() => {
+                      // aria-disabled keeps the button focusable and in the
+                      // tab order, so refusing the activation is the
+                      // handler's job.
+                      if (loading) return;
+                      loadJobs(page + 1, filterKey, searchTerm || undefined);
+                    }}
+                    aria-disabled={loading}
+                    className="btn btn-primary aria-disabled:opacity-50"
                   >
-                    {loading ? t("common.loading") : t("jobs.loadMore")}
+                    {t("jobs.loadMore")}
                   </Button>
                 </div>
               )}

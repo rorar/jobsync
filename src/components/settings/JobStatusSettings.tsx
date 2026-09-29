@@ -379,7 +379,7 @@ export default function JobStatusSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">{t("jobStatus.title")}</h3>
+        <h2 className="text-lg font-medium">{t("jobStatus.title")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t("jobStatus.description")}</p>
       </div>
 
@@ -469,7 +469,7 @@ export default function JobStatusSettings() {
                 <section key={cat.id} aria-label={stageLabel(cat)}>
                   <div className="mb-2 flex items-center gap-2">
                     <StageDot colour={cat.colour} />
-                    <h4 className="text-sm font-semibold">{stageLabel(cat)}</h4>
+                    <h3 className="text-sm font-semibold">{stageLabel(cat)}</h3>
                     {cat.isAppliedStage && (
                       <Badge variant="outline" className="text-[10px]">
                         {t("jobStatus.marksApplied")}

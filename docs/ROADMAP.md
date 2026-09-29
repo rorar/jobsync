@@ -245,6 +245,10 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - Zeitfenster für Undo: konfigurierbar (Default: 10 Sekunden nach Aktion)
 - Gilt für: Staging (Dismiss/Restore), Inbox (Promote/Zurückstellen), Tracking (Archive/Trash/Delete)
 
+**Undo-Erweiterung — offene Punkte (Backlog, 2026-08-20):**
+- **Undo für Jobs (Job-Aggregat):** `deleteJobById` ist heute ein **Hard-Delete ohne Undo-Eintrag und ohne Snapshot** — der `undoStore` (Kompensations-Closures, 10s-TTL, `src/lib/undo`) deckt nur die Vacancy-Pipeline ab, nicht das reguläre Job-Löschen unter `/dashboard/myjobs`. Nachziehen: Job-Delete registriert einen Undo-Eintrag, dessen `compensate()` den Job (inkl. `sourceReferralId`) aus einem Snapshot wiederherstellt. **Designleitplanke (W-D2-Entscheidung, 2026-08-20, korrigiert 2026-08-21):** Job-Delete mutiert kein Fremd-Aggregat im Sinne eines Statuswechsels — insbesondere ändert es NICHT den Status eines konvertierten Referrals. Genau deshalb wurde für `ConvertedReferralHasJob` Option C gewählt: die Garantie liegt als Prosa auf `TipReifiesToJob` (Konvertierungszeitpunkt-Pflicht), `target_job` darf nach Job-Delete null sein — so bleibt die Kompensation frei von Cross-Entity-Split-Brain (vgl. M-A-09) und einem illegalen `declined -> declined` beim erneuten Löschen. **ACHTUNG — Job-Delete ist trotzdem KEINE Ein-Zeilen-Operation (W-D3, 2026-08-21):** der DB-Cascade entfernt `CrmInterview`, `JobContact`, `Interview` sowie die `CrmNoteTarget`/`CrmTaskTarget`-Join-Zeilen, und `withOrphanedCrmPrune` (`src/lib/crm/orphan-targets.ts`) löscht anschließend CrmNotes, die dadurch ohne Target zurückblieben (CrmTasks NICHT — die bleiben auf dem Board sichtbar, siehe W-D3). Ein Job-only-Snapshot kann diese Kinder NICHT wiederherstellen — die Notiz bliebe nach dem Undo dauerhaft abgekoppelt bzw. gelöscht. Der Snapshot muss die kaskadierten Kinder und die geprunten Records mit umfassen; `compensate()` stellt sie zusammen mit dem Job in einer Transaktion wieder her. Redo existiert im aktuellen Modell nicht (Gmail-Undo-Pattern, kein Command-Stack).
+- **Discovery der Undo-fähigen Punkte:** Systematischer Sweep über ALLE destruktiven Mutationen (Server-Actions), um zu entscheiden, welche einen Undo-Eintrag registrieren sollen. Undo ist heute ad-hoc/pipeline-lokal; es gibt keine Inventarliste der undo-fähigen Punkte. Ergebnis: eine Matrix (Action → reversibel? → Kompensationsstrategie: Soft-Revert / Snapshot-Restore / gar nicht), plus Kennzeichnung der Aktionen, die aus Integritätsgründen NICHT einzeln undo-fähig sein dürfen (Cross-Entity-Kaskaden).
+
 **Dedup-Retention (DSGVO Privacy by Design):**
 - Nach Ablauf der Retention-Frist: StagedVacancy-Daten werden **gelöscht**, aber ein **Hash des Dedup-Keys** (`hash(sourceBoard + ":" + externalId)`) bleibt in einer `DedupHash`-Tabelle
 - Hash ist One-Way (nicht rekonstruierbar) → keine personenbezogenen Daten
@@ -1729,6 +1733,8 @@ Universelle Such- und Aktionsleiste im macOS-Spotlight-Stil. Öffnet per `Cmd+K`
 
 **Cross-Ref:** Keyboard Shortcuts (2.16), Analytics (2.18), CRM (5.3), Dokumenten-Generatoren (4.2), LLM AI-Provider
 
+**Recherche (Pre-Spec):** [`docs/design/spotlight-command-palette-2.20-research.md`](design/spotlight-command-palette-2.20-research.md) — Readiness, `cmdk` + Action-Registry, FTS5-Suche, AI-Bridge, Voice; offene Dokument-Fragen in [`docs/design/2026-08-05-f7-open-threads-reference.md`](design/2026-08-05-f7-open-threads-reference.md)
+
 ---
 
 ### 2.21 CompanyDetail Page
@@ -2185,6 +2191,8 @@ Dynamische Dateipfade und Dateinamen für generierte/exportierte Dokumente (CV, 
 
 ## 5. CRM
 
+**Referenz:** Umsetzungsmuster aus Twenty CRM → [`docs/twenty-crm-implementation-patterns.md`](twenty-crm-implementation-patterns.md)
+
 ### 5.1 Kommunikation (→ Communication Connector 1.12)
 - Nutzt den Communication Connector mit Modulen E-Mail und PBX
 - CRM-spezifische Features: Kontakt-Zuordnung, Gesprächsnotizen, Follow-Up-Tracking
@@ -2261,7 +2269,7 @@ Dynamische Dateipfade und Dateinamen für generierte/exportierte Dokumente (CV, 
 - Status-Transition-Dialog mit optionaler Notiz
 - Undo-Toast (5s) für Status-Änderungen
 - Loading/Empty/Error States, Keyboard Navigation, Dark Mode, motion-reduce
-- 7 React-Komponenten: KanbanBoard, KanbanColumn, KanbanCard, StatusTransitionDialog, KanbanEmptyState, KanbanViewModeToggle, index barrel
+- 6 React-Komponenten: KanbanBoard, KanbanColumn, KanbanCard, StatusTransitionDialog, KanbanEmptyState, KanbanViewModeToggle (Barrel `index.ts` 2026-09-13 entfernt — nie importiert, alle sechs Komponenten werden per Direktpfad importiert)
 
 - Kanban-Board als **UI-View** über den Job Status Workflow (→ 5.3) — keine eigene Entität
 - Priorisierung und Sortierung nach Deadline, Match-Score
@@ -2535,6 +2543,8 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 **Cross-Ref:** Allium Specs (→ propagate für Test-Generierung), CLAUDE.md Testing Requirements, e2e/CONVENTIONS.md, CI/CD Pipeline
 
 ### 8.1 Automatische Screenshot/GIF/Video-Dokumentation
+**Design Spec:** [`docs/superpowers/specs/2026-06-09-doc-media-generator-design.md`](superpowers/specs/2026-06-09-doc-media-generator-design.md) — Entwurf, nicht begonnen
+
 - Playwright-basiertes Capture-Script (`tools/capture-docs/`) für automatische Erstellung von Screenshots, GIFs und Videos der wichtigsten UI-Flows
 - **Ziel:** README.md und Docs bleiben bei UI-Änderungen automatisch aktuell
 
@@ -2612,7 +2622,10 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 **68/68 E2E-Tests bestehen** (1 Worker, 17 min). Playwright Workers: 3 (CI: 1).
 
 **Phase 1 — DONE:**
-- ✅ Stale Data Cleanup: `e2e/cleanup-stale-data.ts` in globalSetup
+- ✅ Stale Data Cleanup: `e2e/cleanup-stale-data.ts` in globalSetup — **superseded 2026-09-02
+  (ADR-045).** The file is deleted; each run now gets a disposable copy of a seeded template
+  (`scripts/e2e-db.sh`), so there is no previous run's residue to purge. Kept here as the
+  history of Phase 1, not as a description of the suite (E2E-B36).
 - ✅ `networkidle` → `domcontentloaded` (SSE blockierte networkidle)
 - ✅ Server Warm-up in globalSetup (Turbopack Cold-Start)
 
@@ -2632,7 +2645,18 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 - Dev Server Lifecycle: Auto-Restart bei Crash
 - `retries: 1` für transiente Failures
 - CI-Integration: E2E als Gate vor Merge
-- Production Build (`next start`) statt Dev Server für stabilere parallele Runs
+- ✅ **Production Build (`next start`) statt Dev Server** — `E2E_PROD=1 ./scripts/test-e2e.sh`
+  (2026-09-06). Der Grund war am Ende nicht „stabilere parallele Runs", sondern ein gemessener
+  Leak: `next dev` lädt Reacts Development-Flight-Bundle, das pro Request ~2749 Objekte
+  festhält (`E2E-B42`), woraufhin Nextss Watchdog den Server mitten im Lauf neu startet und
+  jede laufende Anfrage ohne Antwort, Fehler oder Audit-Zeile verwirft. Beide Bundler tragen
+  den Hook, es gibt kein Runtime-Opt-out — und der Watchdog steht in `start-server.js:233`
+  innerhalb von `if (isDev)`, existiert also im Produktionsserver gar nicht.
+  Neu: `scripts/prod-e2e.sh` (Server), `scripts/e2e-prod-build.sh` (Build nach `.next-e2e/`,
+  nur wenn nötig). Der Auth-Blocker war kleiner als angenommen: 5 Anmeldungen je 15 Minuten je
+  IP gegen zwei pro Lauf, seit `e2e/global-setup.ts` das JWT-Session-Cookie erzeugt statt sich
+  anzumelden. `E2E_AUTH_RATE_LIMIT_BYPASS` bleibt unter `NODE_ENV=production` inert und wird
+  von `prod-e2e.sh` aktiv entfernt.
 
 ### 8.10 Test Data Generator / Fake Input Data
 - Fake-Responses pro Connector-Modul für Automation-Tests ohne echte API-Calls
@@ -2756,10 +2780,17 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
   - Verzeichnisstruktur (gruppiert nach Connector) bleibt als Konvention für menschliche Navigation — ist aber nicht mehr technisch erzwungen
   - **Allium-Validierung:** Die Spec-Regel `ModuleRegistration` sagt "Registration happens at application startup" — Self-Registration on import erfüllt das. Die Spec schreibt nicht vor WER die Registration auslöst (Domain-Event, nicht Implementation).
 
-- **Phase 0c — Co-located Tests: ✅ DONE (2026-04-08)**
+- **Phase 0c — Co-located Tests: ✅ DONE (2026-04-08) — Gerüst, kein Inhalt**
   - Modul-Tests im Modul-Verzeichnis: `modules/logo-dev/__tests__/`
   - Jest-Config: Glob-Pattern erweitern für `modules/**/__tests__/**`
   - Pragmatische Alternative: `/new-module` Scaffolding-Skill der Tests automatisch generiert
+  - **Was "DONE" hier heißt (nachgezählt 2026-09-14):** Das Glob-Pattern ist real und aktiv
+    (`jest.config.ts:205`, `<rootDir>/src/lib/connector/**/modules/**/__tests__/**/*.spec.ts`), die
+    Konvention steht. Co-located Tests existieren aber **null**: 11 der 14 Modul-Verzeichnisse haben
+    ein `__tests__/`, und jedes davon enthält ausschließlich eine `.gitkeep` — auch das oben als
+    Beispiel genannte `modules/logo-dev/__tests__/`. `currency`, `geo-codes` und `public-holidays`
+    haben gar keins. Wer gegen "Modul-Tests liegen im Modul-Verzeichnis" plant, plant gegen ein
+    leeres Gerüst: der Weg ist frei, gegangen ist ihn noch niemand.
 
 - **Bewusst nicht umgesetzt — vollständige Auto-Discovery:**
   - Ideal wäre `glob("modules/*/manifest.ts")` beim Start → gar kein `register-all.ts` mehr
@@ -2773,10 +2804,10 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
   - `credential-resolver.ts` — liest `manifest.credential`, egal wo registriert
   - `degradation.ts` — nutzt `moduleRegistry` + Prisma, egal wo registriert
   - `rate-limiter.ts` (TokenBucket) — modul-agnostisch
-  - **Facade-Registries** (`data-enrichment/registry.ts`, `job-discovery/registry.ts` etc.) — bleiben als typisierte Query-Layer. Sie registrieren nichts (`.register()` ist bereits No-Op), sie filtern nur per `moduleRegistry.getByType()`. Unverändert.
+  - **Facade-Registries** (`job-discovery/registry.ts`, `ai-provider/registry.ts`) — bleiben als typisierte Query-Layer. Sie registrieren nichts (`.register()` ist bereits No-Op), sie filtern nur per `moduleRegistry.getByType()`. Unverändert. (`data-enrichment/registry.ts` und `reference-data/registry.ts` existierten als derselbe Fassaden-Typ, hatten aber nie einen Aufrufer — am 2026-09-13 gelöscht, siehe CLAUDE.md § Data Enrichment Connector.)
 
 - **⚠ Aufmerksamkeitspunkt: Import-Reihenfolge bei Facade-Abfragen:**
-  Die Facade-Registries (`enrichmentConnectorRegistry.create()`, `getEnrichmentModuleByDimension()`) und der `EnrichmentOrchestrator` rufen `moduleRegistry.getByType()` / `moduleRegistry.create()` auf. Module MÜSSEN registriert sein bevor die erste Facade-Abfrage erfolgt. Garantie: `register-all.ts` wird in `module.actions.ts` und in den Runner-Startup-Paths importiert — bevor jede Facade aufgerufen wird. Bei Self-Registration muss sichergestellt werden, dass `register-all.ts` NICHT lazy-loaded wird (kein `dynamic import()`), sondern als synchroner Top-Level-Import eingebunden bleibt.
+  Die verbliebenen Facade-Registries (`job-discovery/registry.ts`, `ai-provider/registry.ts`) und der `EnrichmentOrchestrator` rufen `moduleRegistry.getByType()` / `moduleRegistry.create()` auf. Module MÜSSEN registriert sein bevor die erste Facade-Abfrage erfolgt. Garantie: `register-all.ts` wird in `module.actions.ts` und in den Runner-Startup-Paths importiert — bevor jede Facade aufgerufen wird. Bei Self-Registration muss sichergestellt werden, dass `register-all.ts` NICHT lazy-loaded wird (kein `dynamic import()`), sondern als synchroner Top-Level-Import eingebunden bleibt.
 
 - **Voraussetzung:** Module Lifecycle Manager (→ 0.4) implementiert
 - **Konsumenten:** Marketplace (→ 2.11), Phase 1 Module SDK (unten), alle zukünftigen Module
@@ -2799,7 +2830,28 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
 - **Kein neuer Spec nötig** — nutzt bestehenden ModuleManifest-Vertrag aus `module-lifecycle.allium`
 - **Trust-Modell:** Wie Home Assistant / Obsidian — Community vertrauen, nicht sandboxen (Phase 1)
 - **Developer-Doku:** Template-Repository für Modul-Entwickler, Manifest-Referenz, Testing-Guide
+  — muss den Fund aus `e2e/CONVENTIONS.md` § "Converting afterEach to a Playwright fixture — the
+  ordering trap" (2026-09-13) übernehmen: `afterEach`-Hooks laufen immer vor Fixture-Teardown,
+  nie interleaved; ordered Cleanup über mehrere Modelle (z.B. Job vor JobTitle/Company/Location)
+  bricht silent, wenn nur EIN Schritt in ein Fixture umgezogen wird statt der ganzen Kette. Ein
+  externer Modul-Autor, der eigene co-located Tests (Phase 0c) mit Playwright statt Jest schreibt,
+  liefe in dieselbe Falle ohne diese Doku.
 - Cross-Ref: Marketplace UI (2.11) zeigt auch Community-Module. Plugin-Sandboxing als experimentelles Feature (→ 9.3)
+
+**Discovery: Combobox-Konsolidierung und die UI-Erweiterungsnaht für Module (offen):**
+- Frage: Auf welchem Weg bekommen Module ein eigenes durchsuchbares Auswahlfeld — und wird `ui/base-combobox.tsx` dafür zu öffentlicher SDK-Fläche?
+- Vorgeschichte: ADR-038 §G (`docs/adr/038-inside-track-referral-architecture.md:73-76`) plant die Konsolidierung aller spezialisierten Comboboxen auf `src/components/ui/base-combobox.tsx`, in **einem** Zug, weil stückweise Migration a11y regressieren würde. Die dort genannte Begründung ist ausschließlich Barrierefreiheit. Die zweite, nie aufgeschriebene Absicht (2026-09-27 vom Maintainer bestätigt) ist architektonisch: die Comboboxen an das Idiom `App ↔ Connector ↔ Modul` übergeben, damit Erweiterungen sich einklinken können.
+- **Befund, der die kritische Kette umhängt (verifiziert 2026-09-27):** Beide modulseitigen Türen sind geschlossene Unions. `ConnectorParamField.type` (`src/lib/connector/manifest.ts:112`) kennt nur `string | number | boolean | select | multiselect | language-proficiency`, und `options?: (string | number)[]` (`:115`) ist eine **statische** Liste — kein Async-Loader, keine Suche. `SearchFieldOverride.field` (`:125`) ist auf `"keywords" | "location"` begrenzt, und `WidgetRegistryEntry.field` (`src/components/automations/widget-registry.tsx:42`) verengt erneut auf dieselben zwei. Ein Modul kann heute also gar nicht ausdrücken, dass es ein durchsuchbares Feld mit asynchroner Quelle braucht — **unabhängig davon, welche Hülle existiert.** Der Engpass ist das Manifest-Vokabular, nicht die Komponente.
+- Präzedenzfall: **kein Modul hat je eine React-Komponente geliefert.** Beide Registry-Einträge (`eures-occupation`, `eures-location`, `widget-registry.tsx:46-55`) sind First-Party-Komponenten unter `src/components/automations/`, per `dynamic()` aus App-Code geladen und von Hand in die Map eingetragen. Das Idiom (manifestgetriebene UI ohne hartkodiertes Modulwissen, Module als zustandslose API-Übersetzer per DDD-ACL) zeigt in Richtung Deskriptoren, nicht React.
+- **DDD-Einordnung (dritte Triebfeder, Maintainer 2026-09-28):** Die Grenze ist bereits als DDD-Muster entworfen, und zwar in genau der Datei mit den geschlossenen Unions. `src/lib/connector/manifest.ts:164-166` trägt die Abschnittsüberschrift `Contracts (Published Language)`; darunter steht `ModuleManifest` (`:168-183`) mit `manifestVersion: number` (`:171`), und `connectorParamsSchema` / `searchFieldOverrides` sind Vokabeln **in** dieser Sprache (`:188-189`). Ein Modul, das ein durchsuchbares Feld braucht, verlangt damit **ein Wort, das die Sprache noch nicht hat** — die DDD-konforme Antwort ist, das Wort zu ergänzen (Achse 1c bzw. Schritt 2 der Entkopplung), nicht eine React-Komponente über die Kontextgrenze zu teilen. Letzteres wäre ein **Shared Kernel mit UI**: das teuerste Integrationsmuster, koordinierte Releases mit jedem Modulautor, plus ein zweites Versionierungsschema neben dem bereits vorhandenen `manifestVersion`. Die projekteigene ACL-Regel schließt die Form ohnehin aus („Never leak context-specific types … into the App layer"), und CLAUDE.md nennt Module „stateless API translators per DDD ACL" — ein Übersetzer, der UI liefert, ist keiner mehr. **Präzedenz, die 1c verbilligt:** lokalisierte Inhalte liefern Module längst deklarativ (`ModuleI18nEntry` `:155-159` plus co-locierte `i18n.ts`, z.B. `job-discovery/modules/eures/i18n.ts`) — heute auf Name/Beschreibung/`credentialHint` begrenzt, also erweiterungsbedürftig, aber ein vorhandenes Muster statt eines neuen Mechanismus. **Ubiquitous Language:** zwei Namen für einen Begriff sind die Ursache des WEED-1-Vorfalls und sprechen für Achse 2b (ein Überlebender, ein Name). **Wo DDD schweigt:** die vierzehn Trigger liegen alle im App-Kontext — deren Deduplizierung ist Kosten- und Risikowahl, keine Lehrfrage. Genau daran trennen sich die beiden Absichten sauber.
+- Drei unabhängige Achsen, heute zu einer Ja/Nein-Frage verschmolzen:
+  - **Achse 1 — geteilte Einheit:** (1a) Shell-Komponente wie heute · (1b) Headless Hook `useCombobox` mit Prop-Gettern — teilt nur Verhalten, hebt damit den Ein-Pass-Zwang auf · (1c) Deskriptor-Vertrag, gar keine geteilte UI
+  - **Achse 2 — Migrationsrichtung:** (2a) alles **auf** den nie gerenderten Entwurf, wie §G es schreibt · (2b) Hülle **aus** `src/components/ComboBox.tsx` herausziehen (5 Importer, E2E-B39-Korrektur, Live-Region `:225-227`), Entwurf einmotten, `specs/base-combobox.allium` umhängen. 2b ist **nicht** das im knip-Bericht verbotene „dritte Ding" — dort ging es um Löschen bei stehenbleibenden Specs
+  - **Achse 3 — Ablageort:** (3a) internes Primitiv · (3b) versionierte öffentliche SDK-Fläche — nötig, sobald Module externe npm/git-Pakete sind (Phase 1 oben), da ein externes Paket nicht in `src/components/ui/` greifen kann · (3c) keine UI in der Fläche, fällt aus 1c heraus
+- Vierte Möglichkeit, Entkopplung: a11y-Deduplizierung (vierzehn handgebaute Trigger) und Erweiterungsnaht sind **zwei Projekte**, die dieselbe Datei berühren. Getrennt sequenzierbar — erst intern deduplizieren ohne SDK-Zusage, dann Manifest-Vokabular öffnen (`async-select`-Feldtyp und/oder `SearchFieldOverride.field` aufmachen) ohne UI-Zusage. Schritt 2 liefert den Nutzen der Erweiterungsnaht auch dann, wenn Schritt 1 nie stattfindet.
+- Blockiert davon: die `allium:tend`-Kopfnotiz in `specs/base-combobox.allium` — ihr Inhalt hängt an Achse 3, und sie jetzt zu schreiben legt die SDK-Antwort durch die Hintertür fest. Nicht blockiert: der `knip.ts`-Ignore-Eintrag, da die Datei unter jeder Option außer 2b bleibt.
+- Entscheidung: Achse 1 zuerst, weil sie Achse 2 und 3 verengt. Sinnvoll evaluierbar, sobald ein zweiter externer Consumer als Phase-1-Modul real existiert — vorher ist „Module liefern Komponenten" eine Zusage ohne Anwendungsfall. Kontext, Belege und Optionen ausführlich in **GitHub-Issue [#2](https://github.com/rorar/jobsync/issues/2)** — inklusive Re-Verifikationsbefehlen für jede Behauptung hier.
+- Cross-Ref: ADR-038 §G · `docs/knip-unused-ui-primitives.md` § 5 (warum die Datei trotz null Importern bleibt) · `docs/architecture/c4-component-combobox.md` · Marketplace UI (2.11)
 
 ### 8.8 Production Monitoring (Self-Hosted)
 - **Health Endpoint:** `GET /api/health` — DB-Connectivity, Disk Space, Module-Status Zusammenfassung
