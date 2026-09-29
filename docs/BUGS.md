@@ -1,6 +1,6 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-09-29
 
-**Total: 763 bugs found, 682 fixed, 75 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
+**Total: 763 bugs found, 683 fixed, 74 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
 
 > **"Closed as decided" is a fourth disposition, added 2026-09-08 and deliberately not folded into
 > "fixed".** `E2E-B22`, `E2E-B23` and `E2E-B24` are rows the application cannot fix — `Person`,
@@ -31,11 +31,11 @@
 > | Session 2026-09-09 (heading outline across all 20 routes, `UI-B18`) | 1 | 1 | 0 | — |
 > | Session 2026-09-09 (job teardown reporting success it could not see, `E2E-B47`) | 1 | 1 | 0 | — |
 > | Session 2026-09-13 (Public API v1's first real caller, `E2E-B48`, `E2E-B49`) | 2 | 2 | 0 | — |
-> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B11`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B72`, `INF-B1..B5`) | 75 | 3 | 72 | — |
+> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B11`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B72`, `INF-B1..B5`) | 75 | 4 | 71 | — |
 > | Session 2026-08-25 (W-H1 spec flip, filed on `feat/quick-capture-and-referral-events`, merged 2026-09-29; `WH-B1..B4`) | 4 | 3 | 1 | — |
-> | **Total** | **763** | **682** | **75** | **6** |
+> | **Total** | **763** | **683** | **74** | **6** |
 >
-> 682 + 75 + 6 = 763. **Added 2026-09-29:** the sweep block (75 rows: 3 fixed, 72 open; `E2E-B70..B72` from the V3 weed pass, `SEC-B8..B10` from the Docker research pass) — see § Session 2026-09-29 — and, by the merge of `feat/quick-capture-and-referral-events`, its `WH-B1..B4` block (3 fixed, `WH-B2` open); `API-B1` was fixed by the same merge. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
+> 683 + 74 + 6 = 763. **Added 2026-09-29:** the sweep block (75 rows: 4 fixed, 71 open; `E2E-B70..B72` from the V3 weed pass, `SEC-B8..B10` from the Docker research pass) — see § Session 2026-09-29 — and, by the merge of `feat/quick-capture-and-referral-events`, its `WH-B1..B4` block (3 fixed, `WH-B2` open); `API-B1` was fixed by the same merge. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
 > `E2E-B36` and `E2E-B38` open → fixed; `E2E-B22`, `E2E-B23`, `E2E-B24` and `E2E-B42` open →
 > closed as decided; `E2E-B44` filed, split out of `E2E-B24` so a product gap is not settled as a
 > side effect of a test-residue pass. The three remaining open items are the two inherited
@@ -209,7 +209,7 @@ from its `useEffect` fetch chain, which is a real smell) versus pure resource st
 Raising a timeout to make a symptom disappear is the same move as W-E6's "kept for reference only"
 comment, and this session spent its afternoon undoing one of those. Diagnose before suppressing.
 
-## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (75 found, 3 fixed, 72 open)
+## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (75 found, 4 fixed, 71 open)
 
 **Where these come from.** On 2026-09-29, a read-only sweep (plus, for `E2E-B70..B72`, the V3 `allium:weed` pass and, for `SEC-B8..B10`, a Docker research pass the same day) compared everything said, found, deferred or promised in every jobsync Claude session between 2026-08-20 and 2026-09-28 against the code at `fbf44fc4`. That covers 10 dialogue sessions, 114 sub-agent transcripts and 176 automatic security reviews. The rows below are the **defects**: behaviour that is wrong, or a claim in a shipped artefact (code, spec, test) that is false. Almost none of them is new code. Most had already been found once and then lost, for three reasons:
 
@@ -345,7 +345,7 @@ comment, and this session spent its afternoon undoing one of those. Diagnose bef
 
 | ID | Severity | Summary | Fix |
 |----|----------|---------|-----|
-| INF-B1 | HIGH | **The Docker image cannot build.** Docker Publish fails at `npm ci` (`Dockerfile:12`) with `ERESOLVE`: `next-auth@5.0.0-beta.30` wants `nodemailer@^7`, and the project pins `^8`. The workflow has never succeeded: 36 of its 37 runs since it was added (2026-06-02) failed at `npm ci`, 1 was cancelled (latest failure: run `32244003429`). The lockfile is `package-lock.json` from 2026-03-06; a Docker research pass on 2026-09-29 found it lacks 24 of `package.json`'s direct dependencies (inherited), so every npm-based fix also needs a regenerated lockfile. The stale `@radix-ui/react-avatar` entry is harmless: `npm ci` ignores extra lock entries (inherited). *Register:* V4, D10. | **Fix on `fix/e2e-elysium` 2026-09-29, open until it builds on `main`.** Decision D10 taken (option a): the image installs with `bun install --frozen-lockfile` from `bun.lock` (bun 1.4.0 copied from `oven/bun:1.4.0-alpine`), base `node:22.23.2-alpine`, `package-lock.json` deleted, CI pinned to the same bun (`1.4.0`) and node (22). Verified locally (amd64 only): `docker build .` succeeds (1090 packages, lint and type check pass inside `next build`), and the container applies all 62 migrations, serves `/signin` 200 and redirects unauthenticated `/dashboard` to sign-in. arm64 (QEMU) is untested. Close at the first green Docker Publish run on `main`. |
+| INF-B1 | HIGH ✅ FIXED 2026-09-30 | **The Docker image cannot build.** Docker Publish fails at `npm ci` (`Dockerfile:12`) with `ERESOLVE`: `next-auth@5.0.0-beta.30` wants `nodemailer@^7`, and the project pins `^8`. The workflow has never succeeded: 36 of its 37 runs since it was added (2026-06-02) failed at `npm ci`, 1 was cancelled (latest failure: run `32244003429`). The lockfile is `package-lock.json` from 2026-03-06; a Docker research pass on 2026-09-29 found it lacks 24 of `package.json`'s direct dependencies (inherited), so every npm-based fix also needs a regenerated lockfile. The stale `@radix-ui/react-avatar` entry is harmless: `npm ci` ignores extra lock entries (inherited). *Register:* V4, D10. | **Fixed: first green Docker Publish on `main`** — run `36634443566` on the merge `44a23851` (PR #38), 2026-09-29/30, image `ghcr.io/rorar/jobsync:main` published for linux/amd64 and linux/arm64. Fix `5735d22f`: Decision D10 taken (option a): the image installs with `bun install --frozen-lockfile` from `bun.lock` (bun 1.4.0 copied from `oven/bun:1.4.0-alpine`), base `node:22.23.2-alpine`, `package-lock.json` deleted, CI pinned to the same bun (`1.4.0`) and node (22). Verified locally (amd64 only): `docker build .` succeeds (1090 packages, lint and type check pass inside `next build`), and the container applies all 62 migrations, serves `/signin` 200 and redirects unauthenticated `/dashboard` to sign-in.  |
 | INF-B2 | MEDIUM | **`scripts/restart.sh` kills dev servers machine-wide.** It runs `pkill -f "next dev"` and `pkill -9 -f "next-server"` (`scripts/restart.sh:10,13,14`), live code, not comments. That takes every worktree's server with it, which is exactly what `devserver_stop` replaced. `CLAUDE.md:26` lists the script as a normal helper. *Register:* M13. | Open. Route through `devserver_stop`. |
 | INF-B3 | LOW | **Killing `scripts/test.sh` leaves Jest running.** The script has no trap, so killing the wrapper leaves the systemd scope and Jest alive, and `--watch` is still cut at 1800 s. *Sweep:* D-OA6. | Open. |
 | INF-B4 | LOW | **`package.json` scripts bypass the wrappers.** `dev`, `build`, `test` and `test:watch` call `next dev`, `next build` and `jest` directly (`package.json:6,7,10,12`). The PreToolUse hook covers agents, not humans or tools that call the scripts. Mentioned only in the disposition of closed row E2E-B7. *Sweep:* B41b. | Open. |
