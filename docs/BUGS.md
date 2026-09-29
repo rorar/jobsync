@@ -1,6 +1,6 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-09-13
+# Bug Tracker — Collected 2026-03-24, Updated 2026-09-29
 
-**Total: 684 bugs found, 676 fixed, 2 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
+**Total: 752 bugs found, 677 fixed, 69 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
 
 > **"Closed as decided" is a fourth disposition, added 2026-09-08 and deliberately not folded into
 > "fixed".** `E2E-B22`, `E2E-B23` and `E2E-B24` are rows the application cannot fix — `Person`,
@@ -31,9 +31,10 @@
 > | Session 2026-09-09 (heading outline across all 20 routes, `UI-B18`) | 1 | 1 | 0 | — |
 > | Session 2026-09-09 (job teardown reporting success it could not see, `E2E-B47`) | 1 | 1 | 0 | — |
 > | Session 2026-09-13 (Public API v1's first real caller, `E2E-B48`, `E2E-B49`) | 2 | 2 | 0 | — |
-> | **Total** | **684** | **676** | **2** | **6** |
+> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B7`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B69`, `INF-B1..B5`) | 68 | 1 | 67 | — |
+> | **Total** | **752** | **677** | **69** | **6** |
 >
-> 676 + 2 + 6 = 684. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
+> 677 + 69 + 6 = 752. **Added 2026-09-29:** the sweep block (68 rows: 1 fixed, 67 open) — see § Session 2026-09-29. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
 > `E2E-B36` and `E2E-B38` open → fixed; `E2E-B22`, `E2E-B23`, `E2E-B24` and `E2E-B42` open →
 > closed as decided; `E2E-B44` filed, split out of `E2E-B24` so a product gap is not settled as a
 > side effect of a test-residue pass. The three remaining open items are the two inherited
@@ -68,6 +69,141 @@
 > § Session 2026-09-02.
 
 ### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (68 found, 1 fixed, 67 open)
+
+**Where these come from.** On 2026-09-29, a read-only sweep compared everything said, found, deferred or promised in every jobsync Claude session between 2026-08-20 and 2026-09-28 against the code at `fbf44fc4`. That covers 10 dialogue sessions, 114 sub-agent transcripts and 176 automatic security reviews. The rows below are the **defects**: behaviour that is wrong, or a claim in a shipped artefact (code, spec, test) that is false. Almost none of them is new code. Most had already been found once and then lost, for three reasons:
+
+- **Truncated reports.** Sub-agent reports reached the lead session only as idle-notification text cut at about 4,000 characters, or as nothing at all under Claude Code 2.1.246.
+- **Undelivered reviews.** The automatic security-review hook never delivered its findings to a working session.
+- **Premature "done".** "All side findings fixed" was measured against what the lead had seen, not against the findings that existed.
+
+**Not in this table, on purpose:**
+
+- **Stale internal documentation and citations.** These go to `docs/open-items-2026-09-28.md` as M items.
+- **Spec `open question`s.** These stay in the specs. The full list is in the sweep evidence.
+- **Maintainer decisions.** These go to the register as D items.
+- **Findings already carrying a sibling-branch ID** (`WH-B1` = the `no-empty` lint, `WH-B2` = the `TasksPageClient` flake, `WH-B3`, `WH-B4`, all on `feat/quick-capture-and-referral-events`). They get no second ID here.
+
+**Anchors and severity.**
+
+- Every `file:line` is at `fbf44fc4`.
+- *Sweep:* names the sweep ID. The per-probe reports, with source transcripts, are in the sweep evidence kept outside the repo.
+- Severity is this sweep's own judgement unless a row names the reviewer's.
+- *Inherited* marks evidence that a sweep probe checked and the lead did not re-check by hand.
+
+### Product, module lifecycle and GDPR
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| W4-B2 | MEDIUM | **Deleting a job status can dead-end.** `DeleteStatusDialog` chooses between a plain confirm and a reassign picker from `status.jobCount` alone (`src/components/settings/JobStatusSettings.tsx:662`). `deleteJobStatus` also refuses when `historyCount > 0` (`src/actions/jobStatus.actions.ts:357-366`). A status that no job currently has, but that appears in some job's history, therefore gets a plain confirm, then `errors.statusInUse`, and the dialog offers no reassign step. *Sweep:* F-05-20. | Open. Drive the dialog from the same predicate the server uses: expose `historyCount` or an `inUse` flag with the list. Needs a component test that fails first. |
+| MOD-B2 | MEDIUM | **Degradation rule 3 never fires.** `handleCircuitBreakerTrip` is defined at `src/lib/connector/degradation.ts:339` and has no caller in `src/`. The only mentions are comments at `degradation.ts:39,248,305` and `module.actions.ts:471,604`. `CLAUDE.md` § Degradation Rules still lists "pause after 3 CB opens" as live. *Sweep:* F-05-14. | Open. Wire it where the Cockatiel breaker opens, or remove the rule from spec and docs. That is a decision (`specs/module-lifecycle.allium`). |
+| MOD-B3 | LOW | **The "cost is bounded" claim does not hold under its own trigger.** `degradation.ts:111-115` says an aborted escalation is bounded by `checkConsecutiveRunFailures`. That backstop writes to the same database, and its blanket catch returns `{ paused: false }` (`:325-327`). Under the stated `SQLITE_BUSY` trigger, the backstop fails the same way. *Sweep:* E3. | Open. Correct the comment, or make the backstop observable. |
+| GDPR-B1 | MEDIUM | **The Art. 15 export omits 13 of 27 `Person` scalar columns.** The Person `select` in `src/lib/export/collect-user-data.ts:293-310` exports 14 fields. Missing: six `address*` fields, `avatarUrl`, `createdBySource`/`createdByName`, `updatedBySource`/`updatedByName`, `updatedAt` and `userId`. `createdByName` falls under Art. 15(1)(g), the source of data not collected from the subject. The spec understates the gap: `specs/crm-gdpr.allium:995` says "FIVE fields". No test asserts field completeness; `__tests__/collect-user-data-audit.spec.ts` is the audit-trail test. *Sweep:* A67. The 13/27 count is inherited from the 08-30 handoff; the select was re-read. | Open. Add a field-level guard test first: every Prisma `Person` scalar is exported or sits in a documented exclusion set. Handoff 08-30 §4.2 explains why auditing the list by hand failed twice. |
+| GDPR-B2 | MEDIUM (latent) | **The erasure sweep fails open.** `getPrivacySettingsForUser` returns the defaults on any error: a failed read or unparseable JSON (`src/lib/account/privacy-helpers.ts:25-32`). The default is `crmRetentionEnabled: true`. The erasure sweep reads the setting through that path (`crm-cron.ts:92` → `src/lib/crm/retention-policy.ts:45`). A user who switched retention off would have expired auto-created contacts erased whenever that read fails. Latent: nothing writes `dataSource: "auto_created"` yet. *Register:* D8. | Open. Fail closed for the destructive sweep, or change the helper for all its callers. Decision recorded in the register as D8. |
+| GDPR-B3 | LOW | **Consent withdrawal is enforced only on note creation.** `createCrmNote` refuses a consent-blocked target (`src/actions/crmNote.actions.ts:69-70`). `updateCrmNote` (`:125`) and `deleteCrmNote` (`:156`) do not check. The spec records the gap only as an open question (`specs/crm.allium:1957`). *Sweep:* A44. | Open. Decide whether editing an existing note is "new processing" under Art. 7(3), then enforce it or document the exemption. |
+| GDPR-B4 | LOW | **The spec names a dead constant as the timeline purge window.** `CRM_CONFIG.timelineRetentionDays = 1095` (`src/models/person.model.ts:343`) is read only by a test that pins the literal (`__tests__/person.model.spec.ts:527`). The cron reads `RETENTION_CONFIG.crmActivityLogRetentionDays` (`src/lib/scheduler/retention-config.ts:8`). Yet `specs/gdpr-data-rights.allium:445` cites the dead one, so editing it changes nothing. *Sweep:* T25, found only in an unread agent-report tail. | Open. Delete the dead constant and point the spec at the live one. Timeline-retention *policy* stays open under register D9. |
+
+### Security
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| SEC-B3 | LOW | **Erased unions reach a `"use server"` query unvalidated.** `getPersons` copies client-supplied `filters.status` and `filters.dataSource` straight into the Prisma `where` (`src/actions/person.actions.ts:253-255`). `isValidDataSource` (`src/models/person.model.ts:101`), `isValidActorType` (`:170`) and `isValidReferralKind` (`src/models/insideTrack.model.ts:51`) have no caller. This contradicts the ADR-019 rule in `CLAUDE.md`. Scope stays the caller's own rows. The 2026-08-19 decline exists only in a transcript. *Sweep:* H9-3. | Open. Validate at the boundary with the existing guards; add a test that sends a non-enum value. |
+| SEC-B4 | LOW | **Re-seeding silently un-revokes the E2E API key.** The `PublicApiKey` upsert sets `update: { name, revokedAt: null }` (`prisma/seed-e2e.ts:181`). Impact today is limited to the disposable template (`scripts/e2e-db.sh:80`). Reviewer rated it MEDIUM; the finding never reached a working session. *Sweep:* H-S5. | Open. `update: {}` (or name only). |
+| SEC-B5 | LOW (borderline) | **`seed-e2e.ts` has no database or environment guard.** Its only throw is "user missing" (`prisma/seed-e2e.ts:151-157`). `prisma/seed.ts:16` creates `admin@example.com` on any database. One stray run against a real database therefore plants the repo-public `pk_live_` key (`e2e/helpers/api-key-fixture.ts:36-37`), with full `/api/v1/*` access, because `PublicApiKey.permissions` is never read. ADR-046 accepts the committed key but does not weigh this path. *Sweep:* H-S4r. | Open. Refuse unless `DATABASE_URL` names an `.e2e-*` database. |
+| SEC-B6 | LOW | **Heap snapshots contain `AUTH_SECRET` in cleartext, and nothing says so where they are made.** The warning exists only in `docs/handoff-2026-09-06-e2e-elysium.md:194-202`. It is absent where snapshots are armed (`scripts/dev-e2e.sh:138-140`) and in `tools/next-heap/`. *Sweep:* D-OA1. | Open. Print the warning when arming; document it in `tools/next-heap/`. |
+| SEC-B7 | LOW | **The heavy-command guard can be bypassed with a fake heredoc opener.** `strip_heredoc_bodies` matches `<<TAG` anywhere on a line, including in a `#` comment or a quoted argument (`scripts/guard-heavy-commands.sh:148`). Reproduced on 2026-09-29: `# <<SKIP` + `npx jest` + `SKIP` exits 0, while a bare `npx jest` exits 2. The guard is advice-grade by design (`:16-22`), but this vector is not named. Reviewer rated it MEDIUM; the finding never reached a working session. *Sweep:* H-S3. | Open. Ignore `<<` inside comments and quotes, or name the vector in the header. |
+
+### Public API v1
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| API-B1 | LOW | **The public contract documents the wrong DELETE response.** `docs/architecture/public-api-v1.md:500-504` documents `DELETE /api/v1/jobs/:id` as **200 with a body**. The route returns 204 (`src/app/api/v1/jobs/[id]/route.ts:144`), and the tests pin 204 (`__tests__/api-v1-jobs.spec.ts:983,998`). *Register:* M14. | Fixed on `feat/quick-capture-and-referral-events` (`010c9008`, final wording `02e10d0f`, context in that branch's `WH-B4`). Closes when that branch is merged. |
+| API-B2 | LOW | **`?search=` treats `%` and `_` as wildcards.** `GET /api/v1/jobs` passes the value unescaped into Prisma `contains` (`src/app/api/v1/jobs/route.ts:54-57`). The sibling `getPersons` escapes them (`person.actions.ts:256-261`). Own rows only: correctness, not security. *Sweep:* H-O2. | Open. |
+
+### Application code
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| APP-B1 | LOW | **A logo file is unlinked before the delete it belongs to.** `deleteCompanyById` removes the logo file (`src/actions/company.actions.ts:381-387`) before the transaction that deletes the Company (`:397`). A rollback leaves the row pointing at a missing file. *Sweep:* A14. | Open. Unlink after the transaction; `deleteFileAndPruneEmptyParents` is idempotent. |
+| APP-B2 | LOW | **Two different `getJobSourceList` exports.** One in `src/actions/job.actions.ts:39` and one in `src/actions/jobSource.actions.ts:9`; the latter is untested. Which one a caller gets depends on the import path. *Sweep:* F-08-11. | Open. |
+| APP-B3 | LOW | **Job locations are typed as job titles.** `JobLocationsContainer` types its state as `JobTitle[]` (`src/components/admin/JobLocationsContainer.tsx:16`) and casts appends with `as any` (`:34`). The same `as any` append appears in the other admin containers. *Sweep:* F-08-15. | Open. |
+
+### UI, i18n and accessibility
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| UI-B19 | MEDIUM | **Raw i18n keys appear in toasts.** `ApiKeySettings` shows `result.message` as the toast description (`src/components/settings/ApiKeySettings.tsx:185,215`). The actions return keys such as `errors.notAuthenticated` (`src/actions/apiKey.actions.ts:21`). *Sweep:* F-04-06. | Open. `t(result.message)` with a fallback. |
+| UI-B20 | LOW | **Record-count nouns are hardcoded English.** For example `label="job locations"` (`src/components/admin/JobLocationsContainer.tsx:86`), `JobTitlesContainer.tsx:86` and `CompaniesContainer.tsx:111`, so German reads "Zeige 5 von 20 job titles". *Sweep:* F-08-14; reported inside the 2026-09-08 "fix every side finding" request and left open. | Open. |
+| UI-B21 | LOW | **Hardcoded English page titles.** `<h1>Developer Options</h1>` (`src/app/dashboard/developer/page.tsx:19`, although `nav.developerOptions` exists), plus `metadata.title` at `developer/page.tsx:11` and `myjobs/page.tsx:11`. *Sweep:* F-08-22, F-08-23. | Open. |
+| UI-B22 | LOW | **TagInput screen-reader announcements are English in every locale.** The live-region strings are template literals at `src/components/myjobs/TagInput.tsx:114,124,191,208`. *Sweep:* B37. | Open. Four keys × four locales. |
+| UI-B23 | LOW | **The retention-period description understates what restarts the clock.** It says "Editing a contact starts the period again" (`src/i18n/dictionaries/settings.ts:250`, DE `:523`, FR `:796`, ES `:1069`). Since `669104a0`, eight kinds of association advance the clock. ADR-042 records this as "widen when next touched". *Sweep:* A80. | Open. |
+| UI-B24 | MEDIUM | **Admin lists show a load failure as an empty list.** The loaders are `try/finally` with no `catch`, so a failed fetch renders the "No X yet" empty state. Example: `src/components/admin/JobTitlesContainer.tsx:24-43`; five containers in total. *Sweep:* F-08-16, inherited count. | Open. |
+| UI-B25 | LOW | **Load-more failures in the status history are swallowed.** `StatusHistoryTimeline` catches with `// Silently fail -- user can retry` (`src/components/crm/StatusHistoryTimeline.tsx:105-106`) and shows nothing. *Sweep:* F-08-24. | Open. |
+| UI-B26 | LOW | **Row actions have only generic accessible names.** The blacklist row delete is named "Delete" (`src/components/settings/CompanyBlacklistSettings.tsx:215`), and admin edit buttons "Edit" (`src/components/admin/CompaniesTable.tsx:120`). R1 fixed the same defect for the admin tables' delete buttons; a named-edit key (`common.editNamed`) was never added. *Sweep:* F-08-21, F-08-26. | Open. |
+| UI-B27 | MEDIUM | **The admin tablist does not wrap (WCAG 1.4.10 Reflow).** `TabsList` is `inline-flex h-10` (`src/components/ui/tabs.tsx:17`), used at `AdminTabsContainer.tsx:49`. It overflows at narrow widths. This is the reflow half of R3 (`docs/handoff-2026-09-08-open-items.md:99`); UI-B6 fixed only the other half. Static read; not checked in a browser. *Register:* M22. | Open. Goes through the ui-design / `/responsive-design` process `CLAUDE.md` prescribes. |
+| UI-B28 | LOW | **"New Job" does nothing on mobile until hydration.** At 375×667 a tap before React hydrates is dropped (`src/components/myjobs/AddJob.tsx:388-393`, no hydration gate). The E2E helper retries the click (`e2e/crud/keyboard-ux.spec.ts:171-186`), so the suite cannot see it again. Product fix is a UX decision. *Sweep:* B2. | Open (needs a UX decision). |
+| UI-B29 | LOW | **Timeline entries for two activity types lose their detail line.** `formatActivityDetail` hides what it cannot format (`src/components/crm/activity-format.ts:49-70`), which covers `application_submitted` and `automation_degraded`. The per-type sentences were accepted as a follow-up on 2026-08-19 and never filed. *Sweep:* H9-9. | Open. |
+
+### Specs versus code
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| SPEC-B4 | LOW | **Erasure scrubs note and task text, and no spec says so.** The code clears `CrmNote.title/body` and `CrmTask.title/description` on erasure (`src/lib/crm/anonymize-person.ts:109,118`). `crm.allium` `AnonymizePerson` ensures only target deletion (`specs/crm.allium:749-755`), and `specs/crm-gdpr.allium:993` still asks whether the text should be included. *Sweep:* A81. | Open, via `allium:tend`. |
+| SPEC-B5 | LOW | **Reference-row deleters prove deletion by reload only.** The invariant `DeletionProofSurvivesTheModalAndCitesTheServer` (`specs/e2e-test-infrastructure.allium:1591`) demands a server round-trip. The reference-row deleters prove deletion by the row disappearing after reload (`e2e/helpers/admin-reference-cleanup.ts:188-198`). The verifier's report never arrived. *Sweep:* F-04-20, inherited. | Open. Weed pass (register V3) decides which side moves. |
+| SPEC-B6 | LOW | **"Implicitly protected by foreign key constraints" is false for JobSource.** `specs/shared-entities.allium:116,130,145` say so, but `Job.jobSourceId` is `ON DELETE SET NULL` (`prisma/migrations/20260513170926_s1_account_deletion_cascades/migration.sql:331`). *Sweep:* F-08-12. | Open, via `allium:tend`. |
+| SPEC-B7 | LOW | **`.first` is read on a `Set`.** `state.active_runs.first` at `specs/scheduler-coordination.allium:781-782` is validation rule 58: a warning now, an error in the next language version. *Sweep:* F-05-22. | Open, via `allium:tend`. |
+| SPEC-B8 | LOW | **The audit-trail stubs disagree with their owner.** They declare `user: User` (`specs/audit-trail.allium:36,42`); the owner declares `user_id: String` (`specs/crm.allium:246`). *Sweep:* A64. | Open, via `allium:tend`. |
+| SPEC-B9 | LOW | **`data-enrichment.allium` external entities have no fields.** They are declared with zero fields, and field lists sit in comments in camelCase. *Sweep:* F-05-23, inherited. | Open, via `allium:tend`. |
+
+### Unit tests
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| UT-B1 | LOW | **The E2E-B18 guard test pins `INACTIVE` only.** See `__tests__/health-monitor.spec.ts:140,606`. `ERROR` is the non-ACTIVE state production actually sets (`handleAuthFailure`), so loosening the guard at `src/lib/connector/health-monitor.ts:110` from `!== ACTIVE` to `!== INACTIVE` would keep every test green. *Sweep:* P28, found only in an unread agent-report tail. | Open. `it.each([INACTIVE, ERROR])`. |
+| UT-B2 | LOW | **No test renders the retention settings control.** `__tests__/privacy-retention-settings.spec.ts` tests the actions only (no `render(`). *Sweep:* T36. | Open. |
+| UT-B3 | LOW | **A guard test is pinned to one migration file.** `__tests__/health-monitor.spec.ts:634-637` reads the status default from `prisma/migrations/20260329013355_add_module_lifecycle/migration.sql` by name. A later migration that redefines the table still passes. *Sweep:* D-OA4. | Open. |
+| UT-B4 | LOW | **`getReferralDetail`'s `targetJobId` seam is untested.** Mapped at `src/actions/referral.actions.ts:488`; no test mentions `getReferralDetail`. *Sweep:* A55. | Open. |
+| UT-B5 | LOW | **A recurring flake was never recorded.** `ProfilePreferencesCard.spec.tsx` failed in two full-suite runs (2026-08-21, 08-23) and passed alone. Recorded only in `docs/handoff-2026-08-24-orphan-prune.md:197-198`. May be moot after the host move. *Sweep:* A82. | Open (observe). |
+| UT-B6 | LOW | **A fixture puts a `DataSource` value on an `ActorSource` field.** `mockPersonAutoCreated.createdBySource: "auto_created"` (`src/lib/data/testFixtures.ts:1444`). `ActorSource` has no such member; tsc cannot see it because the fixture field is typed `string`. Noted twice on 2026-08-19 as "not filed". *Sweep:* H9-10. | Open. |
+| UT-B7 | LOW | **A vacuous `status` assertion in the W-D2 database test.** At `__tests__/crm-orphan-prune.integration.spec.ts:152`, which exists only on `feat/quick-capture-and-referral-events` (`d6f41879`). *Sweep:* A52. | Open; applies once that branch is merged. |
+| UT-B8 | LOW | **A mocked helper hides the real error remaps.** `__tests__/module.actions.spec.ts:72-74` mocks `handleError`, so the key assertion at `:1379` cannot see the real P2002/P2025 remaps. *Sweep:* F-04-11, inherited. | Open. |
+| UT-B9 | LOW | **A stale mock return shape.** The `health-monitor` mock at `__tests__/health-monitor.spec.ts:36` lacks the `escalated` field the real function returns. *Sweep:* F-04-10, inherited. | Open. |
+
+### E2E tests and E2E tooling
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| E2E-B50 | MEDIUM | **`--timeout=0` is silently turned back into a cap.** Playwright reads `0` as "no timeout" (`node_modules/playwright/lib/worker/timeoutManager.js:85`). `test.setTimeout(testInfo.timeout + Δ)` turns it back into a 30-60 s cap, at 34 unguarded sites, e.g. `e2e/crud/automation-crud.spec.ts:305`. `e2e/helpers/cleanup-fixture.ts:52,69` recommends the pattern, and `scripts/test-e2e.sh:534` passes `--timeout` through. The fix was briefed to an agent (`e2e-wave4`) that died with a 502 before its first tool call. *Sweep:* E1 = F-04-13. | Open. One `extendTimeout(testInfo, Δ)` helper that keeps `0`. |
+| E2E-B51 | MEDIUM | **The Kanban transition test asserts nothing.** "should show transition dialog on status change attempt" (`e2e/crud/kanban.spec.ts:285-305`) has one assertion, `expect(true).toBe(true)` at `:301`. That line sits under `width < 768`, while crud runs at 1280 (`playwright.config.ts:64`). The test dates from `9f66f4cf` (2026-04-02). Same class as E2E-B19. *Sweep:* C78. | Open. |
+| E2E-B52 | MEDIUM | **"should delete the automation and verify removal" verifies nothing itself.** `e2e/crud/automation-crud.spec.ts:575-598` relies on `deleteAutomation`, whose only check sits inside a swallow-ok catch. Reported by the 2026-09-04 fixer and never acted on. The residue gate would still catch a leaked row, unattributed. *Sweep:* E2. | Open. |
+| E2E-B53 | MEDIUM | **`devserver_stop` cannot walk up to the supervisor.** It reads the parent pid as field 4 of `/proc/<pid>/stat` with `awk '{print $4}'` (`scripts/lib-devserver.sh:153`). That field shifts when `comm` contains a space, as in `next-server (v15.5.10)`. The walk then stops at the listener, and `next dev` respawns it. *Sweep:* F-06-06, shape verified, not run. | Open. Parse after the last `)`. |
+| E2E-B54 | LOW | **Weak assertions an audit ranked were never recorded.** See `e2e/crud/kanban.spec.ts:270-283` (an OR over three states), `smtp-settings.spec.ts:180-195`, and `job-detail-panels.spec.ts:440-446` (asserts items only `if (await timeline.isVisible())`). *Sweep:* C37, F-05-18. | Open. |
+| E2E-B55 | LOW | **`deleteQuestion` has no removal proof.** See `e2e/crud/question-crud.spec.ts:153`. *Sweep:* F-05-19, inherited. | Open. |
+| E2E-B56 | LOW | **A negative assertion with no positive control.** "JSearch not selectable" is asserted with `not.toBeVisible` (`e2e/crud/automation-wizard-modules.spec.ts:151-154`), with no proof that the list opened, so a closed dropdown passes. *Sweep:* F-05-33. | Open. |
+| E2E-B57 | LOW | **The swallowed-assertion guard misses two shapes.** `__tests__/e2e-no-swallowed-assertions.spec.ts` does not catch `.catch(() => null)` chained on an assertion (`e2e/crud/task-crud.spec.ts:602,624`), or try-blocks whose swallowed statement is a `waitFor`. *Sweep:* F-05-34. | Open. |
+| E2E-B58 | LOW | **`expectToast` hazard (b) is documented only in the helper's JSDoc.** A pattern that also matches the *failure* message of the same action turns a broken flow green. `/deleted/i` (`e2e/crud/settings-api-keys.spec.ts:136`) is one surfaced message away from it (`e2e/helpers/index.ts:117-126`). The JSDoc also repeats hazard (a) (`:127-131`). The suggested audit of the short patterns was never recorded. *Sweep:* C39, D-OA5. | Open. |
+| E2E-B59 | LOW | **"Wait for UI to settle" waits are no-ops.** `waitForLoadState("domcontentloaded")` on a loaded page returns at once. The comments claim a wait: `e2e/crud/keyboard-ux.spec.ts:401-402`, `:424`, `:444`, `:448`, `:466` (29 calls in the file). *Sweep:* B40. | Open. |
+| E2E-B60 | LOW | **A Playwright runner hang was never diagnosed.** On 2026-09-01, runner and worker sat at 0 % CPU for 40 minutes with no timeout firing, and were killed by hand (`E2E-FIX-NOTES.md:370-384`). Mitigated since (heap cap, fresh server per run, `E2E_MAX_MINUTES`); `E2E_ABORT_CONSECUTIVE_TIMEOUTS` cannot catch it, because no timeout fired. *Sweep:* B1. | Open (investigate if it recurs). |
+| E2E-B61 | LOW | **"Select Resume" is a one-shot pick without retry.** The `getByLabel("Select Resume")` → first-option pattern appears at six sites with no shared helper (`enrichment.spec.ts:256`, `job-crud.spec.ts:323`, `job-detail-panels.spec.ts:257`, `job-status-crud.spec.ts:357,426`, `kanban.spec.ts:104`). The `job-status-crud:322` flake it caused was noted only in chat. *Sweep:* F-05-28. | Open. |
+| E2E-B62 | LOW | **The Load-More branch never runs on a fresh database.** The `expect.poll` path in `loadUntilCompanyVisible` (`e2e/crud/company-crud.spec.ts:15-41`) is never exercised, because a fresh database rarely has a second page. It is green only because it does not run. *Sweep:* B35. | Open. |
+| E2E-B63 | LOW (latent) | **`activity-crud` and `task-crud` can stop each other's timer.** `activity-crud`'s `stopRunningActivity` presses any on-screen "Stop Activity", and the app allows one running activity per user. With more than one worker, the two specs can stop or block each other; the single-worker default hides it. *Sweep:* G-14-05, found only in an unread agent-report tail. | Open. |
+| E2E-B64 | LOW | **Two cleanup hooks can run out of time.** The `task-crud` and `activity-crud` `afterEach` hooks add no time, and their bounded waits can sum past the 60 s hook slot (about 88 s for 1 leaked activity plus 2 leaked tasks). That is a computed worst case, reachable only when the deletes themselves fail. *Sweep:* G-14-06, unread tail. | Open. |
+| E2E-B65 | LOW | **`profile-crud` wastes 10 s on every green run.** "Edit resume title" registers only the pre-rename title, so the hook waits 10 s for a row that no longer exists, then swallows the miss. No leak. *Sweep:* G-14-07, unread tail. | Open. |
+| E2E-B66 | LOW | **Worktrees overwrite each other's live server log.** The log path is fixed per mode (`scripts/test-e2e.sh:179,185`: `/tmp/jobsync-e2e-{prod,dev}.log`), while ports are per worktree. *Sweep:* F-06-09. | Open. |
+| E2E-B67 | LOW | **A typo in `E2E_DEV_BUNDLER` falls back to turbopack silently.** Any value other than `webpack` takes the turbopack branch (`scripts/dev-e2e.sh:96,155`), and the banner does not print which bundler ran. *Sweep:* F-06-07. | Open. |
+| E2E-B68 | LOW | **`E2E_MAX_MINUTES` is not validated.** Its sibling `E2E_ABORT_CONSECUTIVE_TIMEOUTS` is (`:569`); this one is not (`scripts/test-e2e.sh:567`). A non-numeric value aborts the run at the first poll with exit 124. *Sweep:* H-O6. | Open. |
+| E2E-B69 | HIGH ✅ FIXED 2026-09-01 | **The webhook toggle assertion could pass on the previous action's toast.** Toast overlap was fixed in `5c42b3cf`, but the defect never had a row. `docs/handoff-2026-09-02-e2e-closeout.md:67` names it E2E-B14, which is the CI-retry finding. *Sweep:* C55. | Fixed in `5c42b3cf`; row added 2026-09-29 so the count carries it. |
+
+### Build, CI and developer tooling
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| INF-B1 | HIGH | **The Docker image cannot build.** Docker Publish fails at `npm ci` (`Dockerfile:12`) with `ERESOLVE`: `next-auth@5.0.0-beta.30` wants `nodemailer@^7`, and the project pins `^8`. Every recorded run on `main` since at least 2026-08-07 is red (run `32244003429`). The lockfile is `package-lock.json` from 2026-03-06, and it still lists `@radix-ui/react-avatar`, which this branch removed. *Register:* V4, D10. | Open. The strategy (pin, `--legacy-peer-deps`, or build with bun) is register D10. |
+| INF-B2 | MEDIUM | **`scripts/restart.sh` kills dev servers machine-wide.** It runs `pkill -f "next dev"` and `pkill -9 -f "next-server"` (`scripts/restart.sh:10,13,14`), live code, not comments. That takes every worktree's server with it, which is exactly what `devserver_stop` replaced. `CLAUDE.md:26` lists the script as a normal helper. *Register:* M13. | Open. Route through `devserver_stop`. |
+| INF-B3 | LOW | **Killing `scripts/test.sh` leaves Jest running.** The script has no trap, so killing the wrapper leaves the systemd scope and Jest alive, and `--watch` is still cut at 1800 s. *Sweep:* D-OA6. | Open. |
+| INF-B4 | LOW | **`package.json` scripts bypass the wrappers.** `dev`, `build`, `test` and `test:watch` call `next dev`, `next build` and `jest` directly (`package.json:6,7,10,12`). The PreToolUse hook covers agents, not humans or tools that call the scripts. Mentioned only in the disposition of closed row E2E-B7. *Sweep:* B41b. | Open. |
+| INF-B5 | LOW | **knip can never report dead exports in the E2E helper barrel.** `knip.ts:63` declares `e2e/helpers/index.ts` an entry point. That is how the dead `login()` export survived until `ec823595`. *Sweep:* F-09-08. | Open. |
 
 ## Session 2026-09-01/02 — E2E fixture extraction, the data leak behind it, and the close-out (21 found, 20 fixed, 1 open)
 
