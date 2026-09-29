@@ -19,8 +19,8 @@ so.
 - Rows not touched since 2026-09-28 keep their anchors at `efcd2570`. `403cda87`, the merge and
   the later commits added about 300 lines to `docs/BUGS.md`, so in an untouched row a `BUGS.md`
   line number can be stale: search by ID.
-- `CLAUDE.md` is cited "at `294e13c8`", before `8094ff67` corrected the drift the *fix in
-  progress* rows describe.
+- `CLAUDE.md` is cited "at `294e13c8`", that is, before `8094ff67` corrected the drift that M1,
+  M16 and M38–M43 describe. M48 cites it at `688df386`.
 
 **Original state (2026-09-28), kept as history:** branch `fix/e2e-elysium` as it stood before this
 register was written — `efcd2570`, working tree clean, 6 commits ahead of `origin/fix/e2e-elysium`
@@ -104,8 +104,8 @@ claim corrected in § 3, item M6.
 |---|---|---|
 | V1 | **The full Playwright suite has not run since the Job teardown migration.** The last full run on record is 112/112 on 2026-09-08 (`scripts/check-e2e-residue.sh:128`). Since then only targeted runs: the 5 migrated Job specs (28 passed, `docs/handoff-2026-09-14-post-job-teardown-migration.md:8`), 7 specs (41 passed) on 2026-09-14, then `activity-crud` alone. `test-results/.last-run.json` ("passed", 2026-09-14 12:07) is that single-spec run, not a suite. **2026-09-29:** still true; the merge `294e13c8` adds no E2E change but does add production code (`import "server-only"` in `src/lib/crm/orphan-targets.ts:67`). | Production code changed since `d5497bdf` without a full run: `src/auth.config.ts` (E2E-B49 — the `authorized` callback every matched request passes through), `src/app/api/v1/jobs/route.ts` (E2E-B48), `src/lib/connector/data-enrichment/orchestrator.ts` (new chain guard), 13 deleted files (`e4fe2a23`), `prisma/seed-e2e.ts` (+48). |
 | V2 | Jest and typecheck were last run on 2026-09-14: `scripts/test.sh` 320 suites, 5910 passed + 2 todo; `scripts/typecheck-safe.sh` `EXIT=0`. Since then only a comment (`cb136619`) and a `describe` title (`3736c4e2`) changed in code, so the result still describes the code — but re-run before a merge. **Updated 2026-09-29: no longer true.** The merge changed code and tests: `git diff --stat 468db168..HEAD -- src __tests__` lists 7 files — `import "server-only"` in `src/lib/crm/orphan-targets.ts:67`, a new 50-line database-tier test in `__tests__/crm-orphan-prune.integration.spec.ts`, 3 lines in `__tests__/crm-orphan-prune.spec.ts`, and comment-only lint fixes in the three `cdp-scripts/*.mjs`. The 2026-09-14 result does not describe `294e13c8`. Both must be re-run. | `git diff --stat 468db168..HEAD` |
-| V3 | The `allium:weed` pass that ADR-046's plan named as "the actual spec-vs-code check" after the migration was never run. **Inputs added 2026-09-29:** `SPEC-B5` (reload-only deletion proof vs `DeletionProofSurvivesTheModalAndCitesTheServer`), M21, and the 204-as-proof ambiguity against `specs/e2e-test-infrastructure.allium:980-988` (sweep G-13-22). **2026-09-29, after the merge:** a weed pass ran in this session, and `f7100ae7` filed its three defects as `E2E-B70`, `E2E-B71` and `E2E-B72`. Whether that pass is the full check ADR-046 meant, and what it concluded about the inputs above, is recorded in that commit and the weed report, not verified here. The lead confirms and closes. | Not recorded in either 2026-09-14 handoff or in ADR-046. |
-| V4 | **CI on `main` is red, and has been for every recorded run since at least 2026-08-07** (the six most recent runs on `main`, CI and Docker Publish, all `failure`; cause checked for the latest pair only, `968ac32a`, 2026-08-19). CI (run `32244003432`) stops at Lint on the five `no-empty` errors in `src/lib/connector/arbeitsagentur-account/cdp-scripts/*.mjs` (M17); Type check, Unit tests and Build were skipped. Docker Publish (run `32244003429`) fails in `npm ci` with `ERESOLVE`: `next-auth@5.0.0-beta.30` wants `nodemailer@^7.0.7` as a peer, the project pins `^8.0.4` (D10). None of the files involved changed `main..HEAD`, so merging this branch as it is would land red on both — **inferred, not run**. CI triggers only on `main` / `dev` (`ci.yml:3-7`), so this branch's own CI steps have never run in Actions. **Updated 2026-09-29 (`294e13c8`):** the **lint half is resolved on this branch** by the merge. `036e6b91` (`WH-B1` in `docs/BUGS.md`) gives each of the five empty `catch` blocks a comment, e.g. `cdp-auto-complete.mjs:51`. lint: verified 2026-09-29 on `294e13c8` — `bun run lint` 0 errors (react-hooks/exhaustive-deps warnings only). The **Docker half** is `INF-B1` in `docs/BUGS.md`; the strategy stays decision D10. `INF-B1`, as corrected in `072f87d3`, records that Docker Publish has never succeeded since it was added on 2026-06-02. The sentence "none of the files involved changed `main..HEAD`" no longer holds: `package.json` and the three `.mjs` files differ now. | `gh run view 32244003432 --log-failed`; `gh run view 32244003429 --log-failed` |
+| V3 | The `allium:weed` pass that ADR-046's plan named as "the actual spec-vs-code check" after the migration was never run. **Inputs added 2026-09-29:** `SPEC-B5` (reload-only deletion proof vs `DeletionProofSurvivesTheModalAndCitesTheServer`), M21, and the 204-as-proof ambiguity against `specs/e2e-test-infrastructure.allium:980-988` (sweep G-13-22). **RAN 2026-09-29 — verdict dirty.** The pass read `403cda87`. The merge added only `scripts/check-spec-refs.mjs` under `specs/`, `e2e/`, `scripts/`, `src/components/` and `prisma/`, so the result holds at `294e13c8`. The report is the sweep evidence's `wave/weed-report.md`, out of repo. It found 20 divergences (14 spec bugs, 5 code bugs, 1 aspirational) and 7 open questions; its `allium check` result, 0 errors, proves syntax only (report § 0). Where each went: **spec bugs** → M44, which absorbs M21. **Decisions** → D39 (§ Q1, *Proposed resolution for Q1*, the mechanism clause), D40 (§ Q1, *Remaining E2E-B37 shape*), D41 (§ Q2, *Which side is wrong*), D42 (§ 5.6) and D3 (§ Q3). **Code bugs** → BUGS `E2E-B70` (*TrackedFactoryRegistersBeforeWrite*, false leak warning), `E2E-B71` (§ 5.1, seed-template stamp) and `E2E-B72` (inline cleanup, which is D40), all filed by the lead in `f7100ae7`. **Comment and doc drift:** § 5.9 → M45, which absorbs M20; § 5.10 → M46. § 5.7 (`CIExecution`) stays aspirational until D11 is decided. What the pass did not check is listed in § 5.11. | Not recorded in either 2026-09-14 handoff or in ADR-046. |
+| V4 | **CI on `main` is red, and has been for every recorded run since at least 2026-08-07** (the six most recent runs on `main`, CI and Docker Publish, all `failure`; cause checked for the latest pair only, `968ac32a`, 2026-08-19). CI (run `32244003432`) stops at Lint on the five `no-empty` errors in `src/lib/connector/arbeitsagentur-account/cdp-scripts/*.mjs` (M17); Type check, Unit tests and Build were skipped. Docker Publish (run `32244003429`) fails in `npm ci` with `ERESOLVE`: `next-auth@5.0.0-beta.30` wants `nodemailer@^7.0.7` as a peer, the project pins `^8.0.4` (D10). None of the files involved changed `main..HEAD`, so merging this branch as it is would land red on both — **inferred, not run**. CI triggers only on `main` / `dev` (`ci.yml:3-7`), so this branch's own CI steps have never run in Actions. **Updated 2026-09-29 (`294e13c8`):** the **lint half is resolved on this branch** by the merge. `036e6b91` (`WH-B1` in `docs/BUGS.md`) gives each of the five empty `catch` blocks a comment, e.g. `cdp-auto-complete.mjs:51`. lint: verified 2026-09-29 on `294e13c8` — `bun run lint` 0 errors (react-hooks/exhaustive-deps warnings only). The **Docker half** is `INF-B1` in `docs/BUGS.md`; the strategy stays decision D10. `INF-B1`, as corrected in `072f87d3`, records that Docker Publish has never succeeded since it was added on 2026-06-02. The Docker research on 2026-09-29 found the same `npm ci` exit on the first, a middle and the latest run, so "cause checked for the latest pair only" no longer limits the Docker half. The sentence "none of the files involved changed `main..HEAD`" no longer holds: `package.json` and the three `.mjs` files differ now. | `gh run view 32244003432 --log-failed`; `gh run view 32244003429 --log-failed` |
 
 V1 note: `docs/BUGS.md:155,185` record "128 passed, `[residue] OK`" on 2026-09-09, after the 112/112 of 2026-09-08. Whether that was a full-suite run is not recorded; every production change V1 lists came after it either way. *(Re-anchored 2026-09-29: those rows, `E2E-B38` and `E2E-B47`, are now at `docs/BUGS.md:436,466`.)*
 
@@ -118,21 +118,21 @@ Gate to run, each judged by its own `EXIT=` line, never through a pipe: `./scrip
 
 | # | Decision | Context |
 |---|---|---|
-| D1 | **How and when `fix/e2e-elysium` reaches `main`.** It is 274 commits ahead of `main` (= `origin/main`), 0 behind, merge-base `968ac32a` (2026-08-19). It carries two product bug fixes (E2E-B48, E2E-B49), ADR-045, ADR-046, the fixture consolidation and 13 dead-code deletions. The branch name no longer describes its content. **Updated 2026-09-29:** 297 ahead at `294e13c8` (302 at `072f87d3`), 0 behind, same merge-base. It now also carries the sibling merge (`294e13c8`) and the sweep's 68 `docs/BUGS.md` rows (`403cda87`). | `git rev-list --count main..HEAD` |
+| D1 | **How and when `fix/e2e-elysium` reaches `main`.** It is 274 commits ahead of `main` (= `origin/main`), 0 behind, merge-base `968ac32a` (2026-08-19). It carries two product bug fixes (E2E-B48, E2E-B49), ADR-045, ADR-046, the fixture consolidation and 13 dead-code deletions. The branch name no longer describes its content. **Updated 2026-09-29:** 297 ahead at `294e13c8` (302 at `072f87d3`), 0 behind, same merge-base. It now also carries the sibling merge (`294e13c8`) and the sweep's 68 `docs/BUGS.md` rows (`403cda87`). Before the merge to `main`, also do M47, the maintainer's steps for the GitHub files added on 2026-09-29. | `git rev-list --count main..HEAD` |
 | D1a | Three sibling branches hold commits this branch lacks (`git cherry` shows all as genuinely absent, not patch-equivalent). **Whether each is superseded or still needed has not been established.** **Updated 2026-09-29: one of the three is merged; two stay open** — see the dated notes in the rows below. | see below |
 | | `feat/quick-capture-and-referral-events` — 11 commits. Includes a **second, independently built** spec reference checker (`scripts/check-spec-refs.mjs`, `cb614f9c`, 2026-08-25, for qualified cross-spec references) while this branch has `scripts/check-spec-refs.sh` + `tools/allium-refcheck/` (`458d0da0`, 2026-09-06, titled "the reference-integrity gate this project had no tool for"). `ci.yml` diverges both ways: this branch has the notification-writer, allium and spec-refs steps; that branch has the database test tier (`010c9008`). `docs/BUGS.md` diverges too: that branch has four findings this one lacks, `WH-B1`..`WH-B4`, two of them marked OPEN there: `WH-B2` (`__tests__/TasksPageClient.spec.tsx` flakes under full-suite load) and `WH-B3` ("retention expiry archives but never erases"), plus a header of 610 / 607 / 4 open against this branch's 684 / 676 / 2. `72f4138f` (2026-08-26, "user-configurable retention — erase on expiry") is an ancestor of this branch and not of that one. **Checked 2026-09-28 (probe, then re-verified by hand):** at HEAD it closes every item `WH-B3` names — the sweep matches `status: { not: "anonymized" }` (`src/lib/scheduler/crm-cron.ts:72-74`, so rows archived by the old code are reached), erases through `anonymizePersonCascade` (`:127-132`), and no longer reads or copies the name (`:80`). One deliberate exception: with `crmRetentionEnabled` off the sweep skips the Person (`:104`) and the PII stays — a documented opt-out (ADR-042 § 2), default on (`src/models/userSettings.model.ts:122`). The whole path is latent: the only `prisma.person.create` hardcodes `dataSource: "manual"` (`src/actions/person.actions.ts:162,181`), so no `auto_created` Person exists yet. `WH-B2`: `__tests__/TasksPageClient.spec.tsx` is byte-identical on both branches (last changed `f7d0d567`, 2026-03-29), so the shape it names is still there; `docs/handoff-2026-08-30-retention.md:389` records that it "passed on the last two full runs"; it was not re-run. Neither `WH-B` finding has a row in this branch's `docs/BUGS.md`, although `E2E-FIX-BRIEF.md:133` says WH-B2 is "recorded … in `docs/BUGS.md`". **MERGED 2026-09-29 (`294e13c8`); `git rev-list --count HEAD..feat/quick-capture-and-referral-events` = 0.** The merge message resolves the three conflicts: **(1)** `package.json` is a union. `check:spec-refs` stays on the `.sh` checker (`package.json:18`), the `.mjs` is added as `check:spec-qualified-refs` (`:19`), and the CI step that used to run `check:spec-refs` a second time now runs it (`ci.yml:106-107`). **(2)** `CLAUDE.md` keeps this branch's side in both hunks. **(3)** `docs/BUGS.md` keeps this branch's header and block table, adds the sibling's `WH-B1..B4` sections, and gives them a block row. Since the merge, `WH-B3` is recorded as closed by `72f4138f` (`docs/BUGS.md:123`) and `WH-B2` is open (`:197`), so the sentence above that neither `WH-B` finding has a row is no longer true. The porting hazard is moot, because the merge took the tip state. | `git diff fix/e2e-elysium feat/quick-capture-and-referral-events -- .github/workflows/ci.yml` |
-| | **Classified 2026-09-28 (probe, key points re-verified by hand):** none of the 11 commits exists here in any form; only `ci.yml`, `CLAUDE.md`, `docs/BUGS.md` and `package.json` changed on both sides since the merge-base `6a30e6e4`. Missing here: the `server-only` import and W-D2 test (`4086ec09`), the `sqlite3` CI step and ADR-040 update (`010c9008`, `02e10d0f` — ADR-040:82 here still says the tier "is not yet wired"), the lint fix (`036e6b91` — the five empty `catch {}` blocks are live in `src/lib/connector/arbeitsagentur-account/cdp-scripts/*.mjs` and `.eslintrc.json` makes `no-empty` an error), a handoff update, and all `WH-B` rows. Conflict: both branches added `check:spec-refs` to `package.json`, pointing at different checkers. **Porting hazard:** `010c9008`, `8dd32004` and `9ce9195d` add wording that `02e10d0f` later retracts — port the tip state of ADR-040 and `public-api-v1.md`, not commit by commit. The two checkers are complementary, not rivals (probe's comparison, spot-checked): the `.mjs` resolves qualified `alias/Sym.member` references anywhere; the `.sh` + `refcheck.py` kind-checks four positions and has a distinct "could not run" exit. The probe estimates ~32 of 38 qualified cross-spec references are checked by nothing in CI here (its own regex count, not independent). CI runs only on push/PR to `main` and `dev` (`ci.yml:3-7`), so none of this has ever been exercised on this branch; whether `bun run lint` (`next lint`) reaches the `.mjs` files — i.e. whether CI would go red after a merge — is not determined. **2026-09-29:** all of this is now on the branch through `294e13c8`. | `git diff 6a30e6e4 …`; `.eslintrc.json` |
+| | **Classified 2026-09-28 (probe, key points re-verified by hand):** none of the 11 commits exists here in any form; only `ci.yml`, `CLAUDE.md`, `docs/BUGS.md` and `package.json` changed on both sides since the merge-base `6a30e6e4`. Missing here: the `server-only` import and W-D2 test (`4086ec09`), the `sqlite3` CI step and ADR-040 update (`010c9008`, `02e10d0f` — ADR-040:82 here still says the tier "is not yet wired"), the lint fix (`036e6b91` — the five empty `catch {}` blocks are live in `src/lib/connector/arbeitsagentur-account/cdp-scripts/*.mjs` and `.eslintrc.json` makes `no-empty` an error), a handoff update, and all `WH-B` rows. Conflict: both branches added `check:spec-refs` to `package.json`, pointing at different checkers. **Porting hazard:** `010c9008`, `8dd32004` and `9ce9195d` add wording that `02e10d0f` later retracts — port the tip state of ADR-040 and `public-api-v1.md`, not commit by commit. The two checkers are complementary, not rivals (probe's comparison, spot-checked): the `.mjs` resolves qualified `alias/Sym.member` references anywhere; the `.sh` + `refcheck.py` kind-checks five reference kinds *(corrected 2026-09-29: this row said "four positions"; `scripts/check-spec-refs.sh:12` says five)* and has a distinct "could not run" exit. The probe estimates ~32 of 38 qualified cross-spec references are checked by nothing in CI here (its own regex count, not independent). CI runs only on push/PR to `main` and `dev` (`ci.yml:3-7`), so none of this has ever been exercised on this branch; whether `bun run lint` (`next lint`) reaches the `.mjs` files — i.e. whether CI would go red after a merge — is not determined. **2026-09-29:** all of this is now on the branch through `294e13c8`. | `git diff 6a30e6e4 …`; `.eslintrc.json` |
 | | `spec/gdpr-data-rights-person-stub` — 2 commits (`mise.toml`; six plan/analysis docs never added). The main checkout `/home/pascal/projekte/jobsync` sits on this branch, idle since 2026-08-31. **All seven files are absent here** (checked by path and by distinctive lines; `docs/next-session-prompt.md:78` still points at one of them). The main checkout is also **not clean**: 61 uncommitted entries — 54 deleted `docs/.remember/logs/…`, modified `.remember/remember.md`, four `.understand-anything/*` files, `docs/handoff-2026-08-18.md` and `playwright.config.ts`. Not this session's; not touched. **Still open 2026-09-29:** 2 commits ahead of HEAD. `mise.toml` is `cf12dca8` ("track mise.toml, the host move's environment definition") and is not in `294e13c8`; that is `~/elysium-jobsync-migration.md` § 5.3. | `git worktree list`; `git -C /home/pascal/projekte/jobsync status --porcelain` |
 | | `docs-spotlight-research` — 3 docs-only commits (Spotlight 2.20 research, F.7 notes). **Both added documents are absent here.** **Still open 2026-09-29:** 3 commits ahead of HEAD. | |
 | D2 | **Combobox architecture — Axis 1 first** (shell component / headless hook / descriptor contract). Full option space, evidence and the DDD reading in GitHub issue [#2](https://github.com/rorar/jobsync/issues/2) and `docs/ROADMAP.md:2835` (`Discovery: Combobox-Konsolidierung …`). This replaces the older "Option A / Option B" framing in `docs/knip-unused-ui-primitives.md` § 5.5. | Blocks M8's framing (not its fact) and the knip ignore entry in D6. |
-| D3 | **What `TriggerAriaExpanded` means** (`specs/ui-combobox-keyboard.allium:362`): "declares `type="button"` in JSX" or "renders it". Three of fourteen triggers (`WizardShell.tsx:269`, `InterviewForm.tsx:270`, `:450`) only render it because Radix injects it. Decide in an `allium:weed` pass. | `docs/knip-unused-ui-primitives.md` § 5.5, "Three separate facts" |
+| D3 | **What `TriggerAriaExpanded` means** (`specs/ui-combobox-keyboard.allium:362`): "declares `type="button"` in JSX" or "renders it". Three of fourteen triggers (`WizardShell.tsx:269`, `InterviewForm.tsx:270`, `:450`) only render it because Radix injects it. Decide in an `allium:weed` pass. **2026-09-29, weed pass § Q3:** the text supports both readings, which is the defect. The pass recommends doing both: add `type="button"` at the three sites, and tend the guarantee to rendered behaviour via `allium:tend`. That removes the Radix 1.1.15 coupling that M7 would otherwise have to pin. The decision stays here. | `docs/knip-unused-ui-primitives.md` § 5.5, "Three separate facts" |
 | D4 | **Which prevention measures to build** (from the 2026-09-28 discussion): (A) a doc-citation integrity check · (B) graph staleness hook that acts instead of warns · (C) warnings at the point of confusion · (D) deferral entries must name what they unblock · (E) sub-agent briefing rules · (F) document the search-tool traps — **with the mechanism measured on 2026-09-28, which differs from how the 2026-09-27/28 records describe it.** The `grep` shell function runs `( exec -a ugrep "$CLAUDE_CODE_EXECPATH" … )` and falls back to `/home/pascal/.local/bin/claude` when that path is not executable. Since 2026-09-22 that fallback is a 177-byte `sh` wrapper (the session-handoff launcher), and `exec -a` does not survive a script, so the Claude CLI receives the flags: every call fails with `error: unknown option '-G'`, and `-v` prints the Claude version. It is not about clustered flags — `grep -n -i` failed too. It hit the tmux session because that process ran 2.1.270, whose binary the updater had removed from `~/.local/share/claude/versions/`; with `CLAUDE_CODE_EXECPATH` pointing at an existing version, `-ci`, `-n -i` and `-v` all work (verified). Any long-running session whose version gets pruned will hit it again. Separately, even a working `grep` passes `--ignore-files`: `grep -rl BUILD_ID .next-e2e` finds 28 files where `command grep` finds 33. And `awk` is `mawk`: `IGNORECASE` is silently ignored — use `tolower($0) ~ /…/`. Two more traps in the same family: Bash tool output is compressed and paraphrased before the model sees it (recorded only in the auto-memory file `feedback_bash_output_is_paraphrased_not_verbatim.md`, **not** in `CLAUDE.md`, which documents only the `| tail` exit-status trap — a claim made on 2026-09-28 that `CLAUDE.md` already covered it was wrong); and self-imposed width caps such as `printf "%.140s"` hide the end of long Markdown table rows, which is where BACKLOG and BUGS rows keep their triggers and dispositions (M6). Two facts bear on this: M1 below needs no new mechanism and should come first; and a reference checker already exists twice across branches (D1a), while neither checks `path:line` citations in Markdown. **Added 2026-09-29:** the sweep found a fourth loss mechanism for (E): sub-agent reports reached the lead only as notification text cut at about 4,000 characters, or as nothing at all under Claude Code 2.1.246, and the automatic security-review hook never delivered its findings to a working session. Most LOST items in § 8 come from that (`docs/BUGS.md` § Session 2026-09-29, preamble). | |
 | D5 | **CHANGELOG policy.** The newest section is `[2026-05-10]`; nothing since (Waves 1–5, the E2E work) is recorded. Revive or declare frozen. Two false shipped-fix claims were found in it this month: `CHANGELOG.md:491` (WEED-1, corrected 2026-09-14) and `CHANGELOG.md:429` (M3). | |
 | D6 | **GitHub issue [#1](https://github.com/rorar/jobsync/issues/1)** (LinguiJS: knip ignore, three false doc claims, migration scope), open since 2026-09-02. None of its three parts is done — `knip.ts:27-30` still ignores only the EURES generated file. Part 1 edits the same `knip.ts` block as the `base-combobox.tsx` ignore (gated on D2), so the two could share a commit. **Re-checked 2026-09-28:** Parts 1, 2a (local side) and 2c still hold — no `knip.ts` entries, zero importers, `src/i18n/README.md:179` still gates on the swc-plugin, the four catalogs are 108 bytes each. The 2b promise now sits at `CLAUDE.md:193` and `README.md:189-190`. The issue's own figures need correcting: `t("…")` call sites grew to 2 380 (regex; the issue's 2 344 reproduces at 2026-09-02), and "6 448 dictionary entries" was never reproducible — HEAD has 9 600 (2 400 keys × 4). Part 3's `pkill` sites in `build-safe.sh` / `dev-e2e.sh` are comments now and port 3737 is no longer hardcoded. Upstream plugin claims are external and were not checked. **CONVERTED 2026-09-29 → M23; no longer a decision.** The maintainer decided Parts 1–2 on 2026-09-02, in session `47cb5d34`, transcript L6785: the `knip.ts` ignore plus the README and `CLAUDE.md` correction, and *"die Umstellung ist eine Sache für eine eigene Session"*. Part 3, the migration itself, stays in issue #1 for a separate session. **Correction to this row:** `README.md:189-190` is wrong, because `README.md` has 110 lines. The promise is at `src/i18n/README.md:189-190`. | |
 | D7 | **Public API v1 route-stack dedup.** Recounted 2026-09-28 over the 8 working handlers: path-id UUID guard ×6, **ownership check `findFirst({ id, userId })` + 404 ×6** (not ×5 — five only if the single-job GET at `jobs/[id]/route.ts:25` is excluded), JSON body parsing ×4, Zod error formatting two idioms ×3 each (split by site, not by query vs body). `isValidUUID` already exists at `src/lib/api/schemas.ts:97` and all six sites use it; no helper exists for body parsing, Zod formatting or the ownership 404. Found alongside, and verified: the six 404s disagree — `status/route.ts:62` returns the i18n key `api.statusChange.jobNotFound`, the others English text; each route's own `OPTIONS` handler is dead, because `with-api-auth.ts:38-40` answers preflight first; `src/app/api/logos/[id]/route.ts:26` re-declares the UUID regex. Reported by the probe, not re-verified: duplicated resume/tag ownership checks and salary block between the create and update handlers. Optional, deferred. **Added 2026-09-29 (sweep G-28-02, verified at `294e13c8`):** one more duplicate. The company pre-check at `src/app/api/v1/jobs/route.ts:120,125` repeats `trim().toLowerCase()` inline, which `findOrCreate` already does at `src/lib/api/helpers.ts:21`. | `docs/handoff-2026-09-14-e2e-fixture-consolidation.md:228` |
 | D8 | **New, 2026-09-28 — a fail-open path in front of an irreversible action.** `getPrivacySettingsForUser` returns the defaults on *any* error — a failed DB read or an unparseable settings JSON (`src/lib/account/privacy-helpers.ts:25-32`) — and the default is `crmRetentionEnabled: true`. The erasure sweep reads the setting through exactly that path (`crm-cron.ts:92` → `src/lib/crm/retention-policy.ts:45`). So a user who switched retention **off** would have expired auto-created contacts **erased** whenever that read fails. Latent today (no `auto_created` writer, see D1a). Needs a `docs/BUGS.md` row and a choice: fail closed for the destructive sweep only, or change the helper for all its callers (account deletion, confirmation endpoint). **2026-09-29:** the defect now has its row, `GDPR-B2` in `docs/BUGS.md`. The choice stays here. | found by probe, chain re-traced by hand |
 | D9 | Two existing open questions on CRM retention, recorded in the specs and not tracked anywhere else: `quick_capture` Persons carry no retention deadline at all (`specs/crm.allium:1953`), and `CrmActivityLog` retention is undecided (`docs/adr/042-…:366-376`). **Added 2026-09-29 (sweep T25, A66):** **(1)** `GDPR-B4` in `docs/BUGS.md`: `CRM_CONFIG.timelineRetentionDays` (`src/models/person.model.ts:343`) is dead configuration, yet `specs/gdpr-data-rights.allium:445` names it as the source of the purge window. The cron reads `crmActivityLogRetentionDays` (`src/lib/scheduler/retention-config.ts:8`). The mechanical fix belongs to the BUGS row; the policy stays here. **(2)** The fact the policy turns on: `CrmActivityLog` has **three** PII carriers — `targetPersonId`, `details` and `linkedRecordName`. The anonymise rule as specified nulls only the first, while `crm/AnonymizePerson` scrubs all three, so anonymise-as-specified is worse than deleting. Any anonymise answer must scrub all three (`docs/handoff-2026-08-30-retention.md:324-328`; ADR-042:366-376). Ownership is settled: `gdpr-data-rights.allium` Scope S4 owns `CrmActivityLog` retention. | |
-| D10 | **Docker image dependency strategy.** The Dockerfile installs with `npm ci` (`Dockerfile:12`) from `package-lock.json`, last changed 2026-03-06 (`db04d5f2`), while development uses bun (`bun.lock`). Besides the `nodemailer` / `next-auth` peer conflict (V4), the lockfile still lists `@radix-ui/react-avatar`, which this branch removed from `package.json` (`7b19a067`) — a second, inferred reason for `npm ci` to fail. Options include pinning `nodemailer` to the peer range, `--legacy-peer-deps`, or building the image with bun; not evaluated. **2026-09-29:** the failure is `INF-B1` in `docs/BUGS.md`; this row stays the decision. `072f87d3` corrected `INF-B1`. The workflow has never succeeded: 36 of 37 runs failed at `npm ci` and 1 was cancelled. The lockfile lacks 24 direct dependencies (inherited), and a Docker research pass recommends building with bun from `bun.lock`. The same commit filed `SEC-B8` (`next-auth`) and `SEC-B9` (`nodemailer`), published advisories against both installed versions. Upgrading both packages together also changes the peer conflict, so decide this row together with those two. | |
+| D10 | **Docker image dependency strategy.** The Dockerfile installs with `npm ci` (`Dockerfile:12`) from `package-lock.json`, last changed 2026-03-06 (`db04d5f2`), while development uses bun (`bun.lock`). Besides the `nodemailer` / `next-auth` peer conflict (V4), the lockfile still lists `@radix-ui/react-avatar`, which this branch removed from `package.json` (`7b19a067`) — a second, inferred reason for `npm ci` to fail. Options include pinning `nodemailer` to the peer range, `--legacy-peer-deps`, or building the image with bun; not evaluated. **2026-09-29:** the failure is `INF-B1` in `docs/BUGS.md`; this row stays the decision. `072f87d3` corrected `INF-B1`. The workflow has never succeeded: 36 of 37 runs failed at `npm ci` and 1 was cancelled. The lockfile lacks 24 direct dependencies (inherited), and a Docker research pass recommends building with bun from `bun.lock`. The same commit filed `SEC-B8` (`next-auth`) and `SEC-B9` (`nodemailer`), published advisories against both installed versions. Upgrading both packages together also changes the peer conflict, so decide this row together with those two. **Docker research, 2026-09-29** (sweep evidence `wave/docker-report.md`, out of repo; `INF-B1` carries the facts). *Correction to this row:* `@radix-ui/react-avatar` in the lockfile is **not** a reason for `npm ci` to fail, because npm does not report extra lock entries (inherited: the report's reading of the npm 10 source). The real second reason is that `package-lock.json` lacks 24 direct dependencies, so every npm-based option also needs a regenerated lockfile. **Recommendation:** build the image with bun from `bun.lock` on `node:22.23.2-alpine`, delete `package-lock.json`, and pin one bun version in both the Dockerfile and `ci.yml`. Its prerequisite, the lint fix `036e6b91` (`next build` lints), has been on this branch since the merge. Extend `.dockerignore` in the same change (`SEC-B10`). The next-auth and nodemailer bumps are separate follow-ups (`SEC-B8`, `SEC-B9`). The report also names two side findings for the same change: `docker-entrypoint.sh:14` downloads Prisma with `npx` on every container start, and `release.sh:144` would abort once `package-lock.json` is deleted. **The maintainer decides** (report § 9): (1) the bun version, 1.3.14 or 1.4.x, pinned in both places; (2) the Node base image, with `node:22.23.2-alpine` recommended, because Node 20 is end-of-life and `ci.yml`'s `node-version` moves with it (this also settles D30); (3) the verification path: a local amd64 build, `workflow_dispatch` (which pushes a branch image to GHCR), or a permanent `pull_request` trigger; (4) whether to delete or keep `package-lock.json`; (5) whether to do the next-auth and nodemailer bumps now or as tracked follow-ups (nodemailer ≥10.0.2 is two majors away). Close `INF-B1` only after a green Docker Publish run on `main`. | |
 | D11 | **ROADMAP § 8.5 Phase 3 is still TODO** (`docs/ROADMAP.md:2638-2641`): dev-server auto-restart, `retries: 1` (`playwright.config.ts:32` still reads `process.env.CI ? 2 : 0`), and **E2E as a merge gate in CI** — re-flagged by `docs/handoff-2026-09-02-e2e-closeout.md:323-327` ("Playwright never runs unattended") and the 2026-09-06 handoff. The section header (`:2614-2616`, "68/68 … Phase 1+2 DONE") is stale. Not in NOT-PLANNED or Deferred Sprint Work. | |
 | D12 | **ROADMAP § 8.0 "Discovery: Self-Contained Module E2E Coverage (offen)"** (`docs/ROADMAP.md:2511-2517`) — the second discovery entry the header counts; cited as open by `e2e/helpers/cleanup-fixture.ts:39`. Related to D2: both ask what a Module may contribute from its own directory. | |
 | D13 | Twelve `open question`s were added to specs since 2026-09-01. Three bear on product behaviour: resuming an automation is not gated on its module being active (`specs/module-lifecycle.allium:1120`); the "create or select" upsert overwrites the stored label for ActivityType and JobTitle but not for Tag (`specs/shared-entities.allium:502`); `UpdatePreferences` / `ResetToDefaults` are dangling `provides` in the file SPEC-B3 fixed (`specs/notification-dispatch.allium:896`). The other nine are in `specs/e2e-test-infrastructure.allium` and `specs/scheduler-coordination.allium:1017`. **2026-09-29:** at `294e13c8`, 137 lines in `specs/` begin with `open question` (`git grep -h -c '^open question' -- specs`). By the sweep's count, 117 of them are in no tracker. See the last row of § 8. | probe count of added lines; the three verified |
@@ -169,6 +169,10 @@ probes checked and this pass did not re-read.
 | D36 | **No ADR index.** `CLAUDE.md` names ten ADRs in passing (015–019, 029, 030, 042–044, checked at `294e13c8`); 033, 037, 040, 041, 045 and 046 appear in no index and in no `CLAUDE.md` section. The handoff deliberately did not create one. Decide: generate it from the directory, or rely on `ls docs/adr/`. | `docs/handoff-2026-08-30-retention.md:388` (TODO-14); `docs/adr/` has no index file | maintainer | TODO-14 |
 | D37 | **`scripts/sessions/` and the `session/s5a-*` branches.** `scripts/sessions/` holds April-era prompts and `run-session.sh`. No code, script or config references them; only April-era design documents, the retention handoff and the understand-anything graph mention them (`git grep`, 2026-09-29). The directory was last touched in `fa6197ea` (2026-04-05). Two local branches remain, neither on `origin` nor with an upstream: `session/s5a-resume-verification` (tip `5f3f99b1`, resource guards for those scripts) and `session/s5a-ui-gaps-webhook` (tip `547c33c4`). Deleting a directory or a branch is the maintainer's call. | `docs/handoff-2026-08-30-retention.md:390` (TODO-13); `git branch --list '*s5a*'` | maintainer | A84 |
 | D38 | **`jobsync-dashboard.service` and an uncommitted edit in the helpers repo.** The unit is `linked` and `inactive` (`systemctl --user is-enabled`, 2026-09-29). It is not enabled, as two records claim (M26). The script it starts still puts a NixOS path on `PATH` (`~/projekte/helpers/bin/jobsync-dashboard.sh:42`), and on the previous host the unit crash-looped with `Cannot find package 'vite'`. `~/projekte/helpers` also holds an uncommitted edit to the unit file itself, `systemd/user/jobsync-dashboard.service`, that removes its NixOS paths. The edit dates from 2026-08-31; its owner is unknown. Decide: remove the unit or make `vite` resolvable, and commit or discard the foreign edit. Not repo state. | `git -C ~/projekte/helpers status --porcelain` → ` M systemd/user/jobsync-dashboard.service`; `~/elysium-jobsync-migration.md` § 5.1 | maintainer | B27b |
+| D39 | **`FixtureOwnedTeardown`'s mechanism clause: fixture only, or "fixture or `afterEach`, never inline"?** The spec requires a fixture. The code meets the guarantee (runs on a failed test) with 5 fixture files and 9 `afterEach` files. ADR-045, ADR-046 and the residue gate's own advice (`scripts/check-e2e-residue.sh:329-332`) already treat `afterEach` as acceptable. The pass recommends narrowing the clause; the alternative is to keep it and record the 9 files as deferred divergence. The chosen wording goes into M44. | weed pass § Q1, *Proposed resolution for Q1*; `specs/e2e-test-infrastructure.allium:873-875`, `:909-912` | needs-decision | V3 weed |
+| D40 | **Inline cleanup of intra-run-visible models: fix, or accept an arrange-phase reset?** `smtp-settings`, `settings-blacklist` and `company-crud` delete at the end of the test body, where a failed assertion skips the delete. Either add a fixture or `afterEach` teardown, or accept an idempotent arrange-phase reset plus uid-keyed rows and narrow the spec clause. | BUGS `E2E-B72`; weed pass § Q1, *Remaining E2E-B37 shape* | needs-decision | V3 weed |
+| D41 | **Deletion proof for the teardown deleters: tend the invariant, or add toast waits?** `DeletionProofSurvivesTheModalAndCitesTheServer` demands a rendered success message. Four teardown deleters prove deletion by the row disappearing. Every container involved reloads only on server success, so the invariant's premise is false for them. Option (a): tend the invariant to accept a success-gated reload, and pin the nine containers with component tests ("a refused delete keeps the row"). This is the pass's recommendation. Option (b): add `expectToast` waits to the four deleters. The row's own citation is off: the proof is at `admin-reference-cleanup.ts:194-203`, not `:188-198`. | BUGS `SPEC-B5`; weed pass § Q2, *Which side is wrong* | needs-decision | V3 weed, F-04-20 |
+| D42 | **`OneSpecPerAggregate`: keep it with an explicit exception list, or drop it?** The spec lists 11 aggregates with one multi-file exception. HEAD has 28 spec files: Job spans 4, staging 3 and contact 2, and about 10 files map to no aggregate. The answer decides how M44 rewrites `DomainAggregate`. | weed pass § 5.6 | needs-decision | V3 weed |
 
 ---
 
@@ -195,14 +199,14 @@ probes checked and this pass did not re-read.
 | M17 | **The lint failure that keeps `main` red (V4)**: five empty `catch {}` blocks — `cdp-auto-complete.mjs:51`, `cdp-keep-alive.mjs:457`, `cdp-login-bundid.mjs:61,117,128` — against `no-empty` / `allowEmptyCatch: false` (`.eslintrc.json:4`). The fix exists on the sibling branch as `036e6b91` (D1a). **CLOSED on this branch 2026-09-29 by `294e13c8`** (`036e6b91`). Recorded as `WH-B1`, FIXED, in `docs/BUGS.md`. `main` stays red until this branch lands (V4). | CI log of run `32244003432` |
 | M18 | `docs/BUGS.md:109` (MOD-B1) still says "Residual, NOT fixed: a throw after the persist …"; `0e0f5332` closed it the same evening (`src/lib/connector/degradation.ts:81-95`, "MOD-B1 residual, closed 2026-09-05"). **Re-anchored 2026-09-29:** still true; the row is now `docs/BUGS.md:390`. | |
 | M19 | `src/lib/connector/degradation.ts:127` cites the invariant `EscalationIsNotAtomic`, which `specs/module-lifecycle.allium:795` says was replaced. | |
-| M20 | `e2e/helpers/admin-reference-cleanup.ts:18-33` says `keyboard-ux` and `profile-crud` carry private copies of its two functions; `5b9c6f51` (2026-09-09) retired both, and neither spec defines one today. | |
-| M21 | `specs/e2e-test-infrastructure.allium:883-886, 909-914` (`FixtureOwnedTeardown` guidance) counts "2 of 27" spec files and "25 have no afterEach"; today there are 28 spec files, 9 with a `test.afterEach` and 5 on a cleanup fixture. Input for V3; edit via `allium:tend`. | |
+| M20 | `e2e/helpers/admin-reference-cleanup.ts:18-33` says `keyboard-ux` and `profile-crud` carry private copies of its two functions; `5b9c6f51` (2026-09-09) retired both, and neither spec defines one today. **Folded 2026-09-29 into M45** (weed pass § 5.9 found the same comment and four more). | |
+| M21 | `specs/e2e-test-infrastructure.allium:883-886, 909-914` (`FixtureOwnedTeardown` guidance) counts "2 of 27" spec files and "25 have no afterEach"; today there are 28 spec files, 9 with a `test.afterEach` and 5 on a cleanup fixture. Input for V3; edit via `allium:tend`. **Folded 2026-09-29 into M44**, the weed pass's tend list, which re-measured the numbers (§ Q1). | |
 | M22 | The admin tablist has no wrap (`src/components/ui/tabs.tsx:17`, `inline-flex h-10`; used at `AdminTabsContainer.tsx:49`) — the reflow half of R3 (`docs/handoff-2026-09-08-open-items.md:99`, WCAG SC 1.4.10) was never fixed and has no `docs/BUGS.md` row. UI-B6 fixed only the history/activation half. Static read, not checked in a browser; a fix goes through the ui-design / `/responsive-design` process CLAUDE.md prescribes. **2026-09-29:** now `UI-B27` in `docs/BUGS.md`; work it there. | |
 
 ### 3b. Items added 2026-09-29 (from the sweep)
 
 The doc-drift rows fixed on 2026-09-29 (M1, M16, M38–M43) are closed by `8094ff67`; each row says so.
-while this register is written; do not start them.
+M44–M48 were added later the same day, from the V3 weed pass and the lead's review.
 
 | # | Item | Evidence (at `294e13c8`) | Owner | From |
 |---|---|---|---|---|
@@ -227,6 +231,11 @@ while this register is written; do not start them.
 | M41 | **One sentence about the CPU load guard is imprecise.** `CLAUDE.md:75-76` says "usage cannot exceed the allowance". That is imprecise: it confuses the container-root cgroup with the shell's affinity. Keep the decision; fix the sentence. **Closed 2026-09-29 by `8094ff67`** (verified by the lead against the file). | `CLAUDE.md:75-76` at `294e13c8` | agent | D-OA10 |
 | M42 | **The architecture overview names the wrong Jest transformer.** `docs/architecture/overview.md:789` says "Jest 29 + ts-jest". **Closed 2026-09-29 by `8094ff67`** (verified by the lead against the file). The dependency itself is M29. | `docs/architecture/overview.md:789` | agent | D-OA2 |
 | M43 | **`CLAUDE.md` lists degradation rule 3 ("pause after 3 CB opens") as live.** `handleCircuitBreakerTrip` has no caller in `src/` (`MOD-B2`). **Closed 2026-09-29 by `8094ff67`** (verified by the lead against the file). Whether to wire the rule or remove it is the product decision in `MOD-B2`. | `CLAUDE.md:268`, `:601`, `:603` at `294e13c8`; `src/lib/connector/degradation.ts:339` | agent (doc) / needs-decision (MOD-B2) | F-05-14 |
+| M44 | **Tend `specs/e2e-test-infrastructure.allium` per the weed report** (via `allium:tend`, never by hand). This absorbs M21. The spec bugs to fix: the stale measurements (§ Q1, step 1); the `deleteJobViaApi` wording, which should admit a checked HTTP status as a server signal (§ Q2, first bullet); Activity missing from `IntraRunVisibility` (§ Q1 addendum; C34's `WebPushSubscription` is the same kind of gap); the open questions at `:1796` (answered: move it to the ANSWERED block), `:1800` (stale premise) and `:1794` (close or keep, § Q4); `GlobalSetup` (§ 5.2); `DiscardRunDatabase` reason 3 and the unmodelled end-of-run stop (§ 5.3); the `known_debt` list (§ 5.4); `FixtureKind` (§ 5.5); the actors (§ 5.7); and the stale citations inside the deletion-proof invariant (§ 5.8). The parts that depend on D39, D41 and D42 wait for those decisions. | weed pass § 7 (JSON, `spec-bug` entries) | agent | V3 weed, M21 |
+| M45 | **Code comments that contradict the spec or the code** (weed pass § 5.9). This absorbs M20. `scripts/check-e2e-residue.sh:6-8` says the only implementations are two detectors that only `console.warn`. `scripts/check-e2e-residue.sh:161-163` and `e2e/crud/job-crud.spec.ts:644-645` still put the Job delete in an `afterEach`; it has been in the `testWithCleanup` fixture since ADR-046. `e2e/helpers/admin-reference-cleanup.ts:18-33` mentions private copies that no longer exist. `:329-332` of the same script recommends `afterEach`; resolve it with D39. | weed pass § 5.9 | agent | V3 weed, M20 |
+| M46 | **ADR-045 still states the inference that E2E-B37 falsified.** `WebhookEndpoint`, `PublicApiKey`, `SmtpConfig` and `CompanyBlacklist` "end at zero, because those specs already own their rows" (`:153-158`), and `:166` repeats "25 of 27". Add a dated line to § Neutral that points at `E2E-B37`, as was done for ADR-046. | `docs/adr/045-e2e-owns-nothing-that-outlives-the-run.md:153-158`, `:166`; weed pass § 5.10 | agent | V3 weed |
+| M47 | **The GitHub files added on 2026-09-29 do nothing until the branch reaches `main`.** `3da76c83` added `.github/ISSUE_TEMPLATE/*` (bug, decision, work package, config), `.github/pull_request_template.md`, `.github/labels.yml`, `SECURITY.md` and `scripts/sync-labels.sh`. GitHub reads them from the default branch, which is `main`. Before that merge (D1): **(1)** enable private vulnerability reporting; `gh api repos/rorar/jobsync/private-vulnerability-reporting` returned `{"enabled":false}` on 2026-09-29. **(2)** Run `bash scripts/sync-labels.sh --apply` (the script is a dry run by default). | `git show --stat 3da76c83`; `scripts/sync-labels.sh:4-10` | maintainer | lead 2026-09-29 |
+| M48 | **`CLAUDE.md` § i18n says to validate with `bun run /tmp/test-dictionaries.ts`, a file that does not exist.** It is neither in `/tmp` nor tracked (checked 2026-09-29). The dictionary check is `__tests__/dictionaries.spec.ts`: key consistency across the four locales, no empty values, dot notation and per-namespace checks. It runs in `scripts/test.sh`. | `CLAUDE.md:181` at `688df386`; `__tests__/dictionaries.spec.ts:139`, `:154` | agent | lead 2026-09-29 |
 
 ---
 
@@ -285,6 +294,7 @@ pass did not re-read):**
 - [F-06-08] `tools/next-heap/trace-floors.py` does not group by server lifetime. Inherited.
 - [handoff-08-24 § 8.3] The CRM orphan-note prune's count is not reported anywhere. Low, because
   the erasure itself is audited (`docs/BUGS.md:632`).
+- [lead 2026-09-29] `CONTRIBUTING.md` is still upstream's text. It says to add `Gsync/jobsync` as the upstream remote (`:58`), to `npm install` (`:62`, which the Docker research infers would hit the same ERESOLVE as `INF-B1`) and to take issues from upstream (`:84`). Upstream takes no PRs; this fork's workflow is in `CLAUDE.md` § Git Workflow. Rewrite it or mark it as upstream's.
 - [TODO-10, elysium § 5.2] `NODE_COMPILE_CACHE` is **resolved only for shells that source
   `~/.bashrc`**. `~/.bashrc:76` exports it to `~/.cache/node-compile-cache`, which is on zfs,
   while `/tmp` is tmpfs. A process that does not source `.bashrc`, such as a systemd unit, still
@@ -338,118 +348,189 @@ A case-insensitive re-run of this register's own scans for open markers in `docs
 
 ## 8. Sweep 2026-09-29 — destination index
 
-One row per sweep ID in the sweep's destination list (101 IDs), plus the IDs the list did not
-carry. The sweep's account and method: `docs/sweep-2026-09-29.md`. Some IDs in the destination
-list are **group prefixes** (`F-04`, `F-05`, `F-06`, `F-08`, `F-09`, `G-13`, `G-14`, `G-27`,
-`G-28`, `H9`). For those, the row maps every member. Eleven IDs had no destination and were
-resolved on 2026-09-29; their rows say so. Several of them were extraction artefacts, where a
-substring of another ID matched.
+The sweep's ID list is the table in `docs/sweep-2026-09-29.md` § 3, with 147 sweep IDs in 138 rows.
+This section maps each of those rows to a concrete register ID or `docs/BUGS.md` ID, in the same
+order. Where the sweep doc says "register (…, pending)", the pending ID is given here.
+
+*Rebuilt 2026-09-29.* The first version of this section was keyed on the sweep's raw destination
+list. That list truncated ten ID families to a prefix (`F-04`, `G-13`, `H9` and others), so it is
+not used as the reconciliation base any more.
+
+In three places the register's placement differs from the sweep doc's category: A84, B27b and
+F-08-13. Each row's note says why. "inherited" means the probe checked the item and this pass did not
+re-read it (see the rows in § 3b and § 4).
 
 | Sweep ID | Now lives in | Note |
 |---|---|---|
-| A13 | § 4 housekeeping | `CrmPruneDb` `as never` casts |
-| A14 | BUGS `APP-B1` | |
-| A22 | M24 | |
-| A30 | spec open question | `specs/inside-track.allium:833-834` (W-G3) |
-| A33 | spec open question | `specs/inside-track.allium:833-834` (W-G3 sibling) |
-| A36 | M25 | |
+| A7 | D18 |  |
+| A13 | § 4 housekeeping |  |
+| A14 | BUGS `APP-B1` |  |
+| A22 | M24 |  |
+| A30 | spec open question | `specs/inside-track.allium:833-834` |
+| A33 | spec open question | `specs/inside-track.allium:833-834` |
+| A36 | M25 |  |
 | A40 | spec open question | `specs/crm-gdpr.allium:985` |
 | A44 | BUGS `GDPR-B3` | spec side: `specs/crm.allium:1957` |
 | A45 | spec open question | `specs/crm.allium:1959` |
 | A47 | spec open question | `specs/crm-gdpr.allium:987` |
-| A49 | D19 | |
-| A52 | BUGS `UT-B7` | |
-| A53 | D17 | |
-| A55 | BUGS `UT-B4` | |
-| A60 | spec open question | `specs/gdpr-data-rights.allium:528` |
+| A49 | D19 |  |
+| A52 | BUGS `UT-B7` |  |
+| A53 | D17 |  |
+| A55 | BUGS `UT-B4` |  |
+| A60, B8 | spec open question | `specs/gdpr-data-rights.allium:528` |
 | A61 | spec open question | `specs/gdpr-data-rights.allium:530` |
 | A62 | spec open question | `specs/gdpr-data-rights.allium:532` |
 | A63 | spec open question | `specs/gdpr-data-rights.allium:534` |
-| A64 | BUGS `SPEC-B8` | same finding as B9 |
-| A65 | D16 | |
-| A67 | BUGS `GDPR-B1` | spec side: `specs/crm-gdpr.allium:995` ("FIVE fields") |
-| A7 | D18 | |
+| A64, B9 | BUGS `SPEC-B8` |  |
+| A65 | D16 |  |
+| A67 | BUGS `GDPR-B1` | spec side: `specs/crm-gdpr.allium:995` |
 | A73 | D20 | related: M11 |
 | A77 | D21 | component half: BUGS `UT-B2` |
-| A78 | D22 | |
-| A79 | D23 | |
-| A80 | BUGS `UI-B23` | |
-| A81 | BUGS `SPEC-B4` | |
-| A82 | BUGS `UT-B5` | |
+| A78, B11 | D22 |  |
+| A79 | D23 |  |
+| A80, B12 | BUGS `UI-B23` |  |
+| A81 | BUGS `SPEC-B4` |  |
+| A82 | BUGS `UT-B5` |  |
 | A83 | § 4 housekeeping | uncertain; needs a build |
-| A84 | D37 | the destination list said housekeeping; moved to D, because deleting a branch or directory is the maintainer's call |
-| A88 | D32 | |
-| A89 | D33 | |
-| A90 | D34 | |
-| B1 | BUGS `E2E-B60` | |
-| B10 | D24 | |
-| B18 | closed — no item | the destination list had no destination. Extraction artefact: `B18` matched inside `E2E-B18` (sweep P28, now BUGS `UT-B1`). Probe B row 18, a BUGS header off-by-one, was superseded by the header recount (M9). |
-| B2 | BUGS `UI-B28` | |
-| B24 | D29 | |
-| B25 | D30 | |
-| B26 | § 4 housekeeping | the destination list had no destination. Probe B row 26: `scripts/env.sh` Prisma pinning, decided harmless. The string also matched `E2E-B26` in C77, which is M28. |
-| B27b | D38 | the destination list said housekeeping; moved to D, because committing or discarding a foreign edit is the maintainer's call |
-| B27c | M26 | |
-| B29 | D25 | |
-| B35 | BUGS `E2E-B62` | |
-| B37 | BUGS `UI-B22` | |
-| B40 | BUGS `E2E-B59` | |
-| B41b | BUGS `INF-B4` | |
-| B5 | closed — no item | the destination list had no destination. Extraction artefact: `B5` matched inside `IT-B5`, a candidate ID never filed (sweep H9-10, now BUGS `UT-B6`). Probe B row 5 is the `no-empty` lint, BUGS `WH-B1`, fixed by `294e13c8`. |
-| B9 | BUGS `SPEC-B8` | the destination list had no destination. `A64/B9` is the audit-trail stub finding. The string also matched `E2E-B9` in C77, which is M28. |
-| C34 | § 4 housekeeping | |
-| C37 | BUGS `E2E-B54` | |
-| C38 | M27 | |
-| C39 | BUGS `E2E-B58` | |
-| C40 | § 4 housekeeping | |
-| C45 | closed — no finding | the truncated "disclosure" was a single-file `esbuild` parse (§ 5) |
-| C55 | BUGS `E2E-B69` | fixed in `5c42b3cf`; the row notes that the handoff's name for it is wrong |
-| C77 | M28 | |
-| C78 | BUGS `E2E-B51` | |
-| D-OA1 | BUGS `SEC-B6` | |
-| D-OA10 | M41 | fix in progress 2026-09-29 |
-| D-OA11 | § 4 housekeeping | |
-| D-OA2 | M29 (dependency), M42 (doc line) | M42: fix in progress 2026-09-29 |
-| D-OA3 | § 4 housekeeping | |
-| D-OA4 | BUGS `UT-B3` | |
-| D-OA5 | BUGS `E2E-B58` | |
-| D-OA6 | BUGS `INF-B3` | |
-| D-OA7 | M30 | |
-| D-OA8 | § 4 housekeeping | |
-| D-OA9 | M40 | fix in progress 2026-09-29 |
-| D6 | M23 | the destination list had no destination: this is the register's own D6, not a sweep ID. It is converted to M23, with G-28-01 as scope input. |
-| D7 | register D7 | the destination list had no destination: this is the register's own D7. G-28-02 was added to it. |
-| D9 | register D9 | the destination list had no destination: this is the register's own D9. `GDPR-B4` and the three-PII-carrier fact were added to it. |
-| E1 | BUGS `E2E-B50` | same finding as F-04-13 |
-| E11 | closed — no finding | the destination list had no destination. `scripts-wave4` left no transcript; its targets were closed by `64e2f52d` (§ 5). |
-| E2 | BUGS `E2E-B52` | |
-| E3 | BUGS `MOD-B3` | |
-| E4 | M31 | |
-| E5 | M32 | |
-| F-04 | group | F-04-06 → `UI-B19`; F-04-08 → M34; F-04-09 → § 4; F-04-10 → `UT-B9`; F-04-11 → `UT-B8`; F-04-13 → `E2E-B50`; F-04-14 → § 4; F-04-20 → `SPEC-B5`; F-04-21 → M31. The destination list named only `E2E-B50`. |
-| F-05 | group | F-05-11 → D31; F-05-14 → `MOD-B2` (doc side M43); F-05-18 → `E2E-B54`; F-05-19 → `E2E-B55`; F-05-20 → `W4-B2`; F-05-22 → `SPEC-B7`; F-05-23 → `SPEC-B9`; F-05-28 → `E2E-B61`; F-05-33 → `E2E-B56`; F-05-34 → `E2E-B57`; F-05-35 → § 4. The destination list named only `E2E-B61`. |
-| F-06 | group | F-06-06 → `E2E-B53`; F-06-07 → `E2E-B67`; F-06-08 → § 4; F-06-09 → `E2E-B66`. The destination list named only `E2E-B67`. |
-| F-08 | group | F-08-11 → `APP-B2`; F-08-12 → `SPEC-B6`; F-08-13 → D35; F-08-14 → `UI-B20`; F-08-15 → `APP-B3`; F-08-16 → `UI-B24`; F-08-17 → § 4; F-08-19 → § 4; F-08-20 → M35; F-08-21 → `UI-B26`; F-08-22 → `UI-B21`; F-08-23 → `UI-B21`; F-08-24 → `UI-B25`; F-08-25 → § 4; F-08-26 → `UI-B26`. F-08-28 is a process finding: the 2026-09-08/09 request to fix every side finding was reported done while F-08-11, -14, -15, -22, -24 and -26 were still open. Those items are now the BUGS rows listed. The destination list named only `SPEC-B6`. |
-| F-09 | group | F-09-08 → `INF-B5`; F-09-10 → § 4. The destination list named only `INF-B5`. |
-| G-13 | group | the destination list had no destination. G-13-08 → M39 (fix in progress); G-13-26 → § 4; G-13-31 → D28. |
-| G-14 | group | G-14-05 → `E2E-B63`; G-14-06 → `E2E-B64`; G-14-07 → `E2E-B65`; G-14-29 → M36. The destination list named only `E2E-B65`. |
-| G-27 | group | the destination list had no destination. G-27-07 → M37. |
-| G-28 | group | the destination list had no destination. G-28-01 → M23 (scope input); G-28-02 → D7. |
-| H-O2 | BUGS `API-B2` | |
-| H-O6 | BUGS `E2E-B68` | |
+| A84 | D37 | the sweep doc says housekeeping; the register makes it a decision, because deleting a branch or directory is the maintainer's call |
+| A88 | D32 |  |
+| A89 | D33 |  |
+| A90 | D34 |  |
+| B1 | BUGS `E2E-B60` |  |
+| B2 | BUGS `UI-B28` |  |
+| B10 | D24 |  |
+| B24 | D29 |  |
+| B25 | D30 | settled together with D10 (2) |
+| B27b | D38 | the sweep doc says housekeeping; the register makes it a decision, because committing or discarding a foreign edit is the maintainer's call |
+| B27c | M26 |  |
+| B29 | D25 |  |
+| B35 | BUGS `E2E-B62` |  |
+| B37 | BUGS `UI-B22` |  |
+| B40 | BUGS `E2E-B59` |  |
+| B41b | BUGS `INF-B4` |  |
+| C34 | § 4 housekeeping | if tended, it goes with M44 |
+| C37 | BUGS `E2E-B54` |  |
+| C38 | M27 |  |
+| C39, D-OA5 | BUGS `E2E-B58` |  |
+| C40 | § 4 housekeeping |  |
+| C45 | done — no finding | § 5 |
+| C55 | BUGS `E2E-B69` | fixed in `5c42b3cf` |
+| C77 | M28 |  |
+| C78 | BUGS `E2E-B51` |  |
+| D-OA1 | BUGS `SEC-B6` |  |
+| D-OA2 | M29 (dependency), M42 (doc line) | M42 closed by `8094ff67` |
+| D-OA3 | § 4 housekeeping |  |
+| D-OA4 | BUGS `UT-B3` |  |
+| D-OA6 | BUGS `INF-B3` |  |
+| D-OA7 | M30 |  |
+| D-OA8 | § 4 housekeeping |  |
+| D-OA9 | M40 | closed by `8094ff67` |
+| D-OA10 | M41 | closed by `8094ff67` |
+| D-OA11 | § 4 housekeeping |  |
+| E1, F-04-13 | BUGS `E2E-B50` |  |
+| E2 | BUGS `E2E-B52` |  |
+| E3 | BUGS `MOD-B3` |  |
+| E4 | M31 |  |
+| E5 | M32 |  |
+| F-04-06 | BUGS `UI-B19` |  |
+| F-04-08 | M34 |  |
+| F-04-09 | § 4 housekeeping |  |
+| F-04-10 | BUGS `UT-B9` |  |
+| F-04-11 | BUGS `UT-B8` |  |
+| F-04-14 | § 4 housekeeping |  |
+| F-04-20 | BUGS `SPEC-B5` | the decision is D41 |
+| F-04-21 | M31 |  |
+| F-05-11 | D31 |  |
+| F-05-14 | BUGS `MOD-B2` | doc side: M43 |
+| F-05-18 | BUGS `E2E-B54` |  |
+| F-05-19 | BUGS `E2E-B55` |  |
+| F-05-20 | BUGS `W4-B2` |  |
+| F-05-22 | BUGS `SPEC-B7` |  |
+| F-05-23 | BUGS `SPEC-B9` |  |
+| F-05-28 | BUGS `E2E-B61` |  |
+| F-05-33 | BUGS `E2E-B56` |  |
+| F-05-34 | BUGS `E2E-B57` |  |
+| F-05-35 | § 4 housekeeping |  |
+| F-06-06 | BUGS `E2E-B53` |  |
+| F-06-07 | BUGS `E2E-B67` |  |
+| F-06-08 | § 4 housekeeping |  |
+| F-06-09 | BUGS `E2E-B66` |  |
+| F-08-11 | BUGS `APP-B2` |  |
+| F-08-12 | BUGS `SPEC-B6` |  |
+| F-08-13 | D35 | the sweep doc says M; the register makes it a decision, because it is a choice whether to test FK enforcement at all |
+| F-08-14 | BUGS `UI-B20` |  |
+| F-08-15 | BUGS `APP-B3` |  |
+| F-08-16 | BUGS `UI-B24` |  |
+| F-08-17 | § 4 housekeeping |  |
+| F-08-19, F-08-25 | § 4 housekeeping |  |
+| F-08-20 | M35 |  |
+| F-08-21, F-08-26 | BUGS `UI-B26` |  |
+| F-08-22, F-08-23 | BUGS `UI-B21` |  |
+| F-08-24 | BUGS `UI-B25` |  |
+| F-08-28 | process lesson | its six items are BUGS `APP-B2`, `UI-B20`, `APP-B3`, `UI-B21`, `UI-B25`, `UI-B26` |
+| F-09-08 | BUGS `INF-B5` |  |
+| F-09-10 | § 4 housekeeping |  |
+| G-13-08 | M39 | closed by `8094ff67` |
+| G-13-26 | § 4 housekeeping |  |
+| G-13-31 | D28 |  |
+| G-14-05 | BUGS `E2E-B63` |  |
+| G-14-06 | BUGS `E2E-B64` |  |
+| G-14-07 | BUGS `E2E-B65` |  |
+| G-14-29 | M36 |  |
+| G-27-07 | M37 |  |
+| G-28-01 | M23 | scope input for issue #1 Part 3; D6 became M23 |
+| G-28-02 | D7 | added to the existing row |
+| H-unrev | D14 |  |
+| H9-3 | BUGS `SEC-B3` |  |
+| H9-5 | § 4 housekeeping |  |
+| H9-9 | BUGS `UI-B29` |  |
+| H9-10 | BUGS `UT-B6` |  |
+| H9-20 | D15 |  |
+| H9-22 | D27 |  |
 | H-S2 | done — `bcabca94` | BUGS `SEC-B1` |
 | H-S3 | BUGS `SEC-B7` | the class is described there; no reproduction here |
-| H-S4 | D26 | |
-| H-S4r | BUGS `SEC-B5` | |
-| H-S5 | BUGS `SEC-B4` | |
-| H9 | group | H9-3 → `SEC-B3`; H9-5 → § 4; H9-9 → `UI-B29`; H9-10 → `UT-B6`; H9-20 → D15; H9-22 → D27. The destination list named only `UT-B6`. |
-| P28 | BUGS `UT-B1` | |
-| P3 | § 4 housekeeping | |
-| P6 | M33 | |
+| H-S4 | D26 |  |
+| H-S4r | BUGS `SEC-B5` |  |
+| H-S5 | BUGS `SEC-B4` |  |
+| H-O2 | BUGS `API-B2` |  |
+| H-O6 | BUGS `E2E-B68` |  |
+| P3 | § 4 housekeeping |  |
+| P6 | M33 |  |
+| P28 | BUGS `UT-B1` |  |
 | T25 | BUGS `GDPR-B4` | the policy stays in D9 |
-| T36 | BUGS `UT-B2` | |
-| H-unrev | D14 | not in the destination list |
-| *spec open questions* | the specs | 137 lines begin `open question` in `specs/` at `294e13c8`. The sweep counted 117 in no tracker at `fbf44fc4`. The full list is in the sweep evidence, out of repo (`spec-open-questions.md`). They are not copied here. The rows above point at the ones the sweep named. D13 lists the three that bear on product behaviour. |
+| T36 | BUGS `UT-B2` |  |
+| TODO-14 | D36 |  |
+
+**Keys in the sweep's raw destination list that are not finding IDs** (`docs/sweep-2026-09-29.md`
+§ 3, second table). None of them is an open item.
+
+| Key | What it is |
+|---|---|
+| F-04, F-05, F-06, F-08, F-09, G-13, G-14, G-27, G-28, H9 | Truncated family keys. Every member has its own row above. |
+| D6, D7, D9 | Register item IDs, not sweep IDs. D6 became M23 (with G-28-01), D7 received G-28-02, and D9 received `GDPR-B4` and the three-PII-carrier fact. |
+| B5 | Occurs only inside `IT-B5` (never filed; the finding is `UT-B6`). As a probe-B row it is the sibling-branch lint, now `WH-B1`, fixed by the merge. |
+| B18 | Occurs only inside `E2E-B18`. As a probe-B row it is a `docs/BUGS.md` header off by one, superseded by M9. |
+| B26 | Occurs only inside `E2E-B26`. As a probe-B row it is the `scripts/env.sh` Prisma pinning, decided harmless; see § 4. |
+| E11 | An agent with no report and no transcript; its targets were closed by `64e2f52d` (§ 5). |
+
+**Items without a sweep ID**, from the sweep doc's third table and from the lead on 2026-09-29:
+
+| Item | Now lives in |
+|---|---|
+| `CLAUDE.md:1022` Chromium sentence | M38 (closed by `8094ff67`) |
+| The out-of-repo session summary | the header ("What it supersedes"). The sweep doc says "four factual errors"; the check file it cites shows three wrong, three stale and one misleading claim. |
+| The dashboard unit is `linked`, not enabled | D38; the false premise in the handoff is M26 |
+| 137 spec `open question`s, 117 in no tracker | the specs; the full list is in the sweep evidence, out of repo. D13 lists the three that bear on product behaviour. |
+| August open questions `specs/crm.allium:1955` and `specs/crm-gdpr.allium:991` | the specs |
+| `specs/crm-gdpr.allium:995` | BUGS `GDPR-B1` |
+| `specs/crm-gdpr.allium:997`, `:1001` | D9 |
+| "D6 correction" (Parts 1–2 of issue #1 decided on 2026-09-02) | M23 |
+| The maintainer's decision criterion | the register header |
+| V3 weed pass (20 divergences) | V3; the destinations are listed there |
+| `CLAUDE.md` § i18n points at a missing validation script | M48 |
+| `CONTRIBUTING.md` is upstream's text | § 4 |
+| GitHub templates, labels and security policy are dormant until `main` | M47 |
+| Docker research (D10, `INF-B1`, `SEC-B8..B10`) | D10 |
 
 ---
 
