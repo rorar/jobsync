@@ -58,11 +58,11 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.4.0" # keep equal to the oven/bun tag in Dockerfile
+          bun-version: "1.4.0" # keep equal to the oven/bun tag in Dockerfile and mise.toml
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22 # the Docker base image is node:22.23.2-alpine
+          node-version: "22.23.2" # keep equal to the Dockerfile base image and mise.toml
 
       - name: Cache bun dependencies
         uses: actions/cache@v4
