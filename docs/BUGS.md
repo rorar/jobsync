@@ -1,6 +1,6 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-09-29
 
-**Total: 756 bugs found, 681 fixed, 69 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
+**Total: 759 bugs found, 681 fixed, 72 open, 4 closed as decided, 1 closed by its premise disappearing, 1 reclassified as a corrected assumption**
 
 > **"Closed as decided" is a fourth disposition, added 2026-09-08 and deliberately not folded into
 > "fixed".** `E2E-B22`, `E2E-B23` and `E2E-B24` are rows the application cannot fix — `Person`,
@@ -31,11 +31,11 @@
 > | Session 2026-09-09 (heading outline across all 20 routes, `UI-B18`) | 1 | 1 | 0 | — |
 > | Session 2026-09-09 (job teardown reporting success it could not see, `E2E-B47`) | 1 | 1 | 0 | — |
 > | Session 2026-09-13 (Public API v1's first real caller, `E2E-B48`, `E2E-B49`) | 2 | 2 | 0 | — |
-> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B7`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B69`, `INF-B1..B5`) | 68 | 2 | 66 | — |
+> | Session 2026-09-29 (sweep of 2026-08-20..09-28 sessions; `W4-B2`, `MOD-B2/B3`, `GDPR-B1..B4`, `SEC-B3..B7`, `API-B1/B2`, `APP-B1..B3`, `UI-B19..B29`, `SPEC-B4..B9`, `UT-B1..B9`, `E2E-B50..B72`, `INF-B1..B5`) | 71 | 2 | 69 | — |
 > | Session 2026-08-25 (W-H1 spec flip, filed on `feat/quick-capture-and-referral-events`, merged 2026-09-29; `WH-B1..B4`) | 4 | 3 | 1 | — |
-> | **Total** | **756** | **681** | **69** | **6** |
+> | **Total** | **759** | **681** | **72** | **6** |
 >
-> 681 + 69 + 6 = 756. **Added 2026-09-29:** the sweep block (68 rows: 2 fixed, 66 open) — see § Session 2026-09-29 — and, by the merge of `feat/quick-capture-and-referral-events`, its `WH-B1..B4` block (3 fixed, `WH-B2` open); `API-B1` was fixed by the same merge. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
+> 681 + 72 + 6 = 759. **Added 2026-09-29:** the sweep block (71 rows: 2 fixed, 69 open; `E2E-B70..B72` from the V3 weed pass) — see § Session 2026-09-29 — and, by the merge of `feat/quick-capture-and-referral-events`, its `WH-B1..B4` block (3 fixed, `WH-B2` open); `API-B1` was fixed by the same merge. **Moved 2026-09-08** (agent-swarm pass over the whole open list): `E2E-B11`,
 > `E2E-B36` and `E2E-B38` open → fixed; `E2E-B22`, `E2E-B23`, `E2E-B24` and `E2E-B42` open →
 > closed as decided; `E2E-B44` filed, split out of `E2E-B24` so a product gap is not settled as a
 > side effect of a test-residue pass. The three remaining open items are the two inherited
@@ -209,9 +209,9 @@ from its `useEffect` fetch chain, which is a real smell) versus pure resource st
 Raising a timeout to make a symptom disappear is the same move as W-E6's "kept for reference only"
 comment, and this session spent its afternoon undoing one of those. Diagnose before suppressing.
 
-## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (68 found, 2 fixed, 66 open)
+## Session 2026-09-29 — sweep of every session 2026-08-20..09-28 (71 found, 2 fixed, 69 open)
 
-**Where these come from.** On 2026-09-29, a read-only sweep compared everything said, found, deferred or promised in every jobsync Claude session between 2026-08-20 and 2026-09-28 against the code at `fbf44fc4`. That covers 10 dialogue sessions, 114 sub-agent transcripts and 176 automatic security reviews. The rows below are the **defects**: behaviour that is wrong, or a claim in a shipped artefact (code, spec, test) that is false. Almost none of them is new code. Most had already been found once and then lost, for three reasons:
+**Where these come from.** On 2026-09-29, a read-only sweep (plus, for `E2E-B70..B72`, the V3 `allium:weed` pass the same day) compared everything said, found, deferred or promised in every jobsync Claude session between 2026-08-20 and 2026-09-28 against the code at `fbf44fc4`. That covers 10 dialogue sessions, 114 sub-agent transcripts and 176 automatic security reviews. The rows below are the **defects**: behaviour that is wrong, or a claim in a shipped artefact (code, spec, test) that is false. Almost none of them is new code. Most had already been found once and then lost, for three reasons:
 
 - **Truncated reports.** Sub-agent reports reached the lead session only as idle-notification text cut at about 4,000 characters, or as nothing at all under Claude Code 2.1.246.
 - **Undelivered reviews.** The automatic security-review hook never delivered its findings to a working session.
@@ -251,7 +251,7 @@ comment, and this session spent its afternoon undoing one of those. Diagnose bef
 | SEC-B4 | LOW | **Re-seeding silently un-revokes the E2E API key.** The `PublicApiKey` upsert sets `update: { name, revokedAt: null }` (`prisma/seed-e2e.ts:181`). Impact today is limited to the disposable template (`scripts/e2e-db.sh:80`). Reviewer rated it MEDIUM; the finding never reached a working session. *Sweep:* H-S5. | Open. `update: {}` (or name only). |
 | SEC-B5 | LOW (borderline) | **`seed-e2e.ts` has no database or environment guard.** Its only throw is "user missing" (`prisma/seed-e2e.ts:151-157`). `prisma/seed.ts:16` creates `admin@example.com` on any database. One stray run against a real database therefore plants the repo-public `pk_live_` key (`e2e/helpers/api-key-fixture.ts:36-37`), with full `/api/v1/*` access, because `PublicApiKey.permissions` is never read. ADR-046 accepts the committed key but does not weigh this path. *Sweep:* H-S4r. | Open. Refuse unless `DATABASE_URL` names an `.e2e-*` database. |
 | SEC-B6 | LOW | **Heap snapshots contain `AUTH_SECRET` in cleartext, and nothing says so where they are made.** The warning exists only in `docs/handoff-2026-09-06-e2e-elysium.md:194-202`. It is absent where snapshots are armed (`scripts/dev-e2e.sh:138-140`) and in `tools/next-heap/`. *Sweep:* D-OA1. | Open. Print the warning when arming; document it in `tools/next-heap/`. |
-| SEC-B7 | LOW | **The heavy-command guard can be bypassed with a fake heredoc opener.** `strip_heredoc_bodies` matches `<<TAG` anywhere on a line, including in a `#` comment or a quoted argument (`scripts/guard-heavy-commands.sh:148`). Reproduced on 2026-09-29: `# <<SKIP` + `npx jest` + `SKIP` exits 0, while a bare `npx jest` exits 2. The guard is advice-grade by design (`:16-22`), but this vector is not named. Reviewer rated it MEDIUM; the finding never reached a working session. *Sweep:* H-S3. | Open. Ignore `<<` inside comments and quotes, or name the vector in the header. |
+| SEC-B7 | LOW | **The heavy-command guard can be bypassed with a fake heredoc opener.** `strip_heredoc_bodies` matches `<<TAG` anywhere on a line, including in a `#` comment or a quoted argument (`scripts/guard-heavy-commands.sh:148`). Reproduced on 2026-09-29: a blocked command placed after such an opener exits 0, while the same command alone exits 2 (reproduction kept in the out-of-repo sweep evidence). The guard is advice-grade by design (`:16-22`), but this vector is not named. Reviewer rated it MEDIUM; the finding never reached a working session. *Sweep:* H-S3. | Open. Ignore `<<` inside comments and quotes, or name the vector in the header. |
 
 ### Public API v1
 
@@ -333,6 +333,9 @@ comment, and this session spent its afternoon undoing one of those. Diagnose bef
 | E2E-B67 | LOW | **A typo in `E2E_DEV_BUNDLER` falls back to turbopack silently.** Any value other than `webpack` takes the turbopack branch (`scripts/dev-e2e.sh:96,155`), and the banner does not print which bundler ran. *Sweep:* F-06-07. | Open. |
 | E2E-B68 | LOW | **`E2E_MAX_MINUTES` is not validated.** Its sibling `E2E_ABORT_CONSECUTIVE_TIMEOUTS` is (`:569`); this one is not (`scripts/test-e2e.sh:567`). A non-numeric value aborts the run at the first poll with exit 124. *Sweep:* H-O6. | Open. |
 | E2E-B69 | HIGH ✅ FIXED 2026-09-01 | **The webhook toggle assertion could pass on the previous action's toast.** Toast overlap was fixed in `5c42b3cf`, but the defect never had a row. `docs/handoff-2026-09-02-e2e-closeout.md:67` names it E2E-B14, which is the CI-retry finding. *Sweep:* C55. | Fixed in `5c42b3cf`; row added 2026-09-29 so the count carries it. |
+| E2E-B70 | LOW | **Job teardown reports a leak for a Job that was never created.** `TrackedFactoryRegistersBeforeWrite` says a registered row whose write never landed is not a leak (`specs/e2e-test-infrastructure.allium:950-952`). But `deleteJobViaApi` throws on 0 matches (`e2e/helpers/job-fixture.ts:86-89`), and the per-title catch logs it as a leak (`e2e/crud/job-crud.spec.ts:129-135`). The window is widest where a spec registers the title before filling the form (`kanban.spec.ts:88`, `job-status-crud.spec.ts:344,415`). *Source:* V3 weed pass 2026-09-29. | Open. Treat 0 matches as "never written" — no warning — and keep 2+ matches or a non-2xx response as errors. |
+| E2E-B71 | MEDIUM | **The E2E template stamp misses the seed's own imports.** `_e2e_db_stamp` hashes the schema, both seed scripts and the migrations (`scripts/e2e-db.sh:39-47`), but not what the seeds import. `prisma/seed-e2e.ts:36-37` imports `src/lib/api/auth` and `e2e/helpers/api-key-fixture`, and `seed.ts` imports `src/lib/crm/seed-job-statuses`. Changing the fixture key or `hashApiKey` therefore reuses a stale template, and every Job teardown answers 401. *Source:* V3 weed pass 2026-09-29; spec open question `:1832`. | Open. Add the imported files to the stamp, or derive the list from the seeds' imports. |
+| E2E-B72 | LOW | **Some specs clean up inline, where a failed assertion skips it.** `FixtureOwnedTeardown` requires rows of models visible within a run to be removed on a path a thrown assertion cannot skip (`specs/e2e-test-infrastructure.allium:876-880`). `smtp-settings.spec.ts` deletes inline (`:230`, `:273`, `:296`, `:333`), mitigated by an arrange-phase `ensureEmptyState` (`:65-75`). `settings-blacklist.spec.ts:99,158` and `company-crud.spec.ts:120,167` clean up inline with no hook. *Source:* V3 weed pass 2026-09-29. | Open (decision): move the cleanup to `afterEach`, or accept the arrange-phase reset and narrow the spec clause. |
 
 ### Build, CI and developer tooling
 
